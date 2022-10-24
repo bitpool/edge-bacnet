@@ -1,0 +1,302 @@
+<!-- PrimeVue -->
+<link href="resources/@bitpoolos/edge-bacnet/primevue-saga-blue-theme.css" rel="stylesheet" />
+<link href="resources/@bitpoolos/edge-bacnet/primevue.min.css" rel="stylesheet" />
+<link href="resources/@bitpoolos/edge-bacnet/primeflex.min.css" rel="stylesheet" />
+<link href="resources/@bitpoolos/edge-bacnet/primeicons.css" rel="stylesheet" />
+
+<script>
+    //custom script loader to ensure dependencies load every time
+    (function () {
+        LoadScripts();
+
+        function LoadScripts(async) {
+            if (async === undefined) {
+                async = false;
+            }
+            var scripts = [];
+            var _scripts = ['resources/@bitpoolos/edge-bacnet/vue.global.prod.js', 'resources/@bitpoolos/edge-bacnet/core.min.js'];
+
+            if (async) {
+                LoadScriptsAsync(_scripts, scripts)
+            } else {
+                LoadScriptsSync(_scripts, scripts)
+            }
+        }
+
+        // what you are looking for :
+        function LoadScriptsSync(_scripts, scripts) {
+
+            var x = 0;
+            var loopArray = function (_scripts, scripts) {
+                // call itself
+                loadScript(_scripts[x], scripts[x], function () {
+                    // set x to next item
+                    x++;
+                    // any more items in array?
+                    if (x < _scripts.length) {
+                        loopArray(_scripts, scripts);
+                    }
+                });
+            }
+            loopArray(_scripts, scripts);
+        }
+
+        // async load as in your code
+        function LoadScriptsAsync(_scripts, scripts) {
+            for (var i = 0; i < _scripts.length; i++) {
+                loadScript(_scripts[i], scripts[i], function () { });
+            }
+        }
+
+        // load script function with callback to handle synchronicity 
+        function loadScript(src, script, callback) {
+
+            script = document.createElement('script');
+            script.onerror = function () {
+                // handling error when loading script
+                console.log('Error - could not load BACnet node HTML dependencies')
+            }
+            script.onload = function () {
+                callback();
+            }
+            script.src = src;
+            document.getElementsByTagName('head')[0].appendChild(script);
+        }
+    })();
+</script>
+
+<script type="text/javascript">
+    class NodeService {
+        getNetworkData() {
+            return fetch('/bitpool-bacnet-data/getNetworkTree').then(res => res.json());
+        }
+    };
+    RED.nodes.registerType('Bacnet-Gateway', {
+        category: 'Bitpool BACnet',
+        color: '#00aeef',
+        defaults: {
+            name: {value: ""},
+            local_device_address: {value: "", required: true},
+            apduTimeout: {value: 6000},
+            roundDecimal: {value: 2},
+            local_device_port: {value: 47808, required: true},
+            apduSize: {value: "5", required: true},
+            maxSegments: {value: "0x50", required: true},
+            broadCastAddr: {value: "255.255.255.255", required: true},
+            toLogIam: {value: true},
+            discover_polling_schedule: {value: ""},
+            discover_polling_schedule_value: {value: "1", required: true},
+            discover_polling_schedule_options: {value: "Minutes", required: true},
+        },
+        networkInterfaces: [],
+        inputs: 1,
+        outputs: 1,
+        icon: "bitpool.svg",
+        label: function () {
+            return "gateway";
+        },
+        paletteLabel: function () {
+            return "gateway";
+        },
+        oneditprepare: function () {
+            let node = this;
+
+            if (node.networkInterfaces && node.networkInterfaces.length > 0) {
+                let nicSelector = document.getElementById("node-input-local_device_address");
+                node.networkInterfaces.forEach(function (option) {
+                    nicSelector.options[nicSelector.options.length] = option;
+                });
+                nicSelector.value = node.local_device_address
+            }
+
+            function queryAdapters() {
+                let nicSelector = document.getElementById("node-input-local_device_address");
+
+                $.ajax({
+                    url: '/bitpool-bacnet-data/getNetworkInterfaces',
+                    success: function (data) {
+                        let keys = Object.keys(data);
+
+                        for (const key in keys) {
+                            let nicName = keys[key];
+                            let ipAddr = data[keys[key]][0];
+                            let text = nicName + ' : ' + ipAddr;
+                            if (!node.networkInterfaces) node.networkInterfaces = [];
+                            let found = node.networkInterfaces.findIndex(ele => ele.text == text && ele.value == ipAddr);
+                            if (found == -1) {
+                                let newOption = new Option(text, ipAddr);
+                                nicSelector.options[nicSelector.options.length] = newOption;
+                                node.networkInterfaces.push(newOption);
+                            }
+                        }
+                        nicSelector.value = node.local_device_address;
+                    },
+                    timeout: 10000
+                });
+            }
+            queryAdapters();
+
+        },
+        oneditsave: function () {
+            let node = this;
+
+            document.getElementById("node-input-discover_polling_schedule").value = getTimePeriodInSeconds(
+                document.getElementById("node-input-discover_polling_schedule_value").value,
+                document.getElementById("node-input-discover_polling_schedule_options").value
+            );
+        }
+    });
+
+    function getTimePeriodInSeconds(value, interval) {
+        switch (interval) {
+            case "Seconds":
+                return value;
+                break;
+            case "Minutes":
+                return value * 60;
+                break;
+            case "Hours":
+                return value * 3600;
+                break;
+            case "Days":
+                return value * 86400;
+                break;
+            default:
+            // code block
+        }
+    }
+
+</script>
+
+<script type="text/html" data-template-name="Bacnet-Gateway">
+        <style>
+            .deviceButton {
+                width: -webkit-fill-available;
+                background: space;
+                background-color: transparent !important;
+                color: inherit; 
+                border: none;
+                display: flex;
+                align-items: center;
+                padding-top: 20px;
+            }
+    
+            .point {
+                padding-left: 50px
+            }
+
+            .pointButton {
+                color: inherit; 
+                border: none;
+                display: flex;
+                align-items: center;
+            }
+
+            .networkTreeContent {
+                margin-top: 20px;
+                margin-left: 50px;
+            }
+
+        </style>
+    
+        <div class="form-row">
+          <label for="node-input-name"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.name"></span> Name</label>
+          <input type="text" id="node-input-name" placeholder="Name">
+        </div>
+    
+        <div class='form-row node-input-read-tabs-row'>
+            <ul style='min-width:600px;margin-bottom:20px' id='node-input-read-tabs'></ul>
+        </div>
+
+        <div class="form-row" id="networkInterfaceDiv">
+            <label for="node-input-local_device_address"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.local_device_address"></span> Network Interface</label>
+            <select id="node-input-local_device_address" style="width: 70%;" >
+            </select>
+        </div>
+
+        <div class="form-row">
+            <label for="node-input-broadCastAddr"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.broadCastAddr"></span> Broadcast Address </label>
+            <input type="text" id="node-input-broadCastAddr" placeholder="255.255.255.255">
+        </div>
+
+        <div class="form-row">
+            <label for="node-input-local_device_port"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.local_device_port"></span> Local Device Port</label>
+            <input type="text" id="node-input-local_device_port" placeholder="47808">
+        </div>
+
+        <div class="form-row">
+            <label for="node-input-apduTimeout"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.apduTimeout"></span>Apdu Timeout</label>
+            <input type="text" id="node-input-apduTimeout" placeholder="10000">
+        </div>
+
+        <div class="form-row">
+            <label for="node-input-apduSize"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.apduSize"></span>Max Apdu Size</label>
+            <select id="node-input-apduSize">
+                <option value="0">0</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+            </select>
+        </div>
+
+        <div class="form-row">
+            <label for="node-input-maxSegments"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.maxSegments"></span>Max Segments</label>
+            <select id="node-input-maxSegments">
+                <option value="0">0</option>
+                <option value="0x10">0x10</option>
+                <option value="0x20">0x20</option>
+                <option value="0x30">0x30</option>
+                <option value="0x40">0x40</option>
+                <option value="0x50">0x50</option>
+                <option value="0x60">0x60</option>
+                <option value="0x70">0x70</option>
+            </select>
+        </div>
+
+        <div class="form-row" style="align-items: center; display: flex;">
+            <label for="node-input-discover_polling_schedule_value"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.bacnet_polling_schedule"></span>Global Discover Frequency</label>
+            <p style="margin-right: 5px; margin-bottom: 0px; padding-left: 7px;">Every</p>
+            <input type="text" id="node-input-discover_polling_schedule" style="display: none;">
+            <input type="text" id="node-input-discover_polling_schedule_value" placeholder="5" style="width: 70px; margin-right: 5px;">
+            <select name="timePeriod" id="node-input-discover_polling_schedule_options" style="width: 120px; margin-right: 5px;">
+                <option value="Seconds">Seconds</option>
+                <option value="Minutes">Minutes</option>
+                <option value="Hours">Hours</option>
+                <option value="Days">Days</option>
+            </select>
+        </div>
+
+        <div class="form-row">
+            <label for="node-input-toLog">
+                Log found device: 
+            </label>
+            <input type="checkbox" id="node-input-toLogIam" style="width: auto;"/>
+        </div>
+
+    </script>
+    <script type="text/html" data-help-name="Bacnet-Gateway">
+        <p> This node is the brain of the Bitpool BACnet node collection. It acts are the gateway for all BACnet communications and functionality for the collection. </p>
+    
+            <h3><strong>Properties</strong></h3>
+            <ol class="node-ports">
+                <li>Network Interface - the desired interface for the bacstack client to bind to. This interface must not have any other BACnet clients bound to it.</li>
+                <li>Broadcast Address - the desired subnet for global msgs to be broadcast and recieved on. This should be as strict as possible. Use 255.255.255.255 if unsure.</li>
+                <li>Local Device Port - the port to be used for BACnet comms. Default is 47808</li>
+                <li>APDU Timeout - BACnet msg timeout option</li>
+                <li>Max APDU Size - BACnet max apdu size</li>
+                <li>Max Segments - BACnet max segments</li>
+                <li>Global Discover Frequency - the frequency at which the gateway issues global WhoIs BACnet commands. This should be limited to the least amount possible, as over-loading a network can be a serious issue with BACnet commmunications.</li>
+                <li>Log Device Found - toggles logging of found devices to the node-red debug tab.</li>
+            </ol>
+    
+            <h3>Resources:</h3>
+            <h4><strong>Online Docs:</strong></h4>
+            <ul type="1">
+              <li><a href="https://www.bitpool.com/">bitpool.com</a> - check us out here.</li>
+              <li><a href="https://app.bitpool.com/">app.bitpool.com</a> - set up your account.</li>
+              <li><a href="https://wiki.bitpool.com/">wiki.bitpool.com</a> - find more documentation.</li>
+              <li><a href="https://bacnet.org/">BACnet</a> - find more about the protocol.</li>
+            </ul>
+    </script>

@@ -1,0 +1,127 @@
+<script type="text/javascript">
+    RED.nodes.registerType('Bitpool-Bacnet-Object',{
+        category: 'config',
+        color: '#00aeef',
+        defaults: {
+            name: {value:""},
+            object_type_ai: {value: true},
+            object_type_ao: {value: false},
+            object_type_av: {value: false},
+            object_type_bi: {value: false},
+            object_type_bo: {value: false},
+            object_type_bv: {value: false},
+            object_type_mi: {value: false},
+            object_type_mo: {value: false},
+            object_type_mv: {value: false},
+            object_property_presentVal: {value: true},
+            object_property_objDescription: {value: false},
+            object_property_statusFlag: {value: false},
+            object_property_reliability: {value: false},
+            object_property_outOfService: {value: false},
+            object_property_units: {value: false},
+            instance_start: {value: "", required: true},
+            instance_end: {value: "", required: true}
+        },
+        inputs:1,
+        outputs:1,
+        icon: "icon.png",
+        label: function() {
+            return this.name||"Bitpool-Bacnet-Object";
+        },
+        oneditprepare: function() {
+        }
+    });
+
+</script>
+
+<script type="text/html" data-template-name="Bitpool-Bacnet-Object">
+    <div class="form-row">
+      <label for="node-config-input-name"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.name"></span> Name</label>
+      <input type="text" id="node-config-input-name" placeholder="Config Name" style="margin-left: 45px; width: 350px;">
+    </div>
+
+    <div class="form-row" style="display: inline-flex; width: fit-content; align-items: center;">
+        <label for="node-config-input-instance" ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.instance"></span>Instance Range</label>
+        <div id="node-config-input-instance">
+            <label for="node-config-input-instance_start" style="flex-basis: content; width: 75px; padding-left: 45px;"> Start</label>
+                <input type="text" id="node-config-input-instance_start" placeholder="101" style="width: 55px;">
+            
+            <label for="node-config-input-instance_end" style="flex-basis: content; width: 30px;"> End</label>
+                <input type="text" id="node-config-input-instance_end" placeholder="102" style="width: 55px;">
+            
+        </div>
+
+    </div>
+
+    <br>
+
+    <div class="form-row" style="display: inline-flex; width: fit-content; flex-wrap: nowrap;">
+        <label for="node-config-input-object_type_group"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.object_type_group"></span> Object Type</label>
+        <div id="node-config-input-object_type_group"  style="display: flex; padding-left: 45px;">
+            <label for="node-config-input-object_type_ai" style="flex-basis: content; padding-right: 20px;"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_type_ai"></span>AI
+                <input type="checkbox" id="node-config-input-object_type_ai">
+            </label>
+    
+            <label for="node-config-input-object_type_ao" style="flex-basis: content; padding-right: 20px;"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_type_ao"></span>AO
+                <input type="checkbox" id="node-config-input-object_type_ao">
+            </label>
+    
+            <label for="node-config-input-object_type_av"  style="flex-basis: content; padding-right: 20px;"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_type_av"></span>AV
+                <input type="checkbox" id="node-config-input-object_type_av">
+            </label>
+    
+            <label for="node-config-input-object_type_bi" style="flex-basis: content; padding-right: 20px;"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_type_bi"></span>BI
+                <input type="checkbox" id="node-config-input-object_type_bi">
+            </label>
+    
+            <label for="node-config-input-object_type_bo" style="flex-basis: content; padding-right: 20px;"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_type_bo"></span>BO
+                <input type="checkbox" id="node-config-input-object_type_bo">
+            </label>
+    
+            <label for="node-config-input-object_type_bv" style="flex-basis: content; padding-right: 20px;"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_type_bv"></span>BV
+                <input type="checkbox" id="node-config-input-object_type_bv">
+            </label>
+
+            <label for="node-config-input-object_type_mi" style="flex-basis: content; padding-right: 20px;"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_type_mi"></span>MI
+                <input type="checkbox" id="node-config-input-object_type_mi">
+            </label>
+            <label for="node-config-input-object_type_mo" style="flex-basis: content; padding-right: 20px;"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_type_mo"></span>MO
+                <input type="checkbox" id="node-config-input-object_type_mo">
+            </label>
+            <label for="node-config-input-object_type_mv" style="flex-basis: content; padding-right: 20px;"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_type_mv"></span>MV
+                <input type="checkbox" id="node-config-input-object_type_mv">
+            </label>
+        </div>
+    </div>
+
+    <br>
+
+    <div class="form-row" style="display: inline-flex; width: fit-content; flex-wrap: nowrap;">
+        <label for="node-config-input-object_properties_group"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.object_properties_group"></span> Object Properties</label>
+        <div id="node-config-input-object_properties_group"  style="display: flex; padding-left: 45px;">
+            <label for="node-config-input-object_property_presentVal" style="flex-basis: content; padding-right: 20px;"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_presentVal"></span>Present Value
+                <input type="checkbox" id="node-config-input-object_property_presentVal">
+            </label>
+    
+            <label for="node-config-input-object_property_objDescription" style="flex-basis: content; padding-right: 20px;"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_objDescription"></span>Description
+                <input type="checkbox" id="node-config-input-object_property_objDescription">
+            </label>
+    
+            <label for="node-config-input-object_property_statusFlag"  style="flex-basis: content; padding-right: 20px;"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_statusFlag"></span>Status Flags
+                <input type="checkbox" id="node-config-input-object_property_statusFlag">
+            </label>
+    
+            <label for="node-config-input-object_property_reliability" style="flex-basis: content; padding-right: 20px;"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_reliability"></span>Reliability
+                <input type="checkbox" id="node-config-input-object_property_reliability">
+            </label>
+    
+            <label for="node-config-input-object_property_outOfService" style="flex-basis: content; padding-right: 20px;"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_outOfService"></span>Out of Service
+                <input type="checkbox" id="node-config-input-object_property_outOfService">
+            </label>
+    
+            <label for="node-config-input-object_property_units" style="flex-basis: content; padding-right: 20px;"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_units"></span>Units
+                <input type="checkbox" id="node-config-input-object_property_units">
+            </label>
+        </div>
+    </div>
+</script>

@@ -1,0 +1,631 @@
+<script type="text/javascript">
+
+    RED.nodes.registerType('Bacnet-Write', {
+        category: 'Bitpool BACnet',
+        color: '#00aeef',
+        defaults: {
+            name: {value: ""},
+            applicationTag: {value: "4"},
+            priority: {value: "16"},
+            pointsToWrite: {value: []},
+            writeDevices: {value: []},
+            hiddenDeployToggle: {value: false},
+            prevHiddenToggleState: {value: false}
+        },
+        inputs: 1,
+        outputs: 1,
+        icon: "bitpool.svg",
+        label: function () {
+            return "write";
+        },
+        paletteLabel: function () {
+            return "write";
+        },
+        oneditprepare: function () {
+            let node = this;
+
+            node.prevHiddenToggleState = node.hiddenDeployToggle;
+
+
+            const {createApp, ref, onMounted} = Vue;
+
+            //prime vue app
+            const App = {
+                data() {
+                    return {
+                        devices: ref(),
+                        writeDevices: ref(),
+                        deviceList: ref(),
+                        pointList: ref(),
+                        pointsToWrite: ref([]),
+                        nodeService: ref(new NodeService())
+                    }
+                },
+                setup() {
+                    let pointList;
+                    let deviceList;
+                    const selectedKeys = ref(null);
+                    const nodes = ref();
+                    const expandedKeys = ref({});
+
+                    const expandAll = () => {
+                        for (let node of devices.value) {
+                            expandNode(node);
+                        }
+
+                        expandedKeys.value = {...expandedKeys.value};
+                    };
+                    const collapseAll = () => {
+                        expandedKeys.value = {};
+                    };
+                    const expandNode = (node) => {
+                        if (node.children && node.children.length) {
+                            expandedKeys.value[node.key] = true;
+
+                            for (let child of node.children) {
+                                expandNode(child);
+                            }
+                        }
+                    };
+
+                    return {
+                        nodes,
+                        expandedKeys,
+                        expandAll,
+                        collapseAll,
+                        expandNode,
+                    }
+                },
+                mounted() {
+                    this.getData();
+                },
+                methods: {
+                    getData() {
+                        let app = this;
+                        this.nodeService.getNetworkData().then(function (result) {
+                            app.devices = result.renderList;
+                            app.deviceList = result.deviceList;
+                            app.pointList = result.pointList;
+                            app.pollFrequency = parseInt(result.pollFrequency);
+                        });
+                    },
+                    addAllClicked(slotProps) {
+
+                        //update UI 
+                        if (this.writeDevices) {
+                            let foundIndex = this.writeDevices.findIndex(ele => ele.key == slotProps.node.key && ele.label == slotProps.node.label);
+                            if (foundIndex == -1) this.writeDevices.push(slotProps.node);
+                        } else {
+                            this.writeDevices = [slotProps.node];
+                        }
+
+                        this.$forceUpdate()
+
+                        //update node-red data structure to forward to gateway
+                        let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
+                        let points = this.pointList[slotProps.node.label];
+
+                        if (!this.pointsToWrite[device.address] || typeof this.pointsToWrite[device.address] == 'undefined') {
+                            this.pointsToWrite[device.address] = {};
+                        }
+
+                        for (let pointName in points) {
+                            let point = this.pointList[device.deviceName][pointName];
+                            this.pointsToWrite[device.address][point.objectName] = point;
+                        }
+
+                        //force a deploy state
+                        node.hiddenDeployToggle = !node.prevHiddenToggleState;
+                    },
+                    removeAllClicked(slotProps) {
+                        //update UI
+                        if (this.writeDevices.length > 0) {
+                            let foundIndex = this.writeDevices.findIndex(ele => ele.key == slotProps.node.key && ele.label == slotProps.node.label);
+                            if (foundIndex !== -1) this.writeDevices.splice(foundIndex, 1);
+                        }
+                        this.$forceUpdate()
+
+                        //update node-red data structure
+                        let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
+                        if (this.pointsToWrite[device.address]) {
+                            delete this.pointsToWrite[device.address];
+                        }
+
+                        //force a deploy state
+                        node.hiddenDeployToggle = !node.prevHiddenToggleState;
+                    },
+                    addPointClicked(slotProps) {
+
+                        //update UI
+                        let parentDeviceName = slotProps.node.parentDevice;
+                        let foundDeviceIndex = this.writeDevices ? this.writeDevices.findIndex(ele => ele.label == parentDeviceName) : -1;
+
+                        if (foundDeviceIndex == -1) {
+                            //no read devices present, add new
+                            let parentDevice = this.devices.find(ele => ele.label == parentDeviceName);
+                            let newReadParent = {...parentDevice};
+                            newReadParent.children = [];
+                            newReadParent.children.push(slotProps.node);
+
+                            if (this.writeDevices) {
+                                this.writeDevices.push(newReadParent);
+                            } else {
+                                this.writeDevices = [newReadParent];
+                            }
+
+                        } else {
+                            // read device found, add point to existing
+                            this.writeDevices[foundDeviceIndex].children.push(slotProps.node);
+                        }
+
+                        slotProps.node.showAdded = true;
+
+                        this.$forceUpdate();
+
+                        //update node-red data structure
+                        let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
+                        let point = this.pointList[parentDeviceName][slotProps.node.label];
+                        point.deviceAddress = device.address;
+
+                        if (!this.pointsToWrite || this.pointsToWrite.length == 'undefined') {
+                            this.pointsToWrite = [];
+                        }
+
+                        let found = this.pointsToWrite.find(ele =>
+                            ele.deviceAddress == point.deviceAddress &&
+                            ele.objectName == point.objectName &&
+                            ele.meta.arrayIndex == point.meta.arrayIndex &&
+                            ele.meta.objectId.instance == point.meta.objectId.instance &&
+                            ele.meta.objectId.type == point.meta.objectId.type);
+
+
+                        if (!found) this.pointsToWrite.push(point);
+
+                        //force a deploy state
+                        node.hiddenDeployToggle = !node.prevHiddenToggleState;
+                    },
+                    removePointClicked(slotProps) {
+                        //update UI
+                        let parentDeviceName = slotProps.node.parentDevice;
+                        let foundDeviceIndex = this.writeDevices ? this.writeDevices.findIndex(ele => ele.label == parentDeviceName) : -1;
+
+                        if (foundDeviceIndex !== -1) {
+                            let foundIndex = this.writeDevices[foundDeviceIndex].children.findIndex(ele => ele.key == slotProps.node.key && ele.label == slotProps.node.label);
+                            if (foundIndex !== -1) this.writeDevices[foundDeviceIndex].children.splice(foundIndex, 1);
+                            if (this.writeDevices[foundDeviceIndex].children.length == 0) {
+                                this.writeDevices.splice(foundDeviceIndex, 1);
+                            }
+                        }
+
+                        slotProps.node.showAdded = false;
+
+                        this.$forceUpdate();
+
+                        //update node-red data stucture
+                        let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
+                        let point = this.pointList[parentDeviceName][slotProps.node.label];
+                        point.deviceAddress = device.address;
+
+                        let foundIndex = this.pointsToWrite.findIndex(ele =>
+                            ele.deviceAddress == point.deviceAddress &&
+                            ele.objectName == point.objectName &&
+                            ele.meta.arrayIndex == point.meta.arrayIndex &&
+                            ele.meta.objectId.instance == point.meta.objectId.instance &&
+                            ele.meta.objectId.type == point.meta.objectId.type);
+
+                        if (foundIndex !== -1) {
+                            this.pointsToWrite.splice(foundIndex, 1);
+                        }
+
+                        //force a deploy state
+                        node.hiddenDeployToggle = !node.prevHiddenToggleState;
+                    },
+                    isDeviceActive(slotProps) {
+                        let app = this;
+                        if (((Date.now() - slotProps.node.lastSeen) / 1000) < app.pollFrequency) {
+                            return true;
+                        }
+                        return false;
+                    },
+                    isSlotAdded(slotProps) {
+                        if (slotProps.node.showAdded == true) {
+                            return true;
+                        } else {
+                            return false;
+                        }
+                    },
+                    hasData() {
+                        if (this.devices && this.devices.length > 0) {
+                            return true
+                        } else {
+                            return false;
+                        }
+                    }
+                },
+                components: {
+                    "p-tree": primevue.tree,
+                    "p-button": primevue.button,
+                    "p-timeline": primevue.timeline
+                }
+            };
+
+            let vueapp = createApp(App);
+            vueapp.use(primevue.config.default)
+            node.vm = vueapp.mount("#node-input-tabs-content");
+
+            //reinstate device data
+            if (node.writeDevices) {
+                node.vm.$data.writeDevices = node.writeDevices;
+            }
+            if (node.pointsToWrite) {
+                node.vm.$data.pointsToWrite = node.pointsToWrite;
+            }
+
+            let tabs = RED.tabs.create(
+                {
+                    id: "node-input-read-tabs",
+                    onchange: function (tab) {
+                        $("#node-input-tabs-content").children().hide()
+                        $("#" + tab.id).show()
+                    }
+                });
+
+            tabs.addTab(
+                {
+                    id: "read-networkTree-tab",
+                    label: "Device List"
+                });
+
+            tabs.addTab(
+                {
+                    id: "read-writeList-tab",
+                    label: "Write List"
+                });
+
+
+            tabs.addTab(
+                {
+                    id: "read-write-tab",
+                    label: "Properties"
+                });
+
+            document.getElementById("node-input-applicationTag").value = node.applicationTag;
+            document.getElementById("node-input-priority").value = node.priority;
+
+            //remove loading animation
+            let loadingGif = document.getElementById("loadingGif");
+            let loadingText = document.getElementById("loadingText");
+            let table = document.getElementById("read-networkTree-tab-content");
+            loadingGif.style.display = "none";
+            loadingText.style.display = "none";
+            table.style.display = "inherit";
+
+        },
+        oneditsave: function () {
+            let node = this;
+            if (node.vm.$data.devices && node.vm.$data.devices.length > 0) node.devices = node.vm.$data.devices;
+            if (node.vm.$data.writeDevices && node.vm.$data.writeDevices.length > 0) node.writeDevices = node.vm.$data.writeDevices;
+            if (node.vm.$data.pointsToWrite && node.vm.$data.pointsToWrite.length > 0) node.pointsToWrite = node.vm.$data.pointsToWrite;
+        }
+    });
+
+</script>
+
+<script type="text/html" data-template-name="Bacnet-Write">
+    <style>
+        .p-treenode-label {
+            /* color: white; */
+            color: black;
+            width: 100%;
+        }
+        .p-tree {
+            background: inherit !important;
+            border: inherit !important;
+        }
+        .p-button {
+            margin-right: .5rem;
+        }
+        .addPointButton {
+            float: right;
+        }
+        .minusPointButton {
+            float: right;
+        }
+        .addPointButton:hover, .minusPointButton:hover {
+            /* background: #282A36 !important; */
+            background: #d5d5d5 !important;
+        }
+        .pointLabel {
+            font-weight: 400;
+        }
+        .p-treenode-children {
+            /* background-color: #21232e; */
+            background-color: #f0f0f0;
+        }
+        .deviceLabel {
+            font-weight: 100;
+        }
+        .removeAllButton {
+            float: right;
+        }
+        .addAllButton {
+            float: right;
+        }
+        .bacnetbutton {
+            background: none;
+            border: none;
+            /* color: white; */
+            color: black;
+            font-weight: 400;
+        }
+        .bacnetbutton:hover {
+            /* background: #21232e; */
+            background: #f0f0f0;
+            border-radius: 10px;
+        }
+        .allFunctionsText {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol" !important;
+            padding-left: 5px;
+        }
+        .p-treenode-children > li > .p-treenode-children > li {
+            font-size: 14px;
+            height: 25px;
+            color: #b5b5b5 !important;
+        }
+        .p-treenode-children > li > .p-treenode-children > .p-treenode-label {
+            color: #b5b5b5 !important;
+        }
+        .p-treenode-children > li > .p-treenode-children > li:last-child {
+            padding-bottom: 30px;
+        }
+        .p-tree-toggler:enabled:hover {
+            /* background: #21232e !important; */
+            background: #d5d5d5 !important;
+        }
+        .p-tree-toggler:focus {
+            border: none !important;
+            box-shadow: none !important;
+        }
+        .deviceStatus {
+            font-size: 10px;
+        }
+        .statusOnline {
+            color: #11c511;
+
+        }
+        .statusOffline {
+            color: red;
+        }
+        .deviceLabel {
+            position: relative;
+        }
+        .objectPropertiesLabel {
+            display: flex !important;
+            flex-direction: row;
+            align-items: center;
+        }
+        .p-tree .p-tree-container .p-treenode .p-treenode-content:focus {
+            outline: 0 none !important;
+            outline-offset: 0 !important;
+            box-shadow: inset 0 0 0 0.15rem #44475a !important;
+        }
+        .p-tree-filter:focus, .p-tree-filter:focus-visible, .p-inputtext:enabled:hover {
+            box-shadow: inset 0 0 0 0.15rem #44475a !important;
+            border-color: transparent !important;
+        }
+        .bacnetbutton > .pi {
+            display: flex;
+        }
+        .reloadButtonIcon {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol" !important;
+        }
+        .reloadButton {
+            border: none;
+            background: none;
+            margin-right: 20px !important;
+            margin-bottom: 10px !important;
+            font-size: 14px !important;
+            float: right;
+        }
+        .reloadButton:hover {
+            background-color: #d5d5d5;
+            border-radius: 10px;
+        }
+
+    </style>
+
+    <div class="form-row">
+      <label for="node-input-name"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.name"></span> Name</label>
+      <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+
+    <div class='form-row node-input-read-tabs-row'>
+        <ul style='min-width:600px;margin-bottom:20px' id='node-input-read-tabs'></ul>
+    </div>
+
+    <div id='node-input-tabs-content'>
+
+        <div id='read-networkTree-tab' style='display:none'>
+
+            <div id='read-networkTree-tab-content' class="networkTreeContent" style='display:none'>
+                <div>
+                    <button @click="getData()" class="reloadButton">
+                        <i class="pi pi-refresh" style="color: #00AEEF;"><a class="allFunctionsText">Reload data</a></i>
+                    </button>
+                </div>
+
+                <div id="deviceListApp">
+                    <p-tree :value="devices" selectable="false" :filter="true" filterMode="lenient" v-if="hasData()">  
+                        <template #device="slotProps">
+                            <div v-if="isDeviceActive(slotProps)" class="deviceLabelParent" >
+                                <b class="deviceLabel">{{slotProps.node.label}} <b class="statusOnline deviceStatus">Online</b></b>
+                            </div>
+                            <div v-else>
+                                <b class="deviceLabel">{{slotProps.node.label}} <b class="statusOffline deviceStatus">Offline</b></b>
+                            </div>
+                        </template>
+
+                        <template #point="slotProps" v-model:class="pointContent">
+                            <b class="pointLabel">{{slotProps.node.label}}</b>
+                            <template v-if="isSlotAdded(slotProps)">
+                                <button class="addPointButton bacnetbutton">
+                                    <i class="pi pi-check-circle " style="color: #00AEEF;"></i>
+                                </button>
+                            </template>
+                            <template v-else>
+                                <button @click="addPointClicked(slotProps, this)" class="addPointButton bacnetbutton">
+                                    <i class="pi pi-plus-circle "></i>
+                                </button>
+                            </template>
+
+                            <button @click="removePointClicked(slotProps, this)" class="minusPointButton bacnetbutton">
+                                <i class="pi pi-minus-circle "></i>
+                            </button> 
+
+                        </template>
+                    </p-tree>
+                    <div v-else style="text-align: center; padding-top: 20px;">
+                        <a>No devices found.</a>
+                    </div>
+                </div>
+
+            </div>
+            
+            <img id="loadingGif" src="resources/@bitpoolos/edge-bacnet/BitpoolCube_Blue_350.gif" style="width: 70px; display: block; margin-left: auto; margin-right: auto;" />
+            <p id="loadingText" style="display: block; margin-left: auto; margin-right: auto; text-align: center; color: #505050;">Loading current network info</p>
+        </div>
+
+        <div id='read-writeList-tab' style='display:none'>
+            <p-tree :value="writeDevices">
+                <template #device="slotProps">
+                    <b class="deviceLabel">{{slotProps.node.label}} </b>
+                </template>
+
+                <template #point="slotProps" v-model:class="pointContent">
+                    <b class="pointLabel">{{slotProps.node.label}}</b>
+                    <button @click="removePointClicked(slotProps, this)" class="minusPointButton bacnetbutton">
+                        <i class="pi pi-minus-circle "></i>
+                    </button>
+                </template>
+            </p-tree>
+        </div>
+
+        <div id='read-write-tab' style='display:none'>
+            <div class="form-row">
+                <label for="node-input-applicationTag"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.applicationTag"></span> Application Tag</label>
+                <select id="node-input-applicationTag">
+                    <option value="0">NULL</option>
+                    <option value="1">BOOLEAN</option>
+                    <option value="2">UNSIGNED_INT</option>
+                    <option value="3">SIGNED_INT</option>
+                    <option value="4">REAL</option>
+                    <option value="5">DOUBLE</option>
+                    <option value="6">OCTET_STRING</option>
+                    <option value="7">CHARACTER_STRING</option>
+                    <option value="8">BIT_STRING</option>
+                    <option value="9">ENUMERATED</option>
+                    <option value="10">DATE</option>
+                    <option value="11">TIME</option>
+                    <option value="12">OBJECT_ID</option>
+                    <option value="13">RESERVE1</option>
+                    <option value="14">RESERVE2</option>
+                    <option value="15">RESERVE3</option>
+                    <option value="16">MAX_BACNET_APPLICATION_TAG</option>
+                    <option value="100">EMPTYLIST</option>
+                    <option value="101">WEEKNDAY</option>
+                    <option value="102">DATERANGE</option>
+                    <option value="103">DATETIME</option>
+                    <option value="104">TIMESTAMP</option>
+                    <option value="105">ERROR</option>
+                    <option value="106">DEVICE_OBJECT_PROPERTY_REFERENCE</option>
+                    <option value="107">DEVICE_OBJECT_REFERENCE</option>
+                    <option value="108">OBJECT_PROPERTY_REFERENCE</option>
+                    <option value="109">DESTINATION</option>
+                    <option value="110">RECIPIENT</option>
+                    <option value="111">COV_SUBSCRIPTION</option>
+                    <option value="112">CALENDAR_ENTRY</option>
+                    <option value="113">WEEKLY_SCHEDULE</option>
+                    <option value="114">SPECIAL_EVENT</option>
+                    <option value="115">READ_ACCESS_SPECIFICATION</option>
+                    <option value="116">READ_ACCESS_RESULT</option>
+                    <option value="117">LIGHTING_COMMAND</option>
+                    <option value="118">CONTEXT_SPECIFIC_DECODED</option>
+                    <option value="119">CONTEXT_SPECIFIC_ENCODED</option>
+                    <option value="120">LOG_RECORD</option>
+                </select>
+            </div>
+
+            <div class="form-row">
+                <label for="node-input-priority"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.priority"></span> Priority</label>
+                <select id="node-input-priority">
+                    <option value="1">1 - Manual-Life Safety</option>
+                    <option value="2">2 - Automatic-Life Safety</option>
+                    <option value="3">3 - Available</option>
+                    <option value="4">4 - Available</option>
+                    <option value="5">5 - Critical Equipment Control</option>
+                    <option value="6">6 - Minimum On/Off</option>
+                    <option value="7">7 - Available</option>
+                    <option value="8">8 - Manual Operator</option>
+                    <option value="9">9 - Available</option>
+                    <option value="10">10 - Available</option>
+                    <option value="11">11 - Available</option>
+                    <option value="12">12 - Available</option>
+                    <option value="13">13 - Available</option>
+                    <option value="14">14 - Available</option>
+                    <option value="15">15 - Available</option>
+                    <option value="16">16 - Available</option>
+                </select>
+            </div>
+
+            <label for="node-input-hiddenDeployToggle" style="display: none !important;" >
+                <i class="icon-tag" style="display: none !important;"></i> <span data-i18n="bitpool-bacnet.label.hiddenDeployToggle" style="display: none !important;"></span>
+                <input style="display: none !important;" type="checkbox" id="node-input-hiddenDeployToggle">
+            </label>
+        </div>
+
+    </div>
+  </script>
+  <script type="text/html" data-help-name="Bacnet-Write">
+    <p> A node used to view, select devices, device points, and point properties to add to the Write polling list. </p>
+
+        <h3><strong>Device List</strong></h3>
+        <ol class="node-ports">
+            <p>
+                This tab displays the devices and device points that are a result of a network Discover. The data is broken down and listed as Devices, Points for the Device,
+                and Point properties for the Points. 
+                
+                On this tab the user may choose specific points to Write values to. 
+
+                The reload button may be used to show any new data that may have been recieved by the bitpool BACnet node.
+
+                Please note: Data can only be shown here once a Discover sucessfully recieves a response from online devices on the network
+            </p>
+        
+        </ol>
+
+        <h3><strong>Write List</strong></h3>
+        <ol class="node-ports">
+            <p>
+                This tab shows all of the devices and points that have been chosen to write. 
+            </p>
+         
+        </ol>
+
+        <h3><strong>Properties</strong></h3>
+        <ol class="node-ports">
+            <p>
+                This tab allows the user to choose the Application Tag and Priority to be used in a Write function. Please make sure the device / controller is configured correctly to accept the write command. 
+            </p>
+         
+        </ol>
+
+        <h3>Resources:</h3>
+        <h4><strong>Online Docs:</strong></h4>
+        <ul type="1">
+          <li><a href="https://www.bitpool.com/">bitpool.com</a> - check us out here.</li>
+          <li><a href="https://app.bitpool.com/">app.bitpool.com</a> - set up your account.</li>
+          <li><a href="https://wiki.bitpool.com/">wiki.bitpool.com</a> - find more documentation.</li>
+          <li><a href="https://bacnet.org/">BACnet</a> - find more about the protocol.</li>
+          
+        </ul>
+</script>

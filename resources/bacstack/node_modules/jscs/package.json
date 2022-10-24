@@ -1,0 +1,148 @@
+{
+  "author": {
+    "name": "Marat Dulin <mdevils@yandex.ru> and other contributors",
+    "url": "https://github.com/jscs-dev/node-jscs/graphs/contributors"
+  },
+  "description": "JavaScript Code Style",
+  "name": "jscs",
+  "version": "3.0.7",
+  "main": "lib/checker",
+  "homepage": "http://jscs.info",
+  "keywords": [
+    "code style",
+    "formatter",
+    "lint",
+    "linter",
+    "style guide",
+    "validate"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jscs-dev/node-jscs"
+  },
+  "bugs": {
+    "url": "https://github.com/jscs-dev/node-jscs/issues"
+  },
+  "maintainers": [
+    {
+      "name": "Marat Dulin",
+      "email": "mdevils@yandex.ru",
+      "github-username": "mdevils"
+    },
+    {
+      "name": "Oleg Gaidarenko",
+      "email": "markelog@gmail.com",
+      "github-username": "markelog"
+    },
+    {
+      "name": "Mike Sherov",
+      "email": "mike.sherov@gmail.com",
+      "github-username": "mikesherov"
+    },
+    {
+      "name": "Joel Kemp",
+      "email": "joel@mrjoelkemp.com",
+      "github-username": "mrjoelkemp"
+    },
+    {
+      "name": "Alexej Yaroshevich",
+      "email": "zxqfox@gmail.com",
+      "github-username": "zxqfox"
+    },
+    {
+      "name": "Henry Zhu",
+      "email": "hi@henryzoo.com",
+      "github-username": "hzoo"
+    }
+  ],
+  "engines": {
+    "node": ">= 0.10.0"
+  },
+  "dependencies": {
+    "chalk": "~1.1.0",
+    "cli-table": "~0.3.1",
+    "commander": "~2.9.0",
+    "cst": "^0.4.3",
+    "estraverse": "^4.1.0",
+    "exit": "~0.1.2",
+    "glob": "^5.0.1",
+    "htmlparser2": "3.8.3",
+    "js-yaml": "~3.4.0",
+    "jscs-jsdoc": "^2.0.0",
+    "jscs-preset-wikimedia": "~1.0.0",
+    "jsonlint": "~1.6.2",
+    "lodash": "~3.10.0",
+    "minimatch": "~3.0.0",
+    "natural-compare": "~1.2.2",
+    "pathval": "~0.1.1",
+    "prompt": "~0.2.14",
+    "reserved-words": "^0.1.1",
+    "resolve": "^1.1.6",
+    "strip-bom": "^2.0.0",
+    "strip-json-comments": "~1.0.2",
+    "to-double-quotes": "^2.0.0",
+    "to-single-quotes": "^2.0.0",
+    "vow": "~0.4.8",
+    "vow-fs": "~0.3.4",
+    "xmlbuilder": "^3.1.0"
+  },
+  "devDependencies": {
+    "chai": "^3.3.0",
+    "coveralls": "~2.11.2",
+    "has-ansi": "~2.0.0",
+    "jshint": "~2.8.0",
+    "mocha": "^2.2.0",
+    "regenerate": "~1.2.1",
+    "rewire": "^2.3.1",
+    "sinon": "^1.13.0",
+    "sinon-chai": "^2.8.0",
+    "unicode-7.0.0": "~0.1.5",
+    "unit-coverage": "^4.0.1",
+    "xml2js": "~0.4.4"
+  },
+  "bin": {
+    "jscs": "./bin/jscs"
+  },
+  "unit-coverage": {
+    "common": [
+      "-a",
+      "lib",
+      "-a",
+      "test",
+      "-s",
+      "lib/**/*.js",
+      "-t",
+      "test/specs/**/*.js",
+      "-e",
+      "lib/cli-config.js",
+      "-S",
+      "relative",
+      "-O",
+      "sources=lib",
+      "-O",
+      "tests=test/specs"
+    ]
+  },
+  "scripts": {
+    "lint": "npm run jshint && npm run jscs",
+    "jshint": "jshint .",
+    "jscs": "node bin/jscs lib test bin publish",
+    "pretest": "npm run lint",
+    "test": "mocha --color",
+    "watch": "mocha --color --watch",
+    "integration": "#node test/scripts/integration.js",
+    "coverage": "unit-coverage run -p common",
+    "coverage-html": "unit-coverage run -p common -r html -o coverage.html",
+    "coveralls": "unit-coverage run -p common -r lcov -o out.lcov && cat out.lcov | coveralls",
+    "changelog": "git log `git describe --tags --abbrev=0`..HEAD --pretty=format:' * %s (%an)' | grep -v 'Merge pull request'",
+    "release": "node publish/prepublish && npm test && npm publish"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "patterns",
+    "presets",
+    "LICENSE"
+  ]
+}

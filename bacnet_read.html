@@ -1,0 +1,776 @@
+<script type="text/javascript">
+
+    RED.nodes.registerType('Bacnet-Discovery', {
+        category: 'Bitpool BACnet',
+        color: '#00aeef',
+        defaults: {
+            name: {value: ""},
+            events: {value: true},
+            json: {value: true},
+            mqtt: {value: false},
+            hiddenDeployToggle: {value: false},
+            prevHiddenToggleState: {value: false},
+            roundDecimal: {value: 2},
+            deviceList: [],
+            pointList: [],
+            pointsToRead: {value: {}},
+            readDevices: {value: []},
+            devicesToRead: [],
+            object_property_presentVal: {value: true},
+            object_property_objDescription: {value: false},
+            object_property_statusFlag: {value: false},
+            object_property_reliability: {value: false},
+            object_property_outOfService: {value: false},
+            object_property_units: {value: false},
+        },
+        inputs: 1,
+        outputs: 1,
+        icon: "bitpool.svg",
+        label: function () {
+            return "read";
+        },
+        paletteLabel: function () {
+            return "read";
+        },
+        oneditprepare: function () {
+            let node = this;
+
+            node.prevHiddenToggleState = node.hiddenDeployToggle;
+
+            const {createApp, ref, onMounted} = Vue;
+
+            //prime vue app
+            const App = {
+                data() {
+                    return {
+                        devices: ref(),
+                        readDevices: ref(),
+                        deviceList: ref(),
+                        pointList: ref(),
+                        pointsToRead: ref(),
+                        nodeService: ref(new NodeService()),
+                        pollFrequency: ref(),
+                    }
+                },
+                setup() {
+                    let pointList;
+                    let deviceList;
+                    const selectedKeys = ref(null);
+                    const nodes = ref();
+                    const expandedKeys = ref({});
+
+                    const expandAll = () => {
+                        for (let node of devices.value) {
+                            expandNode(node);
+                        }
+
+                        expandedKeys.value = {...expandedKeys.value};
+                    };
+                    const collapseAll = () => {
+                        expandedKeys.value = {};
+                    };
+                    const expandNode = (node) => {
+                        if (node.children && node.children.length) {
+                            expandedKeys.value[node.key] = true;
+
+                            for (let child of node.children) {
+                                expandNode(child);
+                            }
+                        }
+                    };
+
+                    return {
+                        nodes,
+                        expandedKeys,
+                        expandAll,
+                        collapseAll,
+                        expandNode,
+                    }
+                },
+                mounted() {
+                    let app = this;
+                    this.getData();
+                    let timerId = setInterval(() => app.getData(), 5000);
+                },
+                methods: {
+                    getData() {
+                        //console.log("Doing getData ");
+                        let app = this;
+                        this.nodeService.getNetworkData().then(function (result) {
+                            app.devices = result.renderList;
+                            app.deviceList = result.deviceList;
+                            app.pointList = result.pointList;
+                            app.pollFrequency = parseInt(result.pollFrequency);
+                        });
+                    },
+                    addAllClicked(slotProps) {
+                        //update UI 
+
+                        let clone = JSON.parse(JSON.stringify(slotProps.node));
+
+                        if (this.readDevices) {
+                            let foundIndex = this.readDevices.findIndex(ele => ele.key == slotProps.node.key && ele.label == slotProps.node.label);
+                            if (foundIndex == -1) this.readDevices.push(clone);
+                        } else {
+                            this.readDevices = [clone];
+                        }
+
+                        let deviceSlot = this.devices.find(ele => ele.label == slotProps.node.label);
+                        if(deviceSlot) {
+                            deviceSlot.showAdded = true;
+                            deviceSlot.children.forEach(function(child) {
+                                child.showAdded = true;
+                            });
+                        }
+                        slotProps.node.showAdded = true;
+
+
+                        this.$forceUpdate()
+
+                        //update node-red data structure to forward to gateway
+                        let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
+                        let points = this.pointList[slotProps.node.label];
+
+                        if (!this.pointsToRead[device.address]) {
+                            this.pointsToRead[device.address] = {};
+                        }
+
+                        for (let pointName in points) {
+
+                            let point = this.pointList[device.deviceName][pointName];
+
+                            this.pointsToRead[device.address][point.objectName] = point;
+                        }
+
+                        //force a deploy state
+                        node.hiddenDeployToggle = !node.prevHiddenToggleState;
+                    },
+                    removeAllClicked(slotProps) {
+                        //update UI
+                        if (this.readDevices.length > 0) {
+                            let foundIndex = this.readDevices.findIndex(ele => ele.key == slotProps.node.key && ele.label == slotProps.node.label);
+                            if (foundIndex !== -1) this.readDevices.splice(foundIndex, 1);
+                        }
+
+                        let deviceSlot = this.devices.find(ele => ele.label == slotProps.node.label);
+                        if(deviceSlot) {
+                            deviceSlot.showAdded = false;
+                            deviceSlot.children.forEach(function(child) {
+                                child.showAdded = false;
+                            });
+                        }
+                        slotProps.node.showAdded = false;
+                        this.$forceUpdate()
+
+                        //update node-red data structure
+                        let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
+                        if (this.pointsToRead[device.address]) {
+                            delete this.pointsToRead[device.address];
+                        }
+
+                        //force a deploy state
+                        node.hiddenDeployToggle = !node.prevHiddenToggleState;
+                    },
+                    addPointClicked(slotProps) {
+                        
+                        //update UI
+                        let parentDeviceName = slotProps.node.parentDevice;
+                        let foundDeviceIndex = this.readDevices ? this.readDevices.findIndex(ele => ele.label == parentDeviceName) : -1;
+                        let parentDevice = this.devices.find(ele => ele.label == parentDeviceName);
+
+                        if (foundDeviceIndex == -1) {
+                            //no read devices present, add new
+                            let newReadParent = {...parentDevice};
+                            newReadParent.children = [];
+                            newReadParent.children.push(slotProps.node);
+
+                            if (this.readDevices) {
+                                this.readDevices.push(newReadParent);
+                            } else {
+                                this.readDevices = [newReadParent];
+                            }
+                        } else {
+                            // read device found, add point to existing
+                            this.readDevices[foundDeviceIndex].children.push(slotProps.node);
+                        }
+
+                        //set show added to true 
+                        let slot = parentDevice.children.find(ele => ele.label == slotProps.node.label);
+                        slot.showAdded = true;
+
+                        this.$forceUpdate();
+
+                        //update node-red data structure
+                        let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
+                        if (!this.pointsToRead[device.address]) {
+                            this.pointsToRead[device.address] = {};
+                        }
+                        let point = this.pointList[parentDeviceName][slotProps.node.label];
+                        this.pointsToRead[device.address][point.objectName] = point;
+
+                        //force a deploy state
+                        node.hiddenDeployToggle = !node.prevHiddenToggleState;
+                    },
+                    removePointClicked(slotProps) {
+                        //update UI
+                        let parentDeviceName = slotProps.node.parentDevice;
+                        let foundDeviceIndex = this.readDevices ? this.readDevices.findIndex(ele => ele.label == parentDeviceName) : -1;
+                        let parentDevice = this.devices.find(ele => ele.label == parentDeviceName);
+
+                        if (foundDeviceIndex !== -1) {
+                            let foundIndex = this.readDevices[foundDeviceIndex].children.findIndex(ele => ele.key == slotProps.node.key && ele.label == slotProps.node.label);
+                            if (foundIndex !== -1) this.readDevices[foundDeviceIndex].children.splice(foundIndex, 1);
+                            if (this.readDevices[foundDeviceIndex].children.length == 0) {
+                                this.readDevices.splice(foundDeviceIndex, 1);
+                            }
+                        }
+
+                        //set show added to true 
+                        let slot = parentDevice.showAdded ? slotProps.node : parentDevice.children.find(ele => ele.label == slotProps.node.label);
+                        slot.showAdded = false;
+                        slotProps.node.showAdded = false;
+                        this.$forceUpdate();
+
+                        //update node-red data stucture
+                        let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
+                        let point = this.pointList[parentDeviceName][slotProps.node.label];
+                        if (this.pointsToRead[device.address][point.objectName]) delete this.pointsToRead[device.address][point.objectName];
+
+                        //force a deploy state
+                        node.hiddenDeployToggle = !node.prevHiddenToggleState;
+                    },
+                    isDeviceActive(slotProps) {
+                        let app = this;
+                        if (((Date.now() - slotProps.node.lastSeen) / 1000) < (app.pollFrequency + 5)) {
+                            return true;
+                        }
+                        return false;
+                    },
+                    isDeviceAdded(slotProps) {
+                        if (slotProps.node.showAdded == true) {
+                            return true;
+                        } else {
+                            return false;
+                        }
+                    },
+                    isSlotAdded(slotProps) {
+                        return slotProps.node.showAdded;
+                    },
+                    hasData() {
+                        if (this.devices && this.devices.length > 0) {
+                            return true
+                        } else {
+                            return false;
+                        }
+                    }
+                },
+                components: {
+                    "p-tree": primevue.tree,
+                    "p-button": primevue.button,
+                    "p-timeline": primevue.timeline
+                }
+            };
+
+            let vueapp = createApp(App);
+            vueapp.use(primevue.config.default)
+            node.vm = vueapp.mount("#node-input-tabs-content");
+
+            //reinstate device data
+            if (node.readDevices) {
+                node.vm.$data.readDevices = node.readDevices;
+            }
+
+            if (node.pointsToRead) {
+                node.vm.$data.pointsToRead = node.pointsToRead;
+            }
+
+            //set checkboxes to config values stored in backend
+            document.getElementById("node-input-object_property_presentVal").checked = node.object_property_presentVal;
+            document.getElementById("node-input-object_property_presentVal").onclick = handleCheckboxClick;
+            document.getElementById("node-input-object_property_objDescription").checked = node.object_property_objDescription;
+            document.getElementById("node-input-object_property_objDescription").onclick = handleCheckboxClick;
+            document.getElementById("node-input-object_property_statusFlag").checked = node.object_property_statusFlag;
+            document.getElementById("node-input-object_property_statusFlag").onclick = handleCheckboxClick;
+            document.getElementById("node-input-object_property_reliability").checked = node.object_property_reliability;
+            document.getElementById("node-input-object_property_reliability").onclick = handleCheckboxClick;
+            document.getElementById("node-input-object_property_outOfService").checked = node.object_property_outOfService;
+            document.getElementById("node-input-object_property_outOfService").onclick = handleCheckboxClick;
+            document.getElementById("node-input-object_property_units").checked = node.object_property_units;
+            document.getElementById("node-input-object_property_units").onclick = handleCheckboxClick;
+
+            document.getElementById("node-input-roundDecimal").value = node.roundDecimal;
+            document.getElementById("node-input-json").checked = node.json;
+            document.getElementById("node-input-json").onclick = handleMsgTypeClick;
+            document.getElementById("node-input-mqtt").checked = node.mqtt;
+            document.getElementById("node-input-mqtt").onclick = handleMsgTypeClick;
+
+            function handleCheckboxClick() {
+                let checkboxes = document.getElementsByClassName("objectProp");
+                let checkedCount = 0;
+                for (let box of checkboxes) {
+                    if (box.checked == true) {
+                        checkedCount++;
+                    }
+                }
+                if (checkedCount == 0) {
+                    this.checked = true;
+                }
+            }
+
+            function handleMsgTypeClick() {
+                if (this.id == "node-input-json") {
+                    document.getElementById("node-input-mqtt").checked = !document.getElementById("node-input-mqtt").checked;
+                }
+                if (this.id == "node-input-mqtt") {
+                    document.getElementById("node-input-json").checked = !document.getElementById("node-input-json").checked;
+                }
+            }
+
+            //create tabs 
+            let tabs = RED.tabs.create(
+                {
+                    id: "node-input-read-tabs",
+                    onchange: function (tab) {
+                        $("#node-input-tabs-content").children().hide()
+                        $("#" + tab.id).show()
+                    }
+                });
+
+            tabs.addTab(
+                {
+                    id: "read-networkTree-tab",
+                    label: "Device List"
+                });
+
+            tabs.addTab(
+                {
+                    id: "read-readList-tab",
+                    label: "Read List"
+                });
+
+            tabs.addTab(
+                {
+                    id: "read-properties-tab",
+                    label: "Properties"
+                });
+
+            //remove loading animation
+            let loadingGif = document.getElementById("loadingGif");
+            let loadingText = document.getElementById("loadingText");
+            let table = document.getElementById("read-networkTree-tab-content");
+            loadingGif.style.display = "none";
+            loadingText.style.display = "none";
+            table.style.display = "inherit";
+
+        },
+        oneditsave: function () {
+            let node = this;
+            if (node.vm.$data.devices && node.vm.$data.devices.length > 0) node.devices = node.vm.$data.devices;
+            if (node.vm.$data.readDevices && node.vm.$data.readDevices.length > 0) node.readDevices = node.vm.$data.readDevices;
+            if (node.vm.$data.pointsToRead && node.vm.$data.pointsToRead.length > 0) node.pointsToRead = node.vm.$data.pointsToRead;
+
+        },
+        oneditcancel: function () {
+            let node = this;
+            if (node.vm.$data.devices && node.vm.$data.devices.length > 0) node.devices = node.vm.$data.devices;
+            if (node.vm.$data.readDevices && node.vm.$data.readDevices.length > 0) node.readDevices = node.vm.$data.readDevices;
+            if (node.vm.$data.pointsToRead && node.vm.$data.pointsToRead.length > 0) node.pointsToRead = node.vm.$data.pointsToRead;
+        }
+    });
+
+</script>
+
+<script type="text/html" data-template-name="Bacnet-Discovery">
+    <style>
+
+        .p-treenode-label {
+            /* color: white; */
+            color: black;
+            width: 100%;
+        }
+        .p-tree {
+            background: inherit !important;
+            border: inherit !important;
+        }
+        .p-button {
+            margin-right: .5rem;
+        }
+        .addPointButton {
+            float: right;
+        }
+        .minusPointButton {
+            float: right;
+        }
+        .addPointButton:hover, .minusPointButton:hover {
+            /* background: #282A36 !important; */
+            background: #d5d5d5 !important;
+        }
+        .pointLabel {
+            font-weight: 400;
+        }
+        .p-treenode-children {
+            /* background-color: #21232e; */
+            background-color: #f0f0f0;
+        }
+        .deviceLabel {
+            font-weight: 100;
+        }
+        .removeAllButton {
+            float: right;
+        }
+        .addAllButton {
+            float: right;
+        }
+        .bacnetbutton {
+            background: none;
+            border: none;
+            /* color: white; */
+            color: black;
+            font-weight: 400;
+        }
+        .bacnetbutton:hover {
+            /* background: #21232e; */
+            background: #f0f0f0;
+            border-radius: 10px;
+        }
+        .allFunctionsText {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol" !important;
+            padding-left: 5px;
+        }
+        .p-treenode-children > li > .p-treenode-children > li {
+            font-size: 14px;
+            height: 25px;
+            color: #b5b5b5 !important;
+        }
+        .p-treenode-children > li > .p-treenode-children > .p-treenode-label {
+            color: #b5b5b5 !important;
+        }
+        .p-treenode-children > li > .p-treenode-children > li:last-child {
+            padding-bottom: 30px;
+        }
+        .p-tree-toggler:enabled:hover {
+            /* background: #21232e !important; */
+            background: #d5d5d5 !important;
+        }
+        .p-tree-toggler:focus {
+            border: none !important;
+            box-shadow: none !important;
+        }
+        .deviceStatus {
+            font-size: 10px;
+        }
+        .statusOnline {
+            color: #11c511;
+        }
+        .statusOffline {
+            color: red;
+        }
+        .deviceLabel {
+            position: absolute;
+        }
+        .objectPropertiesLabel {
+            display: flex !important;
+            flex-direction: row;
+            align-items: center;
+        }
+        .p-tree .p-tree-container .p-treenode .p-treenode-content:focus {
+            outline: 0 none !important;
+            outline-offset: 0 !important;
+            box-shadow: inset 0 0 0 1px #bdbdbd !important;
+        }
+        .checkbox-round {
+            width: 13px !important;
+            height: 13px !important;
+            background-color: white;
+            border-radius: 50%;
+            vertical-align: middle;
+            border: 1px solid #ddd;
+            appearance: none;
+            -webkit-appearance: none;
+            outline: none;
+            cursor: pointer;
+        }
+        .checkbox-round:checked {
+            background-color: #00AEEF;
+        }
+        .checkbox-round:focus {
+            outline: none !important;
+        }
+        .p-tree-filter:focus, .p-tree-filter:focus-visible, .p-inputtext:enabled:hover {
+            box-shadow: inset 0 0 0 0.15rem #44475a !important;
+            border-color: transparent !important;
+        }
+        .bacnetbutton > .pi {
+            display: flex;
+        }
+        .p-tree-container {
+            margin: 0 !important;
+        }
+        .reloadButtonIcon {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol" !important;
+        }
+        .reloadButton {
+            border: none;
+            background: none;
+            margin-right: 20px !important;
+            margin-bottom: 10px !important;
+            font-size: 14px !important;
+            float: right;
+        }
+        .reloadButton:hover {
+            background-color: #d5d5d5;
+            border-radius: 10px;
+        }
+        .p-tree-filter-icon {
+            margin-top: 0px !important;
+        }
+
+    </style>
+    
+    <div class="form-row">
+        <label for="node-input-name"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.name"></span> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+
+    <div class='form-row node-input-read-tabs-row'>
+        <ul style='min-width:600px;margin-bottom:20px' id='node-input-read-tabs'></ul>
+    </div>
+
+    <div id='node-input-tabs-content'>
+
+            <!--
+                *
+                *
+                *   Network Tree tab
+                *
+                *
+            -->
+            <div id='read-networkTree-tab' style='display:none'>
+
+                <div id='read-networkTree-tab-content' class="networkTreeContent" style='display:none'>
+                    
+                    <div>
+                        <button @click="getData()" class="reloadButton">
+                            <i class="pi pi-refresh" style="color: #00AEEF;"><a class="allFunctionsText">Reload data</a></i>
+                        </button>
+                    </div>
+                    
+
+                    <div id="deviceListApp">
+                        <p-tree :value="devices" selectable="false" :filter="true" filterMode="lenient" filterPlaceholder="No results found." v-if="hasData()">  
+                            <template #device="slotProps">
+                                <div v-if="isDeviceActive(slotProps)" class="deviceLabelParent">
+                                    <b class="deviceLabel">{{slotProps.node.label}} <b class="statusOnline deviceStatus">Online</b></b>
+                                </div>
+                                <div v-else>
+                                    <b class="deviceLabel">{{slotProps.node.label}} <b class="statusOffline deviceStatus">Offline</b></b>
+                                </div>
+
+                                <template v-if="isDeviceAdded(slotProps)">
+                                    <button class="addAllButton bacnetbutton">
+                                        <i class="pi pi-check-circle " style="color: #00AEEF;"></i>
+                                    </button>
+                                </template>
+                                <template v-else>
+                                    <button @click="addAllClicked(slotProps)" class="addAllButton bacnetbutton">
+                                        <i class="pi pi-plus-circle "><a class="allFunctionsText">Add all</a></i>
+                                    </button>
+                                </template>
+                                
+                                <button @click="removeAllClicked(slotProps, this)" class="removeAllButton bacnetbutton">
+                                    <i class="pi pi-minus-circle "><a class="allFunctionsText">Remove all</a></i>
+                                </button>
+                            </template>
+
+                            <template #point="slotProps" v-model:class="pointContent">                                
+                                <b class="pointLabel">{{slotProps.node.label}}</b>
+
+                                <template v-if="isSlotAdded(slotProps)">
+                                    <button class="addPointButton bacnetbutton">
+                                        <i class="pi pi-check-circle " style="color: #00AEEF;"></i>
+                                    </button>
+                                </template>
+                                <template v-else>
+                                    <button @click="addPointClicked(slotProps, this)" class="addPointButton bacnetbutton">
+                                        <i class="pi pi-plus-circle "></i>
+                                    </button>
+                                </template>
+                                
+                                <button @click="removePointClicked(slotProps, this)" class="minusPointButton bacnetbutton">
+                                    <i class="pi pi-minus-circle "></i>
+                                </button>
+                            </template>
+                        </p-tree>
+                        <div v-else style="text-align: center; padding-top: 20px;">
+                            <a>No devices found.</a>
+                        </div>
+                    </div>
+                </div>
+
+                <img id="loadingGif" src="resources/@bitpoolos/edge-bacnet/BitpoolCube_Blue_350.gif" style="width: 70px; display: block; margin-left: auto; margin-right: auto;" />
+                <p id="loadingText" style="display: block; margin-left: auto; margin-right: auto; text-align: center; color: #505050;">Loading current network info</p>
+            </div>
+
+            <!--
+                *
+                *
+                *   Read list tab
+                *
+                *
+            -->
+            <div id='read-readList-tab' style='display:none'>
+
+
+                <p-tree :value="readDevices">
+                    <template #device="slotProps">
+                        <b class="deviceLabel">{{slotProps.node.label}} </b>
+                        <button @click="removeAllClicked(slotProps, this)" class="removeAllButton bacnetbutton">
+                            <i class="pi pi-minus-circle "><a class="allFunctionsText">Remove all</a></i>
+                        </button>
+                    </template>
+
+                    <template #point="slotProps" v-model:class="pointContent">
+                        <b class="pointLabel">{{slotProps.node.label}}</b>
+                        <button @click="removePointClicked(slotProps, this)" class="minusPointButton bacnetbutton">
+                            <i class="pi pi-minus-circle "></i>
+                        </button>
+                    </template>
+                </p-tree>
+
+            </div>
+        <!--
+            *
+            *
+            *   Read Properties tab
+            *
+            *
+        -->
+        <div id='read-properties-tab' style='display:none'>
+            <div class="form-row" style="display: inline-flex; width: fit-content; flex-wrap: nowrap;">
+
+                <label for="node-input-object_properties_group" style="display: flex; align-items: center; white-space: nowrap;">Object Properties:</label>
+                <div id="node-input-object_properties_group"  style="display: flex; align-items: flex-end; flex-direction: column; padding-left: 30px;">
+                    
+                    <div class="objectPropertiesLabel">
+                        <label for="node-input-object_property_presentVal" style="padding-left: 4px; width: auto;" class="objectPropertiesLabel">
+                            <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_presentVal"></span>
+                            <a style="white-space: nowrap;">Present Value</a>
+                            <input style="margin-left: 5px;" class="checkbox-round objectProp" type="checkbox" id="node-input-object_property_presentVal">
+                        </label>
+                    </div>
+            
+                    <div class="objectPropertiesLabel">
+                        <label for="node-input-object_property_objDescription" style="padding-left: 21px; width: auto;" class="objectPropertiesLabel">
+                            <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_objDescription"></span>
+                            <a>Description</a>
+                            <input style="margin-left: 5px;" class="checkbox-round objectProp" type="checkbox" id="node-input-object_property_objDescription">
+                        </label>
+                    </div>
+
+                    <div class="objectPropertiesLabel">
+                        <label for="node-input-object_property_statusFlag"  style="padding-left: 13px; width: auto;" class="objectPropertiesLabel">
+                            <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_statusFlag"></span>
+                            <a style="white-space: nowrap;">Status Flags</a>
+                            <input style="margin-left: 5px;" class="checkbox-round objectProp" type="checkbox" id="node-input-object_property_statusFlag">
+                        </label>
+                    </div>
+
+                    <div class="objectPropertiesLabel">
+                        <label for="node-input-object_property_reliability" style="padding-left: 32px; width: auto;" class="objectPropertiesLabel">
+                            <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_reliability"></span>
+                            <a>Reliability</a>
+                            <input style="margin-left: 5px;" class="checkbox-round objectProp" type="checkbox" id="node-input-object_property_reliability">
+                        </label>
+                    </div>
+
+                    <div class="objectPropertiesLabel">
+                        <label for="node-input-object_property_outOfService" style="padding-left: 3px; width: auto;" class="objectPropertiesLabel">
+                            <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_outOfService"></span>
+                            <a style="white-space: nowrap;">Out of Service</a>
+                            <input style="margin-left: 5px;" class="checkbox-round objectProp" type="checkbox" id="node-input-object_property_outOfService">
+                        </label>
+                    </div>
+
+                    <div class="objectPropertiesLabel">
+                        <label for="node-input-object_property_units" style="padding-left: 60px; width: auto;" class="objectPropertiesLabel">
+                            <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_units"></span>
+                            <a style="white-space: nowrap;">Units</a>
+                            <input style="margin-left: 5px;" class="checkbox-round objectProp" type="checkbox" id="node-input-object_property_units">
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <br>
+            <br>
+
+            <div class="form-row" style="display: flex;">
+                <label for="node-input-msgType">
+                    Message type: 
+                </label>
+                <div id="node-input-msgType" style="display: flex; align-items: flex-end; flex-direction: column;">
+                    <div style="display: flex; flex-direction: row; align-items: flex-start;"><a style="padding-left: 20px;">Block per device</a> <input class="checkbox-round" type="checkbox" id="node-input-json" class="" style="width: 13px; margin-left: 5px;"/> </div>
+                    <div style="display: flex; flex-direction: row; align-items: flex-start;"><a style="padding-left: 20px;">Individual msgs</a> <input class="checkbox-round" type="checkbox" id="node-input-mqtt" class="" style="width: 13px; margin-left: 5px;"/> </div>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label for="node-input-roundDecimal">
+                    Decimal place precision
+                </label>
+                <input type="number" id="node-input-roundDecimal" placeholder="None">
+            </div>
+
+            <label for="node-input-hiddenDeployToggle" style="display: none !important;" >
+                <i class="icon-tag" style="display: none !important;"></i> <span data-i18n="bitpool-bacnet.label.hiddenDeployToggle" style="display: none !important;"></span>
+                <input style="display: none !important;" type="checkbox" id="node-input-hiddenDeployToggle">
+            </label>
+        </div>
+    
+    </div>
+
+</script>
+<script type="text/html" data-help-name="Bacnet-Discovery">
+    <p> A node used to view, select devices, device points, and point properties to add to the Read polling list. </p>
+
+        <h3><strong>Device List</strong></h3>
+        <ol class="node-ports">
+            <p>
+                This tab displays the devices and device points that are a result of a network Discover. The data is broken down and listed as Devices, Points for the Device,
+                and Point properties for the Points. 
+                
+                On this tab the user may choose specific points to read, or all of the points present in a device. 
+
+                The reload button may be used to show any new data that may have been recieved by the bitpool BACnet node.
+
+                Please note: Data can only be shown here once a Discover sucessfully recieves a response from online devices on the network
+            </p>
+        
+        </ol>
+
+        <h3><strong>Read List</strong></h3>
+        <ol class="node-ports">
+            <p>
+                This tab shows all of the devices and points that have been chosen to read. 
+            </p>
+         
+        </ol>
+
+        <h3><strong>Properties</strong></h3>
+        <ol class="node-ports">
+            <p>
+                This tab shows all of the point properties the user may choose to read from the points detailed in the Read List tab. 
+                Here the user may also choose the output format of the Read data, as MQTT compatible Individual msgs, or a JSON block per device. 
+            </p>
+         
+        </ol>
+
+        <h3>Resources:</h3>
+        <h4><strong>Online Docs:</strong></h4>
+        <ul type="1">
+          <li><a href="https://www.bitpool.com/">bitpool.com</a> - check us out here.</li>
+          <li><a href="https://app.bitpool.com/">app.bitpool.com</a> - set up your account.</li>
+          <li><a href="https://wiki.bitpool.com/">wiki.bitpool.com</a> - find more documentation.</li>
+          <li><a href="https://bacnet.org/">BACnet</a> - find more about the protocol.</li>
+        </ul>
+</script>
