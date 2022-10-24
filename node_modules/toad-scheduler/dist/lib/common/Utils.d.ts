@@ -1,1 +1,0 @@
-export declare function isPromise(value: any): value is Promise<any>;
