@@ -1,3 +1,7 @@
+/*
+  MIT License Copyright 2021, 2022 - Bitpool Pty Ltd
+*/
+
 const { createLogger, format, transports } = require('winston');
 const { randomUUID } = require('crypto');
 const os = require('os');

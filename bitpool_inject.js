@@ -14,6 +14,11 @@
  * limitations under the License.
  **/
 
+/*
+  MIT License Copyright 2021, 2022 - Bitpool Pty Ltd
+*/
+
+
  module.exports = function(RED) {
     "use strict";
     const {scheduleTask} = require("cronosjs");

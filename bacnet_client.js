@@ -1,3 +1,7 @@
+/*
+  MIT License Copyright 2021, 2022 - Bitpool Pty Ltd
+*/
+
 const bacnet = require('./resources/bacstack/lib/client');
 const baEnum = require('./resources/bacstack/lib/enum');
 const baAsn1 = require('./resources/bacstack/lib/asn1');

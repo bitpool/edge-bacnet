@@ -1,3 +1,7 @@
+/*
+  MIT License Copyright 2021, 2022 - Bitpool Pty Ltd
+*/
+
 module.exports = function (RED) {
     const baEnum = require('./resources/bacstack/lib/enum');
     function BitpoolBacnetObject (config) {
