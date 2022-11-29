@@ -63,7 +63,7 @@ class BacnetConfig {
 };
 
 class BacnetClientConfig {
-  constructor(apduTimeout, localIpAdrress, local_device_port, apduSize, maxSegments, broadCastAddr, discover_polling_schedule) {
+  constructor(apduTimeout, localIpAdrress, local_device_port, apduSize, maxSegments, broadCastAddr, discover_polling_schedule, device_id_range_enabled, device_id_range_start, device_id_range_end) {
     this.apduTimeout = apduTimeout;
     this.localIpAdrress = localIpAdrress;
     this.port = local_device_port;
@@ -71,6 +71,9 @@ class BacnetClientConfig {
     this.maxSegments = maxSegments;
     this.broadCastAddr = broadCastAddr;
     this.discover_polling_schedule = discover_polling_schedule;
+    this.device_id_range_enabled = device_id_range_enabled;
+    this.device_id_range_start = device_id_range_start;
+    this.device_id_range_end = device_id_range_end;
   }
 };
 

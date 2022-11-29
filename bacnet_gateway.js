@@ -20,6 +20,9 @@ module.exports = function (RED) {
       this.apduTimeout = config.apduTimeout;
       this.broadCastAddr = config.broadCastAddr;
       this.discover_polling_schedule = config.discover_polling_schedule;
+      this.device_id_range_enabled = config.device_id_range_enabled;
+      this.device_id_range_start = config.device_id_range_start;
+      this.device_id_range_end = config.device_id_range_end;
 
       //client and config store
       this.bacnetConfig = nodeContext.get("bacnetConfig");
@@ -31,7 +34,7 @@ module.exports = function (RED) {
       this.toLogIam = config.toLogIam;
 
       this.websocketListener = null;
-      
+
       if(node.apduTimeout && 
         node.localDeviceAddress &&
         node.local_device_port &&
@@ -42,7 +45,7 @@ module.exports = function (RED) {
 
         //sets up or reinitializes node and bacnet device
           if(configHasChanged()) {
-
+            
             node.bacnetConfig = new BacnetClientConfig(
               node.apduTimeout, 
               node.localDeviceAddress, 
@@ -50,7 +53,10 @@ module.exports = function (RED) {
               node.apduSize, 
               node.maxSegments, 
               node.broadCastAddr,
-              node.discover_polling_schedule
+              node.discover_polling_schedule,
+              node.device_id_range_enabled,
+              node.device_id_range_start,
+              node.device_id_range_end
             );
             nodeContext.set("bacnetConfig", node.bacnetConfig);
 
@@ -123,7 +129,6 @@ module.exports = function (RED) {
 
       //route handler for network data
       RED.httpAdmin.get('/bitpool-bacnet-data/getNetworkTree', function(req, res) {
-
         if(!node.bacnetClient) {
           console.log("Issue with the bacnetClient: ", node.bacnetClient);
           //no bacnet client present
@@ -133,7 +138,7 @@ module.exports = function (RED) {
           node.bacnetClient.getNetworkTreeData().then(function(result) {
             res.send(result);
           }).catch(function(error) {
-            res.send(false);
+            res.send(error);
             console.log("Error getting network data:  ", error);
           });
         }   
@@ -183,7 +188,9 @@ module.exports = function (RED) {
         if(node.maxSegments !== node.bacnetConfig.maxSegments){ return true;}
         if(node.broadCastAddr !== node.bacnetConfig.broadCastAddr){ return true;}
         if(node.apduTimeout !== node.bacnetConfig.apduTimeout){ return true;}
-        if(node.discover_polling_schedule !== node.bacnetConfig.discover_polling_schedule){ return true;}
+        if(node.device_id_range_enabled !== node.bacnetConfig.device_id_range_enabled){ return true;}
+        if(node.device_id_range_start !== node.bacnetConfig.device_id_range_start){ return true;}
+        if(node.device_id_range_end !== node.bacnetConfig.device_id_range_end){ return true;}
 
         return false;
       };

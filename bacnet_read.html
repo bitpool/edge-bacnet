@@ -54,6 +54,7 @@
                         pointsToRead: ref(),
                         nodeService: ref(new NodeService()),
                         pollFrequency: ref(),
+                        deviceCount: ref(),
                     }
                 },
                 setup() {
@@ -94,17 +95,19 @@
                 mounted() {
                     let app = this;
                     this.getData();
-                    let timerId = setInterval(() => app.getData(), 5000);
+                    if(!node.reloadTimer) {
+                        node.reloadTimer = setInterval(() => app.getData(), 5000);
+                    }
                 },
                 methods: {
                     getData() {
-                        //console.log("Doing getData ");
                         let app = this;
                         this.nodeService.getNetworkData().then(function (result) {
                             app.devices = result.renderList;
                             app.deviceList = result.deviceList;
                             app.pointList = result.pointList;
                             app.pollFrequency = parseInt(result.pollFrequency);
+                            app.deviceCount = result.deviceList.length;
                         });
                     },
                     addAllClicked(slotProps) {
@@ -128,21 +131,18 @@
                         }
                         slotProps.node.showAdded = true;
 
-
                         this.$forceUpdate()
 
                         //update node-red data structure to forward to gateway
                         let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
-                        let points = this.pointList[slotProps.node.label];
+                        let points = this.pointList[slotProps.node.ipAddr];
 
                         if (!this.pointsToRead[device.address]) {
                             this.pointsToRead[device.address] = {};
                         }
 
                         for (let pointName in points) {
-
-                            let point = this.pointList[device.deviceName][pointName];
-
+                            let point = this.pointList[device.address][pointName];
                             this.pointsToRead[device.address][point.objectName] = point;
                         }
 
@@ -209,7 +209,8 @@
                         if (!this.pointsToRead[device.address]) {
                             this.pointsToRead[device.address] = {};
                         }
-                        let point = this.pointList[parentDeviceName][slotProps.node.label];
+
+                        let point = this.pointList[parentDevice.ipAddr][slotProps.node.label];
                         this.pointsToRead[device.address][point.objectName] = point;
 
                         //force a deploy state
@@ -237,7 +238,7 @@
 
                         //update node-red data stucture
                         let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
-                        let point = this.pointList[parentDeviceName][slotProps.node.label];
+                        let point = this.pointList[parentDevice.ipAddr][slotProps.node.label];
                         if (this.pointsToRead[device.address][point.objectName]) delete this.pointsToRead[device.address][point.objectName];
 
                         //force a deploy state
@@ -525,9 +526,9 @@
             background-color: #d5d5d5;
             border-radius: 10px;
         }
-        .p-tree-filter-icon {
+        /* .p-tree-filter-icon {
             margin-top: 0px !important;
-        }
+        } */
 
     </style>
     
@@ -554,6 +555,7 @@
                 <div id='read-networkTree-tab-content' class="networkTreeContent" style='display:none'>
                     
                     <div>
+                        <a class="countStatus" style="margin-left: 15px;">Count: {{deviceCount}} device(s)</a>
                         <button @click="getData()" class="reloadButton">
                             <i class="pi pi-refresh" style="color: #00AEEF;"><a class="allFunctionsText">Reload data</a></i>
                         </button>

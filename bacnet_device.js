@@ -1,55 +1,101 @@
-module.exports = function (RED) {
-    function BitpoolBacnetDevice (config) {
-      RED.nodes.createNode(this, config)
-      this.deviceId_start = config.deviceId_start;
-      this.deviceId_end = config.deviceId_end;
-      this.address_start = config.address_start;
-      this.address_end = config.address_end;
-      this.deviceId = getDeviceId(this);
-      this.address = getIpAddr(this);
+class BacnetDevice {
+    constructor(config) {
+        let that = this;
+        that.address = config.address;
+        that.deviceId = config.deviceId;
+        that.maxApdu = config.maxApdu;
+        that.segmentation = config.segmentation;
+        that.vendorId = config.vendorId;
+        that.lastSeen = null;
+        that.deviceName = null;
+        that.pointsList = [];
+        that.pointListUpdateTs = null;
+    }
 
-      function getDeviceId(node){
-        let start = node.deviceId_start;
-        let end = node.deviceId_end;
+    updateDeviceConfig(config) {
+        if(config.address !== "" && config.address !== null && config.address !== "undefined") this.address = config.address;
+        if(Number.isInteger(config.deviceId)) this.deviceId = config.deviceId;
+        if(Number.isInteger(config.maxApdu)) this.maxApdu = config.maxApdu;
+        if(Number.isInteger(config.segmentation)) this.segmentation = config.segmentation;
+        if(Number.isInteger(config.vendorId)) this.vendorId = config.vendorId;
+    }
 
-        if(start == end) {
-          return start;
-        }
+    setPointListUpdateTS(ts) {
+        this.pointListUpdateTs = ts;
+    }
 
-        if(start !== end && start < end) {
-          return start + " - " + end;
-        }
+    getPointListUpdateTS() {
+        return this.pointListUpdateTs;
+    }
 
-        if(start && !end) {
-          return start;
-        }
+    getPointsList() {
+        return this.pointsList;
+    }
 
-        if(start > end){
-          return end + " - " + start;
-        }
-      };
+    setPointsList(newPoints) {
+        this.pointsList = newPoints;
+    }
 
-      function getIpAddr(node){
-        let start = node.address_start;
-        let end = node.address_end;
+    getDevicePoints() {
+        return this.points;
+    }
 
-        if(start == end) {
-          return start;
-        }
+    getAddress() {
+        return this.address;
+    }
 
-        if(start !== end && start < end) {
-          return start + " - " + end;
-        }
+    setAddress(address){
+        this.address = address;
+    }
 
-        if(start && !end) {
-          return start;
-        }
-        
-        if(start > end){
-          return end + " - " + start;
-        }
-      };
+    getDeviceId() {
+        return this.deviceId;
+    }
 
-    };
-    RED.nodes.registerType('Bitpool-Bacnet-Device', BitpoolBacnetDevice)
-  }
+    setDeviceId(deviceId){
+        this.deviceId = deviceId;
+    }
+
+    getMaxApdu() {
+        return this.maxApdu;
+    }
+
+    setMaxApdu(maxApdu){
+        this.maxApdu = maxApdu;
+    }
+
+    getSegmentation() {
+        return this.segmentation;
+    }
+
+    setSegmentation(segmentation){
+        this.segmentation = segmentation;
+    }
+
+    getVendorId() {
+        return this.vendorId;
+    }
+
+    setVendorId(vendorId){
+        this.vendorId = vendorId;
+    }
+
+    getLastSeen() {
+        return this.lastSeen;
+    }
+
+    setLastSeen(lastSeen){
+        this.lastSeen = lastSeen;
+    }
+
+    getDeviceName() {
+        return this.deviceName;
+    }
+
+    setDeviceName(deviceName){
+        this.deviceName = deviceName;
+    }
+
+}
+
+module.exports = { BacnetDevice };

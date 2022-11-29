@@ -92,6 +92,9 @@
             discover_polling_schedule: {value: ""},
             discover_polling_schedule_value: {value: "1", required: true},
             discover_polling_schedule_options: {value: "Minutes", required: true},
+            device_id_range_enabled: {value: true},
+            device_id_range_start: {value: 0},
+            device_id_range_end: {value: 4194303},
         },
         networkInterfaces: [],
         inputs: 1,
@@ -140,6 +143,24 @@
                 });
             }
             queryAdapters();
+
+            function setDeviceIdRangeState(state) {
+                let deviceIdRangeStart = $("#node-input-device_id_range_start");
+                let deviceIdRangeEnd = $("#node-input-device_id_range_end");
+                if(state == true) {
+                    deviceIdRangeStart.removeAttr("readonly");
+                    deviceIdRangeEnd.removeAttr("readonly");
+                } else if(state == false) {
+                    deviceIdRangeStart.attr("readonly", true);
+                    deviceIdRangeEnd.attr("readonly", true);
+                }
+            }
+
+            setDeviceIdRangeState(node.device_id_range_enabled);
+
+            $("#node-input-device_id_range_enabled").change(function(e) {
+                setDeviceIdRangeState(this.checked);
+            }); 
 
         },
         oneditsave: function () {
@@ -202,6 +223,15 @@
                 margin-left: 50px;
             }
 
+            /* .form-row deviceIdRange {
+                display: flex;
+                flex-direction: row;
+                flex-wrap: nowrap;
+                align-content: center;
+                justify-content: flex-start;
+                align-items: center;
+            } */
+
         </style>
     
         <div class="form-row">
@@ -227,6 +257,14 @@
         <div class="form-row">
             <label for="node-input-local_device_port"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.local_device_port"></span> Local Device Port</label>
             <input type="text" id="node-input-local_device_port" placeholder="47808">
+        </div>
+
+        <div class="form-row deviceIdRange">
+            <label for="node-input-device_id_range"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.device_id_range"></span> Device ID Range </label>
+            <input type="checkbox" id="node-input-device_id_range_enabled" style="width: auto;"/>
+            <a style="padding-left: 60px;">Start: </a><input type="number" id="node-input-device_id_range_start" style="width: 125px;" min="0" max="4194303"/>
+            <a style="padding-left: 35px;">End: </a><input type="number" id="node-input-device_id_range_end" style="width: 125px;" min="1" max="4194303"/>
+
         </div>
 
         <div class="form-row">

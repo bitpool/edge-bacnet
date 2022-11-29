@@ -42,7 +42,8 @@
                         deviceList: ref(),
                         pointList: ref(),
                         pointsToWrite: ref([]),
-                        nodeService: ref(new NodeService())
+                        nodeService: ref(new NodeService()),
+                        deviceCount: ref(),
                     }
                 },
                 setup() {
@@ -91,6 +92,7 @@
                             app.deviceList = result.deviceList;
                             app.pointList = result.pointList;
                             app.pollFrequency = parseInt(result.pollFrequency);
+                            app.deviceCount = result.deviceList.length;
                         });
                     },
                     addAllClicked(slotProps) {
@@ -107,14 +109,14 @@
 
                         //update node-red data structure to forward to gateway
                         let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
-                        let points = this.pointList[slotProps.node.label];
+                        let points = this.pointList[slotProps.node.ipAddr];
 
                         if (!this.pointsToWrite[device.address] || typeof this.pointsToWrite[device.address] == 'undefined') {
                             this.pointsToWrite[device.address] = {};
                         }
 
                         for (let pointName in points) {
-                            let point = this.pointList[device.deviceName][pointName];
+                            let point = this.pointList[device.address][pointName];
                             this.pointsToWrite[device.address][point.objectName] = point;
                         }
 
@@ -168,7 +170,7 @@
 
                         //update node-red data structure
                         let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
-                        let point = this.pointList[parentDeviceName][slotProps.node.label];
+                        let point = this.pointList[device.address][slotProps.node.label];
                         point.deviceAddress = device.address;
 
                         if (!this.pointsToWrite || this.pointsToWrite.length == 'undefined') {
@@ -181,7 +183,6 @@
                             ele.meta.arrayIndex == point.meta.arrayIndex &&
                             ele.meta.objectId.instance == point.meta.objectId.instance &&
                             ele.meta.objectId.type == point.meta.objectId.type);
-
 
                         if (!found) this.pointsToWrite.push(point);
 
@@ -453,6 +454,7 @@
 
             <div id='read-networkTree-tab-content' class="networkTreeContent" style='display:none'>
                 <div>
+                    <a class="countStatus" style="margin-left: 15px;">Count: {{deviceCount}} device(s)</a>
                     <button @click="getData()" class="reloadButton">
                         <i class="pi pi-refresh" style="color: #00AEEF;"><a class="allFunctionsText">Reload data</a></i>
                     </button>
