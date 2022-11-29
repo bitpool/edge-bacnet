@@ -598,7 +598,6 @@ class BacnetClient extends EventEmitter {
 
         function doScan() {
             let deviceIdRange = config.device.deviceId.split("-").sort(function(a, b){return a-b});
-
             let options = {
                 lowLimit: deviceIdRange[0],
                 highLimit: deviceIdRange[1]
