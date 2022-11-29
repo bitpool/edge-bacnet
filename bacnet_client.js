@@ -391,7 +391,7 @@ class BacnetClient extends EventEmitter {
                 device.setPointsList(result);
                 resolve(result);
 
-            } catch(e){
+            } catch(e) {
                 console.log("Error getting point list: ", e);
                 reject(e);
             }
@@ -450,7 +450,7 @@ class BacnetClient extends EventEmitter {
         
         try {
             that.client.readPropertyMultiple(deviceAddress, requestArray, that.readPropertyMultipleOptions, callback);
-        } catch(e){
+        } catch(e) {
             console.log("Error reading object list:  ", e);
         }
     }
