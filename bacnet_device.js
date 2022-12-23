@@ -1,11 +1,17 @@
 class BacnetDevice {
     constructor(config) {
         let that = this;
-        that.address = config.address;
-        that.deviceId = config.deviceId;
-        that.maxApdu = config.maxApdu;
-        that.segmentation = config.segmentation;
-        that.vendorId = config.vendorId;
+        if(config.header.source) {
+            that.address = {address: config.header.sender.address, net: config.header.source.net, adr: config.header.source.adr};
+            that.isMstp = true;
+        } else {
+            that.address = config.header.sender.address;
+            that.isMstp = false;
+        }
+        that.deviceId = config.payload.deviceId;
+        that.maxApdu = config.payload.maxApdu;
+        that.segmentation = config.payload.segmentation;
+        that.vendorId = config.payload.vendorId;
         that.lastSeen = null;
         that.deviceName = null;
         that.pointsList = [];
@@ -13,11 +19,17 @@ class BacnetDevice {
     }
 
     updateDeviceConfig(config) {
-        if(config.address !== "" && config.address !== null && config.address !== "undefined") this.address = config.address;
-        if(Number.isInteger(config.deviceId)) this.deviceId = config.deviceId;
-        if(Number.isInteger(config.maxApdu)) this.maxApdu = config.maxApdu;
-        if(Number.isInteger(config.segmentation)) this.segmentation = config.segmentation;
-        if(Number.isInteger(config.vendorId)) this.vendorId = config.vendorId;
+        if(config.header.sender.address !== "" && config.header.sender.address !== null && config.header.sender.address !== "undefined") {
+            if(config.header.source) {
+                this.address = {address: config.header.sender.address, net: config.header.source.net, adr: config.header.source.adr};
+            } else {
+                this.address = config.header.sender.address;
+            }
+        }
+        if(Number.isInteger(config.deviceId)) this.deviceId = config.payload.deviceId;
+        if(Number.isInteger(config.maxApdu)) this.maxApdu = config.payload.maxApdu;
+        if(Number.isInteger(config.segmentation)) this.segmentation = config.payload.segmentation;
+        if(Number.isInteger(config.vendorId)) this.vendorId = config.payload.vendorId;
     }
 
     setPointListUpdateTS(ts) {
@@ -33,7 +45,14 @@ class BacnetDevice {
     }
 
     setPointsList(newPoints) {
-        this.pointsList = newPoints;
+        for(let index = 0; index < newPoints.length; index ++){
+            let newPoint = newPoints[index];
+            let foundIndex = this.pointsList.findIndex(ele => ele.value.type == newPoint.value.type && ele.value.instance == newPoint.value.instance);
+            if(foundIndex == -1 ) {
+                //not found
+                this.pointsList.push(newPoint);
+            }
+        }
     }
 
     getDevicePoints() {
@@ -94,6 +113,10 @@ class BacnetDevice {
 
     setDeviceName(deviceName){
         this.deviceName = deviceName;
+    }
+
+    getIsMstpDevice(){
+        return this.isMstp;
     }
 
 }

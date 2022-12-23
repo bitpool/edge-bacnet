@@ -20,18 +20,15 @@
             pointsToRead: {value: {}},
             readDevices: {value: []},
             devicesToRead: [],
-            object_property_presentVal: {value: true},
-            object_property_objDescription: {value: false},
-            object_property_statusFlag: {value: false},
-            object_property_reliability: {value: false},
-            object_property_outOfService: {value: false},
-            object_property_units: {value: false},
+            object_property_simplePayload: {value: false},
+            object_property_fullObject: {value: true}
+
         },
         inputs: 1,
         outputs: 1,
         icon: "bitpool.svg",
         label: function () {
-            return "read";
+            return this.name || "read";
         },
         paletteLabel: function () {
             return "read";
@@ -55,6 +52,7 @@
                         nodeService: ref(new NodeService()),
                         pollFrequency: ref(),
                         deviceCount: ref(),
+                        progressBarValue: ref(),
                     }
                 },
                 setup() {
@@ -63,7 +61,6 @@
                     const selectedKeys = ref(null);
                     const nodes = ref();
                     const expandedKeys = ref({});
-
                     const expandAll = () => {
                         for (let node of devices.value) {
                             expandNode(node);
@@ -108,7 +105,19 @@
                             app.pointList = result.pointList;
                             app.pollFrequency = parseInt(result.pollFrequency);
                             app.deviceCount = result.deviceList.length;
+                            //progress bar percentage
+                            app.progressBarValue = parseInt((result.renderList.length / result.deviceList.length) * 100);
                         });
+                    },
+                    rebuildDataModel() {
+                        let app = this;
+                        app.nodeService.rebuildDataModel().then(function (result) {
+                            if(result == true){
+                                app.progressBarValue = 0;
+                            }
+                        });
+
+
                     },
                     addAllClicked(slotProps) {
                         //update UI 
@@ -135,15 +144,15 @@
 
                         //update node-red data structure to forward to gateway
                         let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
-                        let points = this.pointList[slotProps.node.ipAddr];
+                        let points = this.pointList[slotProps.node.deviceId];
 
-                        if (!this.pointsToRead[device.address]) {
-                            this.pointsToRead[device.address] = {};
+                        if (!this.pointsToRead[device.deviceId]) {
+                            this.pointsToRead[device.deviceId] = {};
                         }
 
                         for (let pointName in points) {
-                            let point = this.pointList[device.address][pointName];
-                            this.pointsToRead[device.address][point.objectName] = point;
+                            let point = this.pointList[device.deviceId][pointName];
+                            this.pointsToRead[device.deviceId][point.objectName] = point;
                         }
 
                         //force a deploy state
@@ -164,12 +173,12 @@
                             });
                         }
                         slotProps.node.showAdded = false;
-                        this.$forceUpdate()
+                        this.$forceUpdate();
 
                         //update node-red data structure
                         let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
-                        if (this.pointsToRead[device.address]) {
-                            delete this.pointsToRead[device.address];
+                        if (this.pointsToRead[device.deviceId]) {
+                            delete this.pointsToRead[device.deviceId];
                         }
 
                         //force a deploy state
@@ -199,19 +208,19 @@
                         }
 
                         //set show added to true 
-                        let slot = parentDevice.children.find(ele => ele.label == slotProps.node.label);
+                        let slot = parentDevice.children.find(ele => ele.pointName == slotProps.node.pointName);
                         slot.showAdded = true;
 
                         this.$forceUpdate();
 
                         //update node-red data structure
                         let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
-                        if (!this.pointsToRead[device.address]) {
-                            this.pointsToRead[device.address] = {};
+                        if (!this.pointsToRead[device.deviceId]) {
+                            this.pointsToRead[device.deviceId] = {};
                         }
 
-                        let point = this.pointList[parentDevice.ipAddr][slotProps.node.label];
-                        this.pointsToRead[device.address][point.objectName] = point;
+                        let point = this.pointList[parentDevice.deviceId][slotProps.node.pointName];
+                        this.pointsToRead[device.deviceId][point.objectName] = point;
 
                         //force a deploy state
                         node.hiddenDeployToggle = !node.prevHiddenToggleState;
@@ -223,7 +232,7 @@
                         let parentDevice = this.devices.find(ele => ele.label == parentDeviceName);
 
                         if (foundDeviceIndex !== -1) {
-                            let foundIndex = this.readDevices[foundDeviceIndex].children.findIndex(ele => ele.key == slotProps.node.key && ele.label == slotProps.node.label);
+                            let foundIndex = this.readDevices[foundDeviceIndex].children.findIndex(ele => ele.key == slotProps.node.key && ele.pointName == slotProps.node.pointName);
                             if (foundIndex !== -1) this.readDevices[foundDeviceIndex].children.splice(foundIndex, 1);
                             if (this.readDevices[foundDeviceIndex].children.length == 0) {
                                 this.readDevices.splice(foundDeviceIndex, 1);
@@ -231,15 +240,15 @@
                         }
 
                         //set show added to true 
-                        let slot = parentDevice.showAdded ? slotProps.node : parentDevice.children.find(ele => ele.label == slotProps.node.label);
+                        let slot = parentDevice.showAdded ? slotProps.node : parentDevice.children.find(ele => ele.pointName == slotProps.node.pointName);
                         slot.showAdded = false;
                         slotProps.node.showAdded = false;
                         this.$forceUpdate();
 
                         //update node-red data stucture
                         let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
-                        let point = this.pointList[parentDevice.ipAddr][slotProps.node.label];
-                        if (this.pointsToRead[device.address][point.objectName]) delete this.pointsToRead[device.address][point.objectName];
+                        let point = this.pointList[parentDevice.deviceId][slotProps.node.pointName];
+                        if (this.pointsToRead[device.deviceId][point.objectName]) delete this.pointsToRead[device.deviceId][point.objectName];
 
                         //force a deploy state
                         node.hiddenDeployToggle = !node.prevHiddenToggleState;
@@ -272,12 +281,14 @@
                 components: {
                     "p-tree": primevue.tree,
                     "p-button": primevue.button,
-                    "p-timeline": primevue.timeline
+                    "p-timeline": primevue.timeline,
+                    "p-progressbar": primevue.progressbar
                 }
             };
 
             let vueapp = createApp(App);
-            vueapp.use(primevue.config.default)
+            vueapp.use(primevue.config.default);
+            vueapp.use(primevue.confirmationservice);
             node.vm = vueapp.mount("#node-input-tabs-content");
 
             //reinstate device data
@@ -290,18 +301,11 @@
             }
 
             //set checkboxes to config values stored in backend
-            document.getElementById("node-input-object_property_presentVal").checked = node.object_property_presentVal;
-            document.getElementById("node-input-object_property_presentVal").onclick = handleCheckboxClick;
-            document.getElementById("node-input-object_property_objDescription").checked = node.object_property_objDescription;
-            document.getElementById("node-input-object_property_objDescription").onclick = handleCheckboxClick;
-            document.getElementById("node-input-object_property_statusFlag").checked = node.object_property_statusFlag;
-            document.getElementById("node-input-object_property_statusFlag").onclick = handleCheckboxClick;
-            document.getElementById("node-input-object_property_reliability").checked = node.object_property_reliability;
-            document.getElementById("node-input-object_property_reliability").onclick = handleCheckboxClick;
-            document.getElementById("node-input-object_property_outOfService").checked = node.object_property_outOfService;
-            document.getElementById("node-input-object_property_outOfService").onclick = handleCheckboxClick;
-            document.getElementById("node-input-object_property_units").checked = node.object_property_units;
-            document.getElementById("node-input-object_property_units").onclick = handleCheckboxClick;
+
+            document.getElementById("node-input-object_property_simplePayload").checked = node.object_property_simplePayload;
+            document.getElementById("node-input-object_property_simplePayload").onclick = handleCheckboxClick;
+            document.getElementById("node-input-object_property_fullObject").checked = node.object_property_fullObject;
+            document.getElementById("node-input-object_property_fullObject").onclick = handleCheckboxClick;
 
             document.getElementById("node-input-roundDecimal").value = node.roundDecimal;
             document.getElementById("node-input-json").checked = node.json;
@@ -310,15 +314,12 @@
             document.getElementById("node-input-mqtt").onclick = handleMsgTypeClick;
 
             function handleCheckboxClick() {
-                let checkboxes = document.getElementsByClassName("objectProp");
-                let checkedCount = 0;
-                for (let box of checkboxes) {
-                    if (box.checked == true) {
-                        checkedCount++;
-                    }
+
+                if(this.id == "node-input-object_property_simplePayload") {
+                    document.getElementById("node-input-object_property_fullObject").checked = !document.getElementById("node-input-object_property_fullObject").checked;
                 }
-                if (checkedCount == 0) {
-                    this.checked = true;
+                if(this.id == "node-input-object_property_fullObject") {
+                    document.getElementById("node-input-object_property_simplePayload").checked = !document.getElementById("node-input-object_property_simplePayload").checked;
                 }
             }
 
@@ -389,13 +390,13 @@
     <style>
 
         .p-treenode-label {
-            /* color: white; */
             color: black;
             width: 100%;
         }
         .p-tree {
             background: inherit !important;
             border: inherit !important;
+            padding-right: 0px !important;
         }
         .p-button {
             margin-right: .5rem;
@@ -407,16 +408,14 @@
             float: right;
         }
         .addPointButton:hover, .minusPointButton:hover {
-            /* background: #282A36 !important; */
             background: #d5d5d5 !important;
         }
         .pointLabel {
             font-weight: 400;
         }
-        .p-treenode-children {
-            /* background-color: #21232e; */
+        /* .p-treenode-children {
             background-color: #f0f0f0;
-        }
+        } */
         .deviceLabel {
             font-weight: 100;
         }
@@ -429,12 +428,10 @@
         .bacnetbutton {
             background: none;
             border: none;
-            /* color: white; */
             color: black;
             font-weight: 400;
         }
         .bacnetbutton:hover {
-            /* background: #21232e; */
             background: #f0f0f0;
             border-radius: 10px;
         }
@@ -454,7 +451,6 @@
             padding-bottom: 30px;
         }
         .p-tree-toggler:enabled:hover {
-            /* background: #21232e !important; */
             background: #d5d5d5 !important;
         }
         .p-tree-toggler:focus {
@@ -517,8 +513,12 @@
         .reloadButton {
             border: none;
             background: none;
-            margin-right: 20px !important;
-            margin-bottom: 10px !important;
+            font-size: 14px !important;
+            float: right;
+        }
+        .rebuildDataButton {
+            border: none;
+            background: none;
             font-size: 14px !important;
             float: right;
         }
@@ -526,9 +526,33 @@
             background-color: #d5d5d5;
             border-radius: 10px;
         }
-        /* .p-tree-filter-icon {
-            margin-top: 0px !important;
-        } */
+        .rebuildDataButton:hover {
+            background-color: #d5d5d5;
+            border-radius: 10px;
+        }
+        .headerDiv {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: nowrap;
+            justify-content: space-around;
+            height: 20px;
+        }
+        .msgTypeDiv {
+            display: flex;
+            align-items: flex-start;
+            flex-direction: column;
+        }
+        .p-progressbar .p-progressbar-value {
+            background: #00AEEF !important;
+        }
+        .p-treenode-label {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+        .buttonGroup {
+            padding-left: 7px;
+        }
 
     </style>
     
@@ -554,11 +578,17 @@
 
                 <div id='read-networkTree-tab-content' class="networkTreeContent" style='display:none'>
                     
-                    <div>
+                    <div class="headerDiv">
                         <a class="countStatus" style="margin-left: 15px;">Count: {{deviceCount}} device(s)</a>
-                        <button @click="getData()" class="reloadButton">
-                            <i class="pi pi-refresh" style="color: #00AEEF;"><a class="allFunctionsText">Reload data</a></i>
-                        </button>
+                        <p-progressbar :value="progressBarValue" :show-value="true" style="width: 300px; height: 20px;"></p-progressbar>
+                        <div class="buttonGroup" style="padding-left: 15px;">
+                            <button @click="rebuildDataModel()" class="rebuildDataButton" title="Rebuild Data Model" >
+                                <i class="pi pi-wrench" style="color: #ff0000;"></i>
+                            </button>
+                            <button @click="getData()" class="reloadButton" title="Reload Data">
+                                <i class="pi pi-refresh" style="color: #00AEEF;"></i>
+                            </button>
+                        </div>
                     </div>
                     
 
@@ -652,71 +682,43 @@
             *
         -->
         <div id='read-properties-tab' style='display:none'>
-            <div class="form-row" style="display: inline-flex; width: fit-content; flex-wrap: nowrap;">
+            <div class="form-row" style="display: flex; width: fit-content; flex-wrap: nowrap; flex-direction: column;">
 
-                <label for="node-input-object_properties_group" style="display: flex; align-items: center; white-space: nowrap;">Object Properties:</label>
-                <div id="node-input-object_properties_group"  style="display: flex; align-items: flex-end; flex-direction: column; padding-left: 30px;">
-                    
+                <label for="node-input-object_properties_group" style="display: flex; align-items: center; white-space: nowrap; text-decoration: underline;">Object Properties:</label>
+
+
+                <div id="node-input-object_properties_group"  style="display: flex; align-items: flex-start; flex-direction: column; padding-left: 50px;">
                     <div class="objectPropertiesLabel">
-                        <label for="node-input-object_property_presentVal" style="padding-left: 4px; width: auto;" class="objectPropertiesLabel">
-                            <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_presentVal"></span>
-                            <a style="white-space: nowrap;">Present Value</a>
-                            <input style="margin-left: 5px;" class="checkbox-round objectProp" type="checkbox" id="node-input-object_property_presentVal">
-                        </label>
-                    </div>
-            
-                    <div class="objectPropertiesLabel">
-                        <label for="node-input-object_property_objDescription" style="padding-left: 21px; width: auto;" class="objectPropertiesLabel">
-                            <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_objDescription"></span>
-                            <a>Description</a>
-                            <input style="margin-left: 5px;" class="checkbox-round objectProp" type="checkbox" id="node-input-object_property_objDescription">
+                        <label for="node-input-object_property_simplePayload" style="padding-left: 4px; width: auto; align-items: start;" class="objectPropertiesLabel">
+                            <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_simplePayload"></span>
+                            <input style="margin-left: 5px;" class=" objectProp" type="checkbox" id="node-input-object_property_simplePayload">
+                            <a style="white-space: nowrap; padding-left: 20px;">Simple Payload</a>
                         </label>
                     </div>
 
                     <div class="objectPropertiesLabel">
-                        <label for="node-input-object_property_statusFlag"  style="padding-left: 13px; width: auto;" class="objectPropertiesLabel">
-                            <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_statusFlag"></span>
-                            <a style="white-space: nowrap;">Status Flags</a>
-                            <input style="margin-left: 5px;" class="checkbox-round objectProp" type="checkbox" id="node-input-object_property_statusFlag">
+                        <label for="node-input-object_property_fullObject" style="padding-left: 4px; width: auto; align-items: start;" class="objectPropertiesLabel">
+                            <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_fullObject"></span>
+                            <input style="margin-left: 5px;" class=" objectProp" type="checkbox" id="node-input-object_property_fullObject">
+                            <a style="white-space: nowrap; padding-left: 20px;">Full Object</a>
                         </label>
                     </div>
 
-                    <div class="objectPropertiesLabel">
-                        <label for="node-input-object_property_reliability" style="padding-left: 32px; width: auto;" class="objectPropertiesLabel">
-                            <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_reliability"></span>
-                            <a>Reliability</a>
-                            <input style="margin-left: 5px;" class="checkbox-round objectProp" type="checkbox" id="node-input-object_property_reliability">
-                        </label>
-                    </div>
-
-                    <div class="objectPropertiesLabel">
-                        <label for="node-input-object_property_outOfService" style="padding-left: 3px; width: auto;" class="objectPropertiesLabel">
-                            <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_outOfService"></span>
-                            <a style="white-space: nowrap;">Out of Service</a>
-                            <input style="margin-left: 5px;" class="checkbox-round objectProp" type="checkbox" id="node-input-object_property_outOfService">
-                        </label>
-                    </div>
-
-                    <div class="objectPropertiesLabel">
-                        <label for="node-input-object_property_units" style="padding-left: 60px; width: auto;" class="objectPropertiesLabel">
-                            <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_units"></span>
-                            <a style="white-space: nowrap;">Units</a>
-                            <input style="margin-left: 5px;" class="checkbox-round objectProp" type="checkbox" id="node-input-object_property_units">
-                        </label>
-                    </div>
-                </div>
+                </div> 
             </div>
 
-            <br>
-            <br>
+            <hr>
 
-            <div class="form-row" style="display: flex;">
-                <label for="node-input-msgType">
+            <div class="form-row msgTypeDiv" style="display: flex;">
+                <label for="node-input-msgType" style="text-decoration: underline;">
                     Message type: 
                 </label>
-                <div id="node-input-msgType" style="display: flex; align-items: flex-end; flex-direction: column;">
-                    <div style="display: flex; flex-direction: row; align-items: flex-start;"><a style="padding-left: 20px;">Block per device</a> <input class="checkbox-round" type="checkbox" id="node-input-json" class="" style="width: 13px; margin-left: 5px;"/> </div>
-                    <div style="display: flex; flex-direction: row; align-items: flex-start;"><a style="padding-left: 20px;">Individual msgs</a> <input class="checkbox-round" type="checkbox" id="node-input-mqtt" class="" style="width: 13px; margin-left: 5px;"/> </div>
+                <div id="node-input-msgType" style="display: flex; align-items: flex-start; flex-direction: column; padding-left: 50px;">
+
+                        <!-- class= checkbox-round -->
+                    <div style="display: flex; flex-direction: row; align-items: flex-start;"><input class="checkbox-round" type="checkbox" id="node-input-json" style="width: 13px; margin-left: 5px;"/><label for="node-input-json" style="padding-left: 20px; width: fit-content;">Block per device</label> </div>
+                    <div style="display: flex; flex-direction: row; align-items: flex-start;"><input class="checkbox-round" type="checkbox" id="node-input-mqtt" style="width: 13px; margin-left: 5px;"/><label for="node-input-mqtt" style="padding-left: 20px; width: fit-content;">Individual msgs</label> </div>
+                
                 </div>
             </div>
 

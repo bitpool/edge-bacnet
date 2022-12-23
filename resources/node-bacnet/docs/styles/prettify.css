@@ -1,0 +1,82 @@
+/*! Color themes for Google Code Prettify | MIT License | github.com/jmblog/color-themes-for-google-code-prettify */
+
+.pln {
+  color: #1b1918;
+}
+
+/* string content */
+.str {
+  color: #7b9726;
+}
+
+/* a keyword */
+.kwd {
+  color: #6666ea;
+}
+
+/* a comment */
+.com {
+  color: #9c9491;
+}
+
+/* a type name */
+.typ {
+  color: #407ee7;
+}
+
+/* a literal value */
+.lit {
+  color: #df5320;
+}
+
+/* punctuation */
+.pun {
+  color: #1b1918;
+}
+
+/* lisp open bracket */
+.opn {
+  color: #1b1918;
+}
+
+/* lisp close bracket */
+.clo {
+  color: #1b1918;
+}
+
+/* a markup tag name */
+.tag {
+  color: #f22c40;
+}
+
+/* a markup attribute name */
+.atn {
+  color: #df5320;
+}
+
+/* a markup attribute value */
+.atv {
+  color: #3d97b8;
+}
+
+/* a declaration */
+.dec {
+  color: #df5320;
+}
+
+/* a variable name */
+.var {
+  color: #f22c40;
+}
+
+/* a function name */
+.fun {
+  color: #407ee7;
+}
+
+/* Specify class=linenums on a pre to get line numbering */
+ol.linenums {
+  margin-top: 0;
+  margin-bottom: 0;
+  color: #9c9491;
+}

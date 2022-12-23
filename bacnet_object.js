@@ -3,7 +3,7 @@
 */
 
 module.exports = function (RED) {
-    const baEnum = require('./resources/bacstack/lib/enum');
+    const baEnum = require('./resources/node-bacnet/index.js').enum;
     function BitpoolBacnetObject (config) {
       RED.nodes.createNode(this, config)
 

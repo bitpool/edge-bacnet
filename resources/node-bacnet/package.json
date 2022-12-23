@@ -1,0 +1,92 @@
+{
+  "name": "node-bacnet",
+  "version": "0.2.4",
+  "description": "The BACnet protocol library written in pure JavaScript.",
+  "main": "index.js",
+  "scripts": {
+    "changelog": "conventional-changelog -p conventail -i CHANGELOG.md -s -r 0",
+    "lint": "jshint lib/ test/ index.js && eslint lib/** test/** examples/** index.js",
+    "lint:fix": "eslint --fix lib/** test/** examples/** index.js",
+    "lint:fix:dry": "eslint --fix-dry-run lib/** test/** examples/** index.js",
+    "test": "npm run lint && npm run test:unit && npm run test:integration",
+    "coverage": "nyc --reporter=lcov --reporter=text-summary --report-dir reports/coverage npm test",
+    "coverage:compliance": "nyc --reporter=lcov --reporter=text-summary --report-dir reports/coverage npm run test:compliance",
+    "coverage:all": "DEBUG=bacnet* nyc --reporter=lcov --reporter=text-summary --report-dir /reports/coverage npm run test:all",
+    "test:unit": "DEBUG=bacnet* mocha test/unit/*.spec.js",
+    "test:integration": "DEBUG=bacnet* mocha test/integration/*.spec.js --timeout 5000",
+    "test:compliance": "DEBUG=bacnet* mocha test/compliance/*.spec.js --timeout 5000",
+    "test:all": "DEBUG=bacnet* mocha test/unit/*.spec.js test/integration/*.spec.js test/compliance/*.spec.js --timeout 5000",
+    "docs": "cp -r images docs && jsdoc -r -d ./docs -t node_modules/@mocha/docdash ./lib ./index.js ./README.md",
+    "release": "standard-version -a",
+    "release:beta": "standard-version --prerelease beta",
+    "release:alpha": "standard-version --prerelease alpha",
+    "compose:build": "docker-compose build",
+    "compose:up": "docker-compose up --abort-on-container-exit --exit-code-from bacnet-client",
+    "docker": "npm run compose:build && npm run compose:up",
+    "prepublishOnly": "npm run lint && npm run coverage && npm run docker && npm run docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BiancoRoyal/node-bacstack.git"
+  },
+  "keywords": [
+    "bacnet",
+    "fieldbus",
+    "building",
+    "automation",
+    "iot"
+  ],
+  "author": {
+    "name": "Fabio Huser",
+    "email": "fabio@fh1.ch"
+  },
+  "contributors": [
+    {
+      "name": "Klaus Landsdorf",
+      "email": "klaus@iniationware.com"
+    },
+    {
+      "name": "Ingo Fischer",
+      "email": "iobroker@fischer-ka.de"
+    }
+  ],
+  "engines": {
+    "node": ">= 10"
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/BiancoRoyal/node-bacstack/issues"
+  },
+  "homepage": "https://github.com/BiancoRoyal/node-bacstack#readme",
+  "dependencies": {
+    "debug": "^4.1.1",
+    "iconv-lite": "^0.5.1",
+    "underscore": "^1.10.2"
+  },
+  "devDependencies": {
+    "chai": "^4.2.0",
+    "conventional-changelog-cli": "^2.0.27",
+    "@mocha/docdash": "^2.1.3",
+    "eslint": "^7.1.0",
+    "jsdoc": "^3.6.4",
+    "jshint": "^2.11.1",
+    "mocha": "^7.1.2",
+    "nyc": "^15.0.1",
+    "standard-version": "^8.0.0"
+  },
+  "files": [
+    "docs",
+    "examples",
+    "lib",
+    "index.js"
+  ],
+  "directories": {
+    "example": "examples",
+    "test": "test"
+  }
+}

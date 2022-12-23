@@ -2,10 +2,11 @@
   MIT License Copyright 2021, 2022 - Bitpool Pty Ltd
 */
 
-const baEnum = require('./resources/bacstack/lib/enum');
+
 
 module.exports = function (RED) {
     const { ReadCommandConfig } = require('./common');
+    const baEnum = require('./resources/node-bacnet/index.js').enum;
 
     function BitpoolBacnetReadDevice (config) {
       RED.nodes.createNode(this, config);
@@ -18,37 +19,32 @@ module.exports = function (RED) {
       this.readDevices = config.readDevices;
       this.id = config.id;
 
-      this.object_property_presentVal = config.object_property_presentVal;
-      this.object_property_objDescription = config.object_property_objDescription;
-      this.object_property_statusFlag = config.object_property_statusFlag;
-      this.object_property_reliability = config.object_property_reliability;
-      this.object_property_outOfService = config.object_property_outOfService;
-      this.object_property_units = config.object_property_units;
+      this.object_property_simplePayload = config.object_property_simplePayload;
+      this.object_property_fullObject = config.object_property_fullObject;
+
+      
+
       this.object_props = getObjectProps(this);
 
       function getObjectProps(node) {
         var propArr = [];
-        if(node.object_property_presentVal == true){
-          propArr.push({ id: baEnum.PropertyIds.PROP_PRESENT_VALUE });
+        if(node.object_property_simplePayload == true){
+          propArr.push({ id: baEnum.PropertyIdentifier.PRESENT_VALUE });
         }
-        if(node.object_property_objDescription == true){
-          propArr.push({ id: baEnum.PropertyIds.PROP_DESCRIPTION });
-        }
-        if(node.object_property_statusFlag == true){
-          propArr.push({ id: baEnum.PropertyIds.PROP_STATUS_FLAGS });
-        }
-        if(node.object_property_reliability == true){
-          propArr.push({ id: baEnum.PropertyIds.PROP_RELIABILITY });
-        }
-        if(node.object_property_outOfService == true){
-          propArr.push({ id: baEnum.PropertyIds.PROP_OUT_OF_SERVICE });
-        }
-        if(node.object_property_units == true) {
-          propArr.push({ id: baEnum.PropertyIds.PROP_UNITS });
+        if(node.object_property_fullObject == true){
+          propArr.push(
+            { id: baEnum.PropertyIdentifier.PRESENT_VALUE },
+            { id: baEnum.PropertyIdentifier.DESCRIPTION },
+            { id: baEnum.PropertyIdentifier.STATUS_FLAGS },
+            { id: baEnum.PropertyIdentifier.RELIABILITY },
+            { id: baEnum.PropertyIdentifier.OUT_OF_SERVICE },
+            { id: baEnum.PropertyIdentifier.UNITS }
+            
+            );
         }
 
         //add object name for every request as its used in formatting
-        propArr.push({ id: baEnum.PropertyIds.PROP_OBJECT_NAME});
+        propArr.push({ id: baEnum.PropertyIdentifier.OBJECT_NAME});
 
         return propArr;
       };
@@ -63,6 +59,10 @@ module.exports = function (RED) {
           type: "Read",
           id: node.id,
           options: readConfig,
+          objectPropertyType: {
+            simplePayload: node.object_property_simplePayload,
+            fullObject: node.object_property_fullObject
+          },
           outputType: {
             json: node.json,
             mqtt: node.mqtt

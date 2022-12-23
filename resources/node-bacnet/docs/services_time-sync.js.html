@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>services/time-sync.js - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    
+    <link type="text/css" rel="stylesheet" href="https://fonts.googleapis.com/css?family=Montserrat:400,700">
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="bacnet.html">bacnet</a><ul class='methods'><li data-type='method'><a href="bacnet.html#.close">close</a></li><li data-type='method'><a href="bacnet.html#.confirmedCOVNotification">confirmedCOVNotification</a></li><li data-type='method'><a href="bacnet.html#.deviceCommunicationControl">deviceCommunicationControl</a></li><li data-type='method'><a href="bacnet.html#.iAmResponse">iAmResponse</a></li><li data-type='method'><a href="bacnet.html#.readProperty">readProperty</a></li><li data-type='method'><a href="bacnet.html#.readPropertyMultiple">readPropertyMultiple</a></li><li data-type='method'><a href="bacnet.html#.readPropertyResponse">readPropertyResponse</a></li><li data-type='method'><a href="bacnet.html#.reinitializeDevice">reinitializeDevice</a></li><li data-type='method'><a href="bacnet.html#.resultResponse">resultResponse</a></li><li data-type='method'><a href="bacnet.html#.timeSync">timeSync</a></li><li data-type='method'><a href="bacnet.html#.timeSyncUTC">timeSyncUTC</a></li><li data-type='method'><a href="bacnet.html#.unconfirmedCOVNotification">unconfirmedCOVNotification</a></li><li data-type='method'><a href="bacnet.html#.whoIs">whoIs</a></li><li data-type='method'><a href="bacnet.html#.writeProperty">writeProperty</a></li><li data-type='method'><a href="bacnet.html#.writePropertyMultiple">writePropertyMultiple</a></li></ul></li><li><a href="Client.html">Client</a><ul class='methods'><li data-type='method'><a href="Client.html#.createBitstring">createBitstring</a></li><li data-type='method'><a href="Client.html#acknowledgeAlarm">acknowledgeAlarm</a></li><li data-type='method'><a href="Client.html#addListElement">addListElement</a></li><li data-type='method'><a href="Client.html#confirmedEventNotification">confirmedEventNotification</a></li><li data-type='method'><a href="Client.html#confirmedPrivateTransfer">confirmedPrivateTransfer</a></li><li data-type='method'><a href="Client.html#createObject">createObject</a></li><li data-type='method'><a href="Client.html#deleteObject">deleteObject</a></li><li data-type='method'><a href="Client.html#errorResponse">errorResponse</a></li><li data-type='method'><a href="Client.html#getAlarmSummary">getAlarmSummary</a></li><li data-type='method'><a href="Client.html#getEnrollmentSummary">getEnrollmentSummary</a></li><li data-type='method'><a href="Client.html#getEventInformation">getEventInformation</a></li><li data-type='method'><a href="Client.html#iHaveResponse">iHaveResponse</a></li><li data-type='method'><a href="Client.html#readFile">readFile</a></li><li data-type='method'><a href="Client.html#readRange">readRange</a></li><li data-type='method'><a href="Client.html#removeListElement">removeListElement</a></li><li data-type='method'><a href="Client.html#sendBvlc">sendBvlc</a></li><li data-type='method'><a href="Client.html#simpleAckResponse">simpleAckResponse</a></li><li data-type='method'><a href="Client.html#subscribeCov">subscribeCov</a></li><li data-type='method'><a href="Client.html#subscribeProperty">subscribeProperty</a></li><li data-type='method'><a href="Client.html#unconfirmedEventNotification">unconfirmedEventNotification</a></li><li data-type='method'><a href="Client.html#unconfirmedPrivateTransfer">unconfirmedPrivateTransfer</a></li><li data-type='method'><a href="Client.html#writeFile">writeFile</a></li></ul></li></ul><h3>Events</h3><ul><li><a href="bacnet.html#.event:error">error</a></li><li><a href="bacnet.html#.event:iAm">iAm</a></li><li><a href="bacnet.html#.event:timeSync">timeSync</a></li><li><a href="bacnet.html#.event:whoIs">whoIs</a></li></ul><h3>Global</h3><ul><li><a href="global.html#ApplicationTag">ApplicationTag</a></li><li><a href="global.html#EnableDisable">EnableDisable</a></li><li><a href="global.html#MaxApduLengthAccepted">MaxApduLengthAccepted</a></li><li><a href="global.html#MaxSegmentsAccepted">MaxSegmentsAccepted</a></li><li><a href="global.html#ReinitializedState">ReinitializedState</a></li><li><a href="global.html#usc">usc</a></li></ul>
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">services/time-sync.js</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * The timeSync event represents the request to synchronize the local time to
+ * the received time.
+ *
+ * @event bacnet.timeSync
+ * @param {date} dateTime - The time to be synchronized to.
+ *
+ * @example
+ * const bacnet = require('node-bacnet');
+ * const client = new bacnet();
+ *
+ * client.on('timeSync', (msg) => {
+ *   console.log(
+ *     'address: ', msg.header.address,
+ *     ' - dateTime: ', msg.payload.dateTime
+ *   );
+ * });
+ */
+
+'use strict';
+
+const baAsn1      = require('../asn1');
+const baEnum      = require('../enum');
+
+module.exports.encode = (buffer, time) => {
+  baAsn1.encodeApplicationDate(buffer, time);
+  baAsn1.encodeApplicationTime(buffer, time);
+};
+
+module.exports.decode = (buffer, offset, length) => {
+  let len = 0;
+  let result;
+  result = baAsn1.decodeTagNumberAndValue(buffer, offset + len);
+  len += result.len;
+  if (result.tagNumber !== baEnum.ApplicationTag.DATE) {
+    return undefined;
+  }
+  const date = baAsn1.decodeDate(buffer, offset + len);
+  len += date.len;
+  result = baAsn1.decodeTagNumberAndValue(buffer, offset + len);
+  len += result.len;
+  if (result.tagNumber !== baEnum.ApplicationTag.TIME) {
+    return undefined;
+  }
+  const time = baAsn1.decodeBacnetTime(buffer, offset + len);
+  len += time.len;
+  return {
+    len,
+    value: new Date(date.value.getFullYear(), date.value.getMonth(), date.value.getDate(), time.value.getHours(), time.value.getMinutes(), time.value.getSeconds(), time.value.getMilliseconds())
+  };
+};
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.6.4</a> on Tue Jun 02 2020 20:24:55 GMT+0200 (Central European Summer Time) using the <a href="https://github.com/mochajs/mocha-docdash">@mocha/docdash</a> theme.
+</footer>
+
+<script src="scripts/prettify/prettify.js"></script>
+<script src="scripts/prettify/lang-css.js"></script>
+<script>prettyPrint();</script>
+<script src="scripts/linenumber.js"></script>
+
+
+</body>
+</html>

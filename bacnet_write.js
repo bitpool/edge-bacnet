@@ -5,9 +5,7 @@
 module.exports = function (RED) {
     function BitpoolBacnetWriteDevice (config) {
       RED.nodes.createNode(this, config);
-
       var node = this;
-
       node.priority = config.priority;
       node.appTag = config.applicationTag;
       node.pointsToWrite = config.pointsToWrite;

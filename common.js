@@ -5,8 +5,9 @@
 const { createLogger, format, transports } = require('winston');
 const { randomUUID } = require('crypto');
 const os = require('os');
+const { exec } = require("child_process");
+const baEnum = require('./resources/node-bacnet/index.js').enum;
 
-const baEnum = require('./resources/bacstack/lib/enum');
 
 const logger = createLogger({
     format: format.combine(
@@ -63,7 +64,23 @@ class BacnetConfig {
 };
 
 class BacnetClientConfig {
-  constructor(apduTimeout, localIpAdrress, local_device_port, apduSize, maxSegments, broadCastAddr, discover_polling_schedule, device_id_range_enabled, device_id_range_start, device_id_range_end) {
+  constructor(
+    apduTimeout, 
+    localIpAdrress, 
+    local_device_port, 
+    apduSize, 
+    maxSegments, 
+    broadCastAddr, 
+    discover_polling_schedule,
+    device_id_range_enabled, 
+    device_id_range_start, 
+    device_id_range_end, 
+    toRestartNodeRed, 
+    deviceId,
+    manual_instance_range_enabled,
+    manual_instance_range_start,
+    manual_instance_range_end
+  ) {
     this.apduTimeout = apduTimeout;
     this.localIpAdrress = localIpAdrress;
     this.port = local_device_port;
@@ -74,6 +91,11 @@ class BacnetClientConfig {
     this.device_id_range_enabled = device_id_range_enabled;
     this.device_id_range_start = device_id_range_start;
     this.device_id_range_end = device_id_range_end;
+    this.toRestartNodeRed = toRestartNodeRed;
+    this.deviceId = deviceId;
+    this.manual_instance_range_enabled = manual_instance_range_enabled;
+    this.manual_instance_range_start = manual_instance_range_start;
+    this.manual_instance_range_end = manual_instance_range_end;
   }
 };
 
@@ -84,7 +106,6 @@ class ReadCommandConfig {
     this.precision = decimalPrecision;
   }
 };
-
 
 class WriteCommandConfig {
   constructor(device, objects) {
@@ -103,10 +124,10 @@ class WriteCommandConfig {
 };
 
 const getUnit = function(id) {
-  for (var key in baEnum.UnitsId) {
-    if(baEnum.UnitsId[key] == id){
-      if (baEnum.UnitsId.hasOwnProperty(key)) {
-        let unitsArr = key.split("_"); unitsArr.shift();
+  for (var key in baEnum.EngineeringUnits) {
+    if(baEnum.EngineeringUnits[key] == id) {
+      if (baEnum.EngineeringUnits.hasOwnProperty(key)) {
+        let unitsArr = key.split("_");
         let unit;
         unitsArr.forEach((ele, index) =>{
           if(index == 0){
@@ -119,6 +140,7 @@ const getUnit = function(id) {
       }
     }
   }
+  return "no-units";
 };
 
 const generateId = function() {
@@ -161,5 +183,38 @@ const roundDecimalPlaces = function(value, decimals) {
   return value;
 }
 
+const doNodeRedRestart = function() {
+  return new Promise(function(resolve, reject) {
+    try {
+      exec("restart", (error, stdout, stderr) => {
+        if (error) {
+            console.log(`Node-Red restart error: ${error.message}`);
+            reject(error.message);
+        }
+        if (stderr) {
+            console.log(`Node-Red restart stderr: ${stderr}`);
+            reject(stderr);
+        }
+        resolve(stdout);
+      });
+    } catch(e){
+      console.log(`Node-Red restart error: ${e}`);
+      reject(e);
+    }
+  });
+};
 
-module.exports = { DeviceObjectId, DeviceObject, BacnetConfig, BacnetClientConfig, ReadCommandConfig, WriteCommandConfig, logger, getUnit, generateId, getIpAddress, roundDecimalPlaces };
+module.exports = {
+  DeviceObjectId, 
+  DeviceObject, 
+  BacnetConfig, 
+  BacnetClientConfig, 
+  ReadCommandConfig, 
+  WriteCommandConfig, 
+  logger, 
+  getUnit, 
+  generateId, 
+  getIpAddress, 
+  roundDecimalPlaces, 
+  doNodeRedRestart
+};

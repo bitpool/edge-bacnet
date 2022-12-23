@@ -109,15 +109,15 @@
 
                         //update node-red data structure to forward to gateway
                         let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
-                        let points = this.pointList[slotProps.node.ipAddr];
+                        let points = this.pointList[slotProps.node.deviceId];
 
-                        if (!this.pointsToWrite[device.address] || typeof this.pointsToWrite[device.address] == 'undefined') {
-                            this.pointsToWrite[device.address] = {};
+                        if (!this.pointsToWrite[device.deviceId] || typeof this.pointsToWrite[device.deviceId] == 'undefined') {
+                            this.pointsToWrite[device.deviceId] = {};
                         }
 
                         for (let pointName in points) {
-                            let point = this.pointList[device.address][pointName];
-                            this.pointsToWrite[device.address][point.objectName] = point;
+                            let point = this.pointList[device.deviceId][pointName];
+                            this.pointsToWrite[device.deviceId][point.objectName] = point;
                         }
 
                         //force a deploy state
@@ -133,8 +133,8 @@
 
                         //update node-red data structure
                         let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
-                        if (this.pointsToWrite[device.address]) {
-                            delete this.pointsToWrite[device.address];
+                        if (this.pointsToWrite[device.deviceId]) {
+                            delete this.pointsToWrite[device.deviceId];
                         }
 
                         //force a deploy state
@@ -170,15 +170,15 @@
 
                         //update node-red data structure
                         let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
-                        let point = this.pointList[device.address][slotProps.node.label];
-                        point.deviceAddress = device.address;
+                        let point = this.pointList[device.deviceId][slotProps.node.pointName];
+                        point.deviceId = device.deviceId;
 
                         if (!this.pointsToWrite || this.pointsToWrite.length == 'undefined') {
                             this.pointsToWrite = [];
                         }
 
                         let found = this.pointsToWrite.find(ele =>
-                            ele.deviceAddress == point.deviceAddress &&
+                            ele.deviceId == point.deviceId &&
                             ele.objectName == point.objectName &&
                             ele.meta.arrayIndex == point.meta.arrayIndex &&
                             ele.meta.objectId.instance == point.meta.objectId.instance &&
@@ -209,10 +209,10 @@
                         //update node-red data stucture
                         let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
                         let point = this.pointList[parentDeviceName][slotProps.node.label];
-                        point.deviceAddress = device.address;
+                        point.deviceId = device.deviceId;
 
                         let foundIndex = this.pointsToWrite.findIndex(ele =>
-                            ele.deviceAddress == point.deviceAddress &&
+                            ele.deviceId == point.deviceId &&
                             ele.objectName == point.objectName &&
                             ele.meta.arrayIndex == point.meta.arrayIndex &&
                             ele.meta.objectId.instance == point.meta.objectId.instance &&
@@ -343,10 +343,9 @@
         .pointLabel {
             font-weight: 400;
         }
-        .p-treenode-children {
-            /* background-color: #21232e; */
+        /* .p-treenode-children {
             background-color: #f0f0f0;
-        }
+        } */
         .deviceLabel {
             font-weight: 100;
         }
@@ -435,6 +434,11 @@
         .reloadButton:hover {
             background-color: #d5d5d5;
             border-radius: 10px;
+        }
+        .p-treenode-label {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
         }
 
     </style>

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>Home - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    
+    <link type="text/css" rel="stylesheet" href="https://fonts.googleapis.com/css?family=Montserrat:400,700">
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="bacnet.html">bacnet</a><ul class='methods'><li data-type='method'><a href="bacnet.html#.close">close</a></li><li data-type='method'><a href="bacnet.html#.confirmedCOVNotification">confirmedCOVNotification</a></li><li data-type='method'><a href="bacnet.html#.deviceCommunicationControl">deviceCommunicationControl</a></li><li data-type='method'><a href="bacnet.html#.iAmResponse">iAmResponse</a></li><li data-type='method'><a href="bacnet.html#.readProperty">readProperty</a></li><li data-type='method'><a href="bacnet.html#.readPropertyMultiple">readPropertyMultiple</a></li><li data-type='method'><a href="bacnet.html#.readPropertyResponse">readPropertyResponse</a></li><li data-type='method'><a href="bacnet.html#.reinitializeDevice">reinitializeDevice</a></li><li data-type='method'><a href="bacnet.html#.resultResponse">resultResponse</a></li><li data-type='method'><a href="bacnet.html#.timeSync">timeSync</a></li><li data-type='method'><a href="bacnet.html#.timeSyncUTC">timeSyncUTC</a></li><li data-type='method'><a href="bacnet.html#.unconfirmedCOVNotification">unconfirmedCOVNotification</a></li><li data-type='method'><a href="bacnet.html#.whoIs">whoIs</a></li><li data-type='method'><a href="bacnet.html#.writeProperty">writeProperty</a></li><li data-type='method'><a href="bacnet.html#.writePropertyMultiple">writePropertyMultiple</a></li></ul></li><li><a href="Client.html">Client</a><ul class='methods'><li data-type='method'><a href="Client.html#.createBitstring">createBitstring</a></li><li data-type='method'><a href="Client.html#acknowledgeAlarm">acknowledgeAlarm</a></li><li data-type='method'><a href="Client.html#addListElement">addListElement</a></li><li data-type='method'><a href="Client.html#confirmedEventNotification">confirmedEventNotification</a></li><li data-type='method'><a href="Client.html#confirmedPrivateTransfer">confirmedPrivateTransfer</a></li><li data-type='method'><a href="Client.html#createObject">createObject</a></li><li data-type='method'><a href="Client.html#deleteObject">deleteObject</a></li><li data-type='method'><a href="Client.html#errorResponse">errorResponse</a></li><li data-type='method'><a href="Client.html#getAlarmSummary">getAlarmSummary</a></li><li data-type='method'><a href="Client.html#getEnrollmentSummary">getEnrollmentSummary</a></li><li data-type='method'><a href="Client.html#getEventInformation">getEventInformation</a></li><li data-type='method'><a href="Client.html#iHaveResponse">iHaveResponse</a></li><li data-type='method'><a href="Client.html#readFile">readFile</a></li><li data-type='method'><a href="Client.html#readRange">readRange</a></li><li data-type='method'><a href="Client.html#removeListElement">removeListElement</a></li><li data-type='method'><a href="Client.html#sendBvlc">sendBvlc</a></li><li data-type='method'><a href="Client.html#simpleAckResponse">simpleAckResponse</a></li><li data-type='method'><a href="Client.html#subscribeCov">subscribeCov</a></li><li data-type='method'><a href="Client.html#subscribeProperty">subscribeProperty</a></li><li data-type='method'><a href="Client.html#unconfirmedEventNotification">unconfirmedEventNotification</a></li><li data-type='method'><a href="Client.html#unconfirmedPrivateTransfer">unconfirmedPrivateTransfer</a></li><li data-type='method'><a href="Client.html#writeFile">writeFile</a></li></ul></li></ul><h3>Events</h3><ul><li><a href="bacnet.html#.event:error">error</a></li><li><a href="bacnet.html#.event:iAm">iAm</a></li><li><a href="bacnet.html#.event:timeSync">timeSync</a></li><li><a href="bacnet.html#.event:whoIs">whoIs</a></li></ul><h3>Global</h3><ul><li><a href="global.html#ApplicationTag">ApplicationTag</a></li><li><a href="global.html#EnableDisable">EnableDisable</a></li><li><a href="global.html#MaxApduLengthAccepted">MaxApduLengthAccepted</a></li><li><a href="global.html#MaxSegmentsAccepted">MaxSegmentsAccepted</a></li><li><a href="global.html#ReinitializedState">ReinitializedState</a></li><li><a href="global.html#usc">usc</a></li></ul>
+</nav>
+
+<div id="main">
+    
+
+    
+
+
+
+    
+
+
+
+
+
+
+
+
+
+    
+
+
+    <section class="readme">
+        <article><p><img src="http://b.repl.ca/v1/Platform-Node-green.png" alt="Platform Node">
+<img src="http://b.repl.ca/v1/Contrib-BACnet%C2%AE-green.png" alt="Contrib BACnet®">
+<img src="http://b.repl.ca/v1/NodeJS-LTS-green.png" alt="NodeJS_Version">
+<a href="http://www.npm-stats.com/~packages/node-bacnet"><img src="https://img.shields.io/npm/dm/node-bacnet.svg" alt="NPM download"></a>
+<a href="https://travis-ci.org/BiancoRoyal/node-bacstack"><img src="https://travis-ci.org/BiancoRoyal/node-bacstack.svg?branch=master" alt="Build Status"></a>
+<a href="https://coveralls.io/github/BiancoRoyal/node-bacstack?branch=master"><img src="https://coveralls.io/repos/github/BiancoRoyal/node-bacstack/badge.svg?branch=master" alt="Coverage Status"></a>
+<a href="https://gitpod.io/#https://github.com/BiancoRoyal/node-bacstack"><img src="https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod" alt="Gitpod Ready-to-Code"></a></p>
+<h1>node-bacnet</h1>
+<p><a href="https://www.npmjs.com/package/node-bacnet"><img src="images/bacnet-icon-quad64.png" alt="node-bacnetLogo64"></a></p>
+<p>The BACnet® protocol library written in pure JavaScript.</p>
+<p>BACnet® is a protocol to interact with building automation devices defined by ASHRAE.</p>
+<h2>Usage</h2>
+<p>Add node-bacnet to your project by using:</p>
+<pre class="prettyprint source lang-sh"><code>npm install --save node-bacnet
+</code></pre>
+<p>The API documentation is available under <strong><a href="https://biancoroyal.github.io/node-bacstack/">GitHub Page of Docs</a></strong>.</p>
+<h3>Features</h3>
+<p>The BACnet® standard defines a wide variety of services as part of the
+specification. While node-bacnet tries to be as complete as possible,
+following services are already supported at this point in time:</p>
+<table>
+<thead>
+<tr>
+<th>Service</th>
+<th style="text-align:center">Execute</th>
+<th style="text-align:center">Handle</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Who Is</td>
+<td style="text-align:center"><a href="https://biancoroyal.github.io/node-bacstack/bacstack.html#.whoIs">yes</a></td>
+<td style="text-align:center"><a href="https://biancoroyal.github.io/node-bacstack/bacstack.html#.event:whoIs">yes</a></td>
+</tr>
+<tr>
+<td>I Am</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center"><a href="https://biancoroyal.github.io/node-bacstack/bacstack.html#.event:iAm">yes</a></td>
+</tr>
+<tr>
+<td>Who Has</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>I Have</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Time Sync</td>
+<td style="text-align:center"><a href="https://biancoroyal.github.io/node-bacstack/bacstack.html#.timeSync">yes</a></td>
+<td style="text-align:center"><a href="https://biancoroyal.github.io/node-bacstack/bacstack.html#.event:timeSync">yes</a></td>
+</tr>
+<tr>
+<td>UTC Time Sync</td>
+<td style="text-align:center"><a href="https://biancoroyal.github.io/node-bacstack/bacstack.html#.timeSyncUTC">yes</a></td>
+<td style="text-align:center"><a href="https://biancoroyal.github.io/node-bacstack/bacstack.html#.event:timeSyncUTC">yes</a></td>
+</tr>
+<tr>
+<td>Read Property</td>
+<td style="text-align:center"><a href="https://biancoroyal.github.io/node-bacstack/bacstack.html#.readProperty">yes</a></td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Read Property Multiple</td>
+<td style="text-align:center"><a href="https://biancoroyal.github.io/node-bacstack/bacstack.html#.readPropertyMultiple">yes</a></td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Read Range</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Write Property</td>
+<td style="text-align:center"><a href="https://biancoroyal.github.io/node-bacstack/bacstack.html#.writeProperty">yes</a></td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Write Property Multiple</td>
+<td style="text-align:center"><a href="https://biancoroyal.github.io/node-bacstack/bacstack.html#.writePropertyMultiple">yes</a></td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Add List Element</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Remove List Element</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Create Object</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Delete Object</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Subscribe COV</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Confirmed COV Notification</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Subscribe Property</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Atomic Read File</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Atomic Write File</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Reinitialize Device</td>
+<td style="text-align:center"><a href="https://biancoroyal.github.io/node-bacstack/bacstack.html#.reinitializeDevice">yes</a></td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Device Communication Control</td>
+<td style="text-align:center"><a href="https://biancoroyal.github.io/node-bacstack/bacstack.html#.deviceCommunicationControl">yes</a></td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Get Alarm Summary</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Get Event Information</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Get Enrollment Summary</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Acknowledge Alarm</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Confirmed Event Notification</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Unconfirmed Event Notification</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Unconfirmed Private Transfer</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Confirmed Private Transfer</td>
+<td style="text-align:center">yes¹</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Register Foreign Device</td>
+<td style="text-align:center">no</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+<tr>
+<td>Distribute Broadcast to Network</td>
+<td style="text-align:center">no</td>
+<td style="text-align:center">yes¹</td>
+</tr>
+</tbody>
+</table>
+<p>¹ Support implemented as Beta (untested, undocumented, breaking interface)</p>
+<h2>Contributing</h2>
+<p>This package is based on the work of Fabio Huser and is now community driven.
+The group is searching for active collaborators to finish that library to become a good piece of Open Source.
+Implementing and maintaining a protocol stack is a lot of work, therefore any
+help is appreciated, from creating issues, to contributing documentation, fixing
+issues, sending pull requests and adding new features.</p>
+<p>Please follow the <a href="CONTRIBUTING.md">Contribution Guide</a> when submitting any
+changes. Ask the active NPM publishers if you need some advice to start your contribution!</p>
+<h2>License</h2>
+<p><a href="http://opensource.org/licenses/MIT">The MIT License</a></p>
+<p>Copyright (c) 2018-2020 Community Driven</p>
+<p>Copyright (c) 2017-2019 Fabio Huser</p>
+<p><strong>Note:</strong> This is not an official product of the BACnet Advocacy Group.
+BACnet® is a registered trademark of American Society of Heating, Refrigerating and
+Air-Conditioning Engineers (ASHRAE).</p></article>
+    </section>
+
+
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.6.4</a> on Tue Jun 02 2020 20:24:55 GMT+0200 (Central European Summer Time) using the <a href="https://github.com/mochajs/mocha-docdash">@mocha/docdash</a> theme.
+</footer>
+
+<script src="scripts/prettify/prettify.js"></script>
+<script src="scripts/prettify/lang-css.js"></script>
+<script>prettyPrint();</script>
+<script src="scripts/linenumber.js"></script>
+
+
+</body>
+</html>
