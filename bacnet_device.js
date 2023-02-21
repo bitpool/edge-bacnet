@@ -1,21 +1,39 @@
 class BacnetDevice {
-    constructor(config) {
+    constructor(fromImport, config) {
         let that = this;
-        if(config.header.source) {
-            that.address = {address: config.header.sender.address, net: config.header.source.net, adr: config.header.source.adr};
-            that.isMstp = true;
-        } else {
-            that.address = config.header.sender.address;
-            that.isMstp = false;
+
+        if(fromImport == true) {
+            that.address = config.address;
+            that.isMstp = config.isMstp;
+            that.deviceId = config.deviceId;
+            that.maxApdu = config.maxApdu;
+            that.segmentation = config.segmentation;
+            that.vendorId = config.vendorId;
+            that.lastSeen = config.lastSeen;
+            that.deviceName = config.deviceName;
+            that.pointsList = config.pointsList;
+            that.pointListUpdateTs = config.pointListUpdateTs;
+            that.manualDiscoveryMode = config.manualDiscoveryMode;
+
+        } else if(fromImport == false) {
+
+            if(config.header.source) {
+                that.address = {address: config.header.sender.address, net: config.header.source.net, adr: config.header.source.adr};
+                that.isMstp = true;
+            } else {
+                that.address = config.header.sender.address;
+                that.isMstp = false;
+            }
+            that.deviceId = config.payload.deviceId;
+            that.maxApdu = config.payload.maxApdu;
+            that.segmentation = config.payload.segmentation;
+            that.vendorId = config.payload.vendorId;
+            that.lastSeen = null;
+            that.deviceName = null;
+            that.pointsList = [];
+            that.pointListUpdateTs = null;
+            that.manualDiscoveryMode = false;
         }
-        that.deviceId = config.payload.deviceId;
-        that.maxApdu = config.payload.maxApdu;
-        that.segmentation = config.payload.segmentation;
-        that.vendorId = config.payload.vendorId;
-        that.lastSeen = null;
-        that.deviceName = null;
-        that.pointsList = [];
-        that.pointListUpdateTs = null;
     }
 
     updateDeviceConfig(config) {
@@ -30,6 +48,14 @@ class BacnetDevice {
         if(Number.isInteger(config.maxApdu)) this.maxApdu = config.payload.maxApdu;
         if(Number.isInteger(config.segmentation)) this.segmentation = config.payload.segmentation;
         if(Number.isInteger(config.vendorId)) this.vendorId = config.payload.vendorId;
+    }
+
+    setManualDiscoveryMode(bool) {
+        this.manualDiscoveryMode = bool;
+    }
+
+    getManualDiscoveryMode() {
+        return this.manualDiscoveryMode;
     }
 
     setPointListUpdateTS(ts) {

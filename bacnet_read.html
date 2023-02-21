@@ -119,8 +119,16 @@
 
 
                     },
+                    addAllDevices() {
+                        let app = this;
+                        app.devices.forEach(function (device) {
+                            app.addAllClicked({"node": device});
+                        });
+
+                    },
                     addAllClicked(slotProps) {
                         //update UI 
+                        let app = this;
 
                         let clone = JSON.parse(JSON.stringify(slotProps.node));
 
@@ -144,48 +152,71 @@
 
                         //update node-red data structure to forward to gateway
                         let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
-                        let points = this.pointList[slotProps.node.deviceId];
+                        let deviceAddress = app.getDeviceAddress(device.address);
+                        let key = `${deviceAddress}-${device.deviceId}`;
+                        let points = this.pointList[key];
 
-                        if (!this.pointsToRead[device.deviceId]) {
-                            this.pointsToRead[device.deviceId] = {};
+                        if (!this.pointsToRead[key]) {
+                            this.pointsToRead[key] = {};
                         }
 
                         for (let pointName in points) {
-                            let point = this.pointList[device.deviceId][pointName];
-                            this.pointsToRead[device.deviceId][point.objectName] = point;
+                            let point = this.pointList[key][pointName];
+                            this.pointsToRead[key][point.objectName] = point;
                         }
 
                         //force a deploy state
                         node.hiddenDeployToggle = !node.prevHiddenToggleState;
+                    },
+                    removeAllDevices() {
+                        let app = this;
+
+                        let clone = JSON.parse(JSON.stringify(app.readDevices));
+
+                        clone.forEach(function (device) {
+                            app.removeAllClicked({"node": device});
+                        });
+
+                        app.$forceUpdate();
+
                     },
                     removeAllClicked(slotProps) {
-                        //update UI
-                        if (this.readDevices.length > 0) {
-                            let foundIndex = this.readDevices.findIndex(ele => ele.key == slotProps.node.key && ele.label == slotProps.node.label);
-                            if (foundIndex !== -1) this.readDevices.splice(foundIndex, 1);
+                        let app = this;
+                        try {
+                            //update UI
+                            if (this.readDevices.length > 0) {
+                                let foundIndex = this.readDevices.findIndex(ele => ele.key == slotProps.node.key && ele.label == slotProps.node.label);
+                                if (foundIndex !== -1) this.readDevices.splice(foundIndex, 1);
+                            }
+
+                            let deviceSlot = this.devices.find(ele => ele.label == slotProps.node.label);
+                            if(deviceSlot) {
+                                deviceSlot.showAdded = false;
+                                deviceSlot.children.forEach(function(child) {
+                                    child.showAdded = false;
+                                });
+                            }
+                            slotProps.node.showAdded = false;
+                            this.$forceUpdate();
+
+                            //update node-red data structure
+                            let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
+                            let deviceAddress = app.getDeviceAddress(device.address);
+                            let key = `${deviceAddress}-${device.deviceId}`;
+                            if (this.pointsToRead[key]) {
+                                delete this.pointsToRead[key];
+                            }
+
+                            //force a deploy state
+                            node.hiddenDeployToggle = !node.prevHiddenToggleState;
+
+                        } catch(e){
+                            console.log("removeAllClicked error: ", e);
                         }
 
-                        let deviceSlot = this.devices.find(ele => ele.label == slotProps.node.label);
-                        if(deviceSlot) {
-                            deviceSlot.showAdded = false;
-                            deviceSlot.children.forEach(function(child) {
-                                child.showAdded = false;
-                            });
-                        }
-                        slotProps.node.showAdded = false;
-                        this.$forceUpdate();
-
-                        //update node-red data structure
-                        let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
-                        if (this.pointsToRead[device.deviceId]) {
-                            delete this.pointsToRead[device.deviceId];
-                        }
-
-                        //force a deploy state
-                        node.hiddenDeployToggle = !node.prevHiddenToggleState;
                     },
                     addPointClicked(slotProps) {
-                        
+                        let app = this;
                         //update UI
                         let parentDeviceName = slotProps.node.parentDevice;
                         let foundDeviceIndex = this.readDevices ? this.readDevices.findIndex(ele => ele.label == parentDeviceName) : -1;
@@ -215,17 +246,21 @@
 
                         //update node-red data structure
                         let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
-                        if (!this.pointsToRead[device.deviceId]) {
-                            this.pointsToRead[device.deviceId] = {};
+                        let deviceAddress = app.getDeviceAddress(device.address);
+                        let key = `${deviceAddress}-${device.deviceId}`;
+
+                        if (!this.pointsToRead[key]) {
+                            this.pointsToRead[key] = {};
                         }
 
-                        let point = this.pointList[parentDevice.deviceId][slotProps.node.pointName];
-                        this.pointsToRead[device.deviceId][point.objectName] = point;
+                        let point = this.pointList[key][slotProps.node.pointName];
+                        this.pointsToRead[key][point.objectName] = point;
 
                         //force a deploy state
                         node.hiddenDeployToggle = !node.prevHiddenToggleState;
                     },
                     removePointClicked(slotProps) {
+                        let app = this;
                         //update UI
                         let parentDeviceName = slotProps.node.parentDevice;
                         let foundDeviceIndex = this.readDevices ? this.readDevices.findIndex(ele => ele.label == parentDeviceName) : -1;
@@ -247,11 +282,25 @@
 
                         //update node-red data stucture
                         let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
-                        let point = this.pointList[parentDevice.deviceId][slotProps.node.pointName];
-                        if (this.pointsToRead[device.deviceId][point.objectName]) delete this.pointsToRead[device.deviceId][point.objectName];
+                        let deviceAddress = app.getDeviceAddress(device.address);
+                        let key = `${deviceAddress}-${device.deviceId}`;
+                        let point = this.pointList[key][slotProps.node.pointName];
+                        if (this.pointsToRead[key][point.objectName]) delete this.pointsToRead[key][point.objectName];
+                        //if last point is removed, deleted whole entry
+                        if(Object.keys(this.pointsToRead[key]).length == 0) delete this.pointsToRead[key];
 
                         //force a deploy state
                         node.hiddenDeployToggle = !node.prevHiddenToggleState;
+                    },
+                    getDeviceAddress(addr) {
+                        switch(typeof addr) {
+                            case "object":
+                                return addr.address;
+                            case "string":
+                                return addr;
+                            default:    
+                                return addr;
+                        }
                     },
                     isDeviceActive(slotProps) {
                         let app = this;
@@ -498,7 +547,7 @@
             outline: none !important;
         }
         .p-tree-filter:focus, .p-tree-filter:focus-visible, .p-inputtext:enabled:hover {
-            box-shadow: inset 0 0 0 0.15rem #44475a !important;
+            box-shadow: inset 0 0 0 0.15rem #dfdcdc !important;
             border-color: transparent !important;
         }
         .bacnetbutton > .pi {
@@ -509,6 +558,18 @@
         }
         .reloadButtonIcon {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol" !important;
+        }
+        .removeAllDevicesButton {
+            border: none;
+            background: none;
+            font-size: 14px !important;
+            float: right;
+            display: flex;
+            align-items: center;
+        }
+        .removeAllDevicesButton:hover {
+            background-color: #d5d5d5;
+            border-radius: 10px;
         }
         .reloadButton {
             border: none;
@@ -553,6 +614,14 @@
         .buttonGroup {
             padding-left: 7px;
         }
+        #read-readList-tab {
+            display: flex; 
+            flex-direction: column;
+        }
+        .removeAllDevicesDiv {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            padding-right: 20px;
+        }
 
     </style>
     
@@ -587,6 +656,9 @@
                             </button>
                             <button @click="getData()" class="reloadButton" title="Reload Data">
                                 <i class="pi pi-refresh" style="color: #00AEEF;"></i>
+                            </button>
+                            <button @click="addAllDevices()" class="reloadButton" title="Add all devices">
+                                <i class="pi pi-plus" style="color: #00AEEF;"></i>
                             </button>
                         </div>
                     </div>
@@ -655,7 +727,11 @@
                 *
             -->
             <div id='read-readList-tab' style='display:none'>
-
+                <div class="removeAllDevicesDiv" >
+                    <button @click="removeAllDevices()" class="removeAllDevicesButton" title="Remove all devices">
+                        <i class="pi pi-minus-circle" style="color: #ff0000; padding-right: 5px;"> </i><a style="color: #ff0000;">Remove All Devices</a>
+                    </button>
+                </div>
 
                 <p-tree :value="readDevices">
                     <template #device="slotProps">

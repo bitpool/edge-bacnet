@@ -7,7 +7,7 @@ const { randomUUID } = require('crypto');
 const os = require('os');
 const { exec } = require("child_process");
 const baEnum = require('./resources/node-bacnet/index.js').enum;
-
+const fs = require('fs');
 
 const logger = createLogger({
     format: format.combine(
@@ -79,7 +79,8 @@ class BacnetClientConfig {
     deviceId,
     manual_instance_range_enabled,
     manual_instance_range_start,
-    manual_instance_range_end
+    manual_instance_range_end,
+    bacnetServerEnabled
   ) {
     this.apduTimeout = apduTimeout;
     this.localIpAdrress = localIpAdrress;
@@ -96,6 +97,7 @@ class BacnetClientConfig {
     this.manual_instance_range_enabled = manual_instance_range_enabled;
     this.manual_instance_range_start = manual_instance_range_start;
     this.manual_instance_range_end = manual_instance_range_end;
+    this.bacnetServerEnabled = bacnetServerEnabled;
   }
 };
 
@@ -204,6 +206,33 @@ const doNodeRedRestart = function() {
   });
 };
 
+// STORE CONFIG FUNCTION ==========================================================
+//
+// ================================================================================
+async function Store_Config(data) {
+  await fs.writeFile("edge-bacnet-datastore.cfg", data, (err) => {
+    if (err) {
+      console.log("Store_Config writeFile error: ", err);
+    }
+  });
+};
+
+// READ CONFIG SYNC FUNCTION ======================================================
+//
+// ================================================================================
+function Read_Config_Sync() {
+  var data = "{}";
+  try {
+    data = fs.readFileSync("edge-bacnet-datastore.cfg", {encoding:'utf8', flag:'r'});
+  }
+  catch(err) {
+    console.log("Read_Config_Sync error:", err);
+    data = '{}';
+    Store_Config(data);
+  }
+  return data;
+};
+
 module.exports = {
   DeviceObjectId, 
   DeviceObject, 
@@ -216,5 +245,7 @@ module.exports = {
   generateId, 
   getIpAddress, 
   roundDecimalPlaces, 
-  doNodeRedRestart
+  doNodeRedRestart,
+  Store_Config,
+  Read_Config_Sync
 };

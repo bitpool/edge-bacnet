@@ -109,15 +109,16 @@
 
                         //update node-red data structure to forward to gateway
                         let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
-                        let points = this.pointList[slotProps.node.deviceId];
+                        let key = `${device.address}-${device.deviceId}`;
+                        let points = this.pointList[key];
 
-                        if (!this.pointsToWrite[device.deviceId] || typeof this.pointsToWrite[device.deviceId] == 'undefined') {
-                            this.pointsToWrite[device.deviceId] = {};
+                        if (!this.pointsToWrite[key] || typeof this.pointsToWrite[key] == 'undefined') {
+                            this.pointsToWrite[key] = {};
                         }
 
                         for (let pointName in points) {
-                            let point = this.pointList[device.deviceId][pointName];
-                            this.pointsToWrite[device.deviceId][point.objectName] = point;
+                            let point = this.pointList[key][pointName];
+                            this.pointsToWrite[key][point.objectName] = point;
                         }
 
                         //force a deploy state
@@ -133,8 +134,9 @@
 
                         //update node-red data structure
                         let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
-                        if (this.pointsToWrite[device.deviceId]) {
-                            delete this.pointsToWrite[device.deviceId];
+                        let key = `${device.address}-${device.deviceId}`;
+                        if (this.pointsToWrite[key]) {
+                            delete this.pointsToWrite[key];
                         }
 
                         //force a deploy state
@@ -170,8 +172,10 @@
 
                         //update node-red data structure
                         let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
-                        let point = this.pointList[device.deviceId][slotProps.node.pointName];
+                        let key = `${device.address}-${device.deviceId}`;
+                        let point = this.pointList[key][slotProps.node.pointName];
                         point.deviceId = device.deviceId;
+                        point.deviceAddress = device.address;
 
                         if (!this.pointsToWrite || this.pointsToWrite.length == 'undefined') {
                             this.pointsToWrite = [];
@@ -208,7 +212,8 @@
 
                         //update node-red data stucture
                         let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
-                        let point = this.pointList[parentDeviceName][slotProps.node.label];
+                        let key = `${device.address}-${device.deviceId}`;
+                        let point = this.pointList[key][slotProps.node.pointName];
                         point.deviceId = device.deviceId;
 
                         let foundIndex = this.pointsToWrite.findIndex(ele =>

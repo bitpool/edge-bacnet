@@ -95,17 +95,21 @@
             maxSegments: {value: "0x50", required: true},
             broadCastAddr: {value: "255.255.255.255", required: true},
             toLogIam: {value: true},
-            //toRestartNodeRed: {value: false},
             discover_polling_schedule: {value: ""},
             discover_polling_schedule_value: {value: "1", required: true},
             discover_polling_schedule_options: {value: "Minutes", required: true},
             device_id_range_enabled: {value: false},
             device_id_range_start: {value: 0},
             device_id_range_end: {value: 4194303},
-            deviceId: {value: 1234, required: true},
+            deviceId: {value: 817001, required: true},
             manual_instance_range_enabled: {value: false},
             manual_instance_range_start: {value: 0},
             manual_instance_range_end: {value: 10000},
+            logErrorToConsole: {value: false},
+            serverEnabled: {value: false},
+            bacnetServerRebuildSchedule: {value: ""},
+            bacnetServerRebuildSchedule_value: {value: "1", required: true},
+            bacnetServerRebuildSchedule_options: {value: "Hours", required: true}
         },
         networkInterfaces: [],
         inputs: 1,
@@ -141,8 +145,11 @@
                     label: "Discovery"
                 });
 
-            
-
+            tabs.addTab(
+                {
+                    id: "read-server-tab",
+                    label: "Server"
+                });
 
             if (node.networkInterfaces && node.networkInterfaces.length > 0) {
                 let nicSelector = document.getElementById("node-input-local_device_address");
@@ -179,17 +186,17 @@
 
             queryAdapters();
 
-            function setBroadCastAddress() {
-                let nicSelector = document.getElementById("node-input-local_device_address");
-                nicSelector.onchange = function(e) {
-                    if(typeof e.target.value == "string" && e.target.value !== ""){
-                        let broadcastAddrPrefill = e.target.value.split(".").slice(0, 3).join(".") + ".255";
-                        document.getElementById("node-input-broadCastAddr").value = broadcastAddrPrefill;
-                    }
-                };
-            }
+            // function setBroadCastAddress() {
+            //     let nicSelector = document.getElementById("node-input-local_device_address");
+            //     nicSelector.onchange = function(e) {
+            //         if(typeof e.target.value == "string" && e.target.value !== ""){
+            //             let broadcastAddrPrefill = e.target.value.split(".").slice(0, 3).join(".") + ".255";
+            //             document.getElementById("node-input-broadCastAddr").value = broadcastAddrPrefill;
+            //         }
+            //     };
+            // }
 
-            setBroadCastAddress();
+            // setBroadCastAddress();
 
             function setDeviceIdRangeState(state) {
                 let deviceIdRangeStart = $("#node-input-device_id_range_start");
@@ -225,14 +232,7 @@
 
             $("#node-input-manual_instance_range_enabled").change(function(e) {
                 setManualInstanceRangeState(this.checked);
-            }); 
-
-            // document.getElementById('restart-nr-button').onclick = function () {
-            //     this.disabled = true;
-            //     document.getElementById("node-input-toRestartNodeRed").checked = true;
-            // }
-
-            // console.log("toRestartNodeRed: ", document.getElementById("node-input-toRestartNodeRed").checked);
+            });
 
         },
         oneditsave: function (test) {
@@ -241,6 +241,11 @@
             document.getElementById("node-input-discover_polling_schedule").value = getTimePeriodInSeconds(
                 document.getElementById("node-input-discover_polling_schedule_value").value,
                 document.getElementById("node-input-discover_polling_schedule_options").value
+            );
+
+            document.getElementById("node-input-bacnetServerRebuildSchedule").value = getTimePeriodInSeconds(
+                document.getElementById("node-input-bacnetServerRebuildSchedule_value").value,
+                document.getElementById("node-input-bacnetServerRebuildSchedule_options").value
             );
         }
     });
@@ -295,6 +300,10 @@
                 margin-left: 50px;
             }
 
+            .red-ui-editor label {
+                font-size: 12px;
+            }
+
         </style>
 
         <div class='form-row node-input-read-tabs-row'>
@@ -330,7 +339,7 @@
     
                 <div class="form-row">
                     <label for="node-input-deviceId"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.deviceId"></span> Device ID </label>
-                    <input type="text" id="node-input-deviceId" placeholder="1234">
+                    <input type="text" id="node-input-deviceId" placeholder="817001">
                 </div>
     
                 <div class="form-row deviceIdRange">
@@ -338,7 +347,6 @@
                     <input type="checkbox" id="node-input-device_id_range_enabled" style="width: auto;"/>
                     <a style="padding-left: 60px;">Start: </a><input type="number" id="node-input-device_id_range_start" style="width: 125px;" min="0" max="4194303"/>
                     <a style="padding-left: 35px;">End: </a><input type="number" id="node-input-device_id_range_end" style="width: 125px;" min="1" max="4194303"/>
-    
                 </div>
             </div>
 
@@ -376,7 +384,7 @@
                 </div>
     
                 <div class="form-row" style="align-items: center; display: flex;">
-                    <label for="node-input-discover_polling_schedule_value"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.bacnet_polling_schedule"></span>Global Discover Frequency</label>
+                    <label for="node-input-discover_polling_schedule_value"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.bacnet_polling_schedule"></span>Discover Frequency</label>
                     <p style="margin-right: 5px; margin-bottom: 0px; padding-left: 7px;">Every</p>
                     <input type="text" id="node-input-discover_polling_schedule" style="display: none;">
                     <input type="text" id="node-input-discover_polling_schedule_value" placeholder="5" style="width: 70px; margin-right: 5px;">
@@ -388,12 +396,12 @@
                     </select>
                 </div>
 
-                <!-- <div class="form-row deviceIdRange">
-                    <label for="node-input-device_id_range"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.device_id_range"></span> Manual Point Discovery Instance Range </label>
+                <div class="form-row deviceIdRange">
+                    <label for="node-input-device_id_range"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.device_id_range"></span>Point Discovery Range </label>
                     <input type="checkbox" id="node-input-manual_instance_range_enabled" style="width: auto;"/>
                     <a style="padding-left: 60px;">Start: </a><input type="number" id="node-input-manual_instance_range_start" style="width: 125px;" min="0" max="100000"/>
                     <a style="padding-left: 35px;">End: </a><input type="number" id="node-input-manual_instance_range_end" style="width: 125px;" min="1" max="100000"/>
-                </div> -->
+                </div>
     
                 <div class="form-row">
                     <label for="node-input-toLog">
@@ -401,35 +409,73 @@
                     </label>
                     <input type="checkbox" id="node-input-toLogIam" style="width: auto;"/>
                 </div>
+
+                <div class="form-row">
+                    <label for="node-input-logErrorToConsole">
+                        Log BACnet errors to console: 
+                    </label>
+                    <input type="checkbox" id="node-input-logErrorToConsole" style="width: auto;"/>
+                </div>
+
             </div>
-    
-            
+            <div id='read-server-tab' style='display:none'>
+                <div class="form-row">
+                    <label for="node-input-serverEnabled">
+                        Enabled: 
+                    </label>
+                    <input type="checkbox" id="node-input-serverEnabled" style="width: auto;"/>
+                </div>
 
-            
-
-        <!-- <div class="form-row">
-            <label for="node-input-toRestartNodeRed">
-                Restart Node-Red: 
-            </label>
-            <button id="restart-nr-button">Restart Node-Red</button>
-            <input type="checkbox" id="node-input-toRestartNodeRed" style="display: none;"/>
-        </div> -->
+                <div class="form-row" style="align-items: center; display: flex;">
+                    <label for="node-input-bacnetServerRebuildSchedule_value"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.bacnetServerRebuildSchedule"></span>Clear Server Points:</label>
+                    <p style="margin-right: 5px; margin-bottom: 0px; padding-left: 7px;">Every</p>
+                    <input type="text" id="node-input-bacnetServerRebuildSchedule" style="display: none;">
+                    <input type="text" id="node-input-bacnetServerRebuildSchedule_value" placeholder="5" style="width: 70px; margin-right: 5px;">
+                    <select name="timePeriod" id="node-input-bacnetServerRebuildSchedule_options" style="width: 120px; margin-right: 5px;">
+                        <option value="Seconds">Seconds</option>
+                        <option value="Minutes">Minutes</option>
+                        <option value="Hours">Hours</option>
+                        <option value="Days">Days</option>
+                    </select>
+                </div>
+            </div>
 
     </script>
     <script type="text/html" data-help-name="Bacnet-Gateway">
         <p> This node is the brain of the Bitpool BACnet node collection. It acts are the gateway for all BACnet communications and functionality for the collection. </p>
     
-            <h3><strong>Properties</strong></h3>
-            <ol class="node-ports">
+            <h3><strong>Gateway Tab</strong></h3>
+            <ul class="node-ports">
                 <li>Network Interface - the desired interface for the bacstack client to bind to. This interface must not have any other BACnet clients bound to it.</li>
                 <li>Broadcast Address - the desired subnet for global msgs to be broadcast and recieved on. This should be as strict as possible. Use 255.255.255.255 if unsure.</li>
                 <li>Local Device Port - the port to be used for BACnet comms. Default is 47808</li>
+
+            </ul>
+
+            <h3><strong>Discovery Tab</strong></h3>
+            <ul class="node-ports">
                 <li>APDU Timeout - BACnet msg timeout option</li>
                 <li>Max APDU Size - BACnet max apdu size</li>
                 <li>Max Segments - BACnet max segments</li>
                 <li>Global Discover Frequency - the frequency at which the gateway issues global WhoIs BACnet commands. This should be limited to the least amount possible, as over-loading a network can be a serious issue with BACnet commmunications.</li>
+                <li>Manual Point Discovery Instance Range - if a BACnet device doesnt have a Object list (BACnet objectType:propertyId - 8:76), the this bacnet client will enter into manual discovery mode, where it iterates through types and instnace ranges. This range can be used to limit this manual scanning </li>
                 <li>Log Device Found - toggles logging of found devices to the node-red debug tab.</li>
-            </ol>
+                <li>Log BACnet Errors to Console - toggles logging of BACnet related errors to the node-red console</li>
+            </ul>
+
+            <h3><strong>Server Tab</strong></h3>
+            <p>This section provides the ability to simulate a BACnet device and BACnet points using node-red. </p>
+            <p>Injecting a msg.topic and msg.payload into the gateway node will create a virtual point that can be discovered by other devices via BACnet/IP</p>
+            <p>This node only supports 2 BACnet object types, Analog Value - to show numeric data, and a Character String - to show string data.</p>
+            <ul class="node-ports">
+                <li>Enabled - toggles whether or not the local BACnet server is started or not. </li>
+                <li>Clear Server Points - a schedule for the locally generated BACnet points to get cleared from the node object store</li>
+            </ul>
+
+            <h3><strong>Examples</strong></h3>
+            <p>For example flows, please use the examples section for this node. These examples can be found at: Node-red hamburger menu on top right -> Import -> Examples -> @bitpoolos/edge-bacnet</p>
+            <p>To find screen shot examples of settings and flows, please go to our wiki <a href="https://wiki.bitpool.com/en/edge/apps/bitpool-edge/nr-bacnet">here</a></p>
+
     
             <h3>Resources:</h3>
             <h4><strong>Online Docs:</strong></h4>
