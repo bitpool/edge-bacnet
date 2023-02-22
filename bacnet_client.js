@@ -323,7 +323,18 @@ class BacnetClient extends EventEmitter {
             devicesToRead.forEach(function(key, index) {
                 let device = that.deviceList.find(ele => `${that.getDeviceAddress(ele)}-${ele.getDeviceId()}` == key);
                 let deviceName = device.getDeviceName();
-                bacnetResults[deviceName] = readConfig.pointsToRead[key];
+                let deviceKey = (typeof device.getAddress() == "object") ? device.getAddress().address + "-" + device.getDeviceId() : device.getAddress() + "-" + device.getDeviceId();            
+                let deviceObject = that.networkTree[deviceKey];
+                if(!bacnetResults[deviceName]) bacnetResults[deviceName] = {};
+                if(deviceObject) {
+                    for(const pointName in readConfig.pointsToRead[key]) {
+                        let bac_obj = that.getObjectType(readConfig.pointsToRead[key][pointName].objectID.type);
+                        let objectId = pointName + "_" + bac_obj + '_' + readConfig.pointsToRead[key][pointName].objectID.instance;
+                        let point = deviceObject[objectId];
+                        bacnetResults[deviceName][pointName] = point;
+                    }
+                }
+
                 if(index == devicesToRead.length - 1) that.emit('values', bacnetResults, outputType, objectPropertyType);
             });
         } catch(e) {
@@ -331,7 +342,7 @@ class BacnetClient extends EventEmitter {
         }
     }
 
-    getDeviceAddress(device){
+    getDeviceAddress(device) {
         switch(typeof device.getAddress()) {
             case "object":
                 return device.getAddress().address;
