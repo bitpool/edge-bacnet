@@ -96,6 +96,7 @@ class BacnetClient extends EventEmitter {
 
                 setTimeout(() => {
                     that.queryDevices();
+                    that.sanitizeDeviceList();
                   }, "5000")
 
             } catch(e) {
@@ -132,7 +133,6 @@ class BacnetClient extends EventEmitter {
                             newBacnetDevice.setLastSeen(Date.now());
                             that.updateDeviceName(newBacnetDevice);
                             that.deviceList.push(newBacnetDevice);
-
                         } else if(foundIndex !== -1) {
                             that.deviceList[foundIndex].updateDeviceConfig(device);
                             that.deviceList[foundIndex].setLastSeen(Date.now());
@@ -189,7 +189,6 @@ class BacnetClient extends EventEmitter {
             .acquire()
             .then(function(release) {
                 try {
-
                     that.getDevicePointList(device).then(function() {
                         that.buildJsonObject(device).then(function() {
                             release();
@@ -208,7 +207,6 @@ class BacnetClient extends EventEmitter {
                         });
                         release();
                     });
-
                 } catch(e) {
                     that.logOut("Error while querying devices: ", e);
                     release();
@@ -220,30 +218,38 @@ class BacnetClient extends EventEmitter {
 
     sanitizeDeviceList() {
         let that = this;
+        
+        //1 hour in seconds
+        let timeoutThreshold = 3600;
 
-        that.deviceList.forEach(function(device, index) {
-            if(((Date.now() - device.getLastSeen()) / 1000) >  3600) {
-                //device hasnt responded to whoIs for over an hour
+        that.renderList.forEach(function(item, index) {
+            if(((Date.now() - item.lastSeen) / 1000) >  timeoutThreshold) {
+                //render item hasnt responded to whoIs for over an hour
 
-                let deviceKey = (typeof device.getAddress() == "object") ? device.getAddress().address + "-" + device.getDeviceId() : device.getAddress() + "-" + device.getDeviceId();            
+                let deviceIndex = that.deviceList.findIndex(ele => ele.deviceId == item.deviceId);
+                let device = that.deviceList[deviceIndex];
+
+                let ipAddr = typeof device.getAddress() == "object" ? device.getAddress().address : device.getAddress();
+                let deviceKey = ipAddr + "-" + device.getDeviceId();            
+
                 delete that.networkTree[deviceKey];
 
-                if(that.renderList){
-                    let foundIndex = that.renderList.findIndex(ele => ele.ipAddr == device.getAddress() && ele.deviceId == device.getDeviceId());
-                    if(foundIndex !== -1) {
-                        that.renderList.splice(foundIndex, 1);
-                    }
+                if(((Date.now() - device.getLastSeen()) / 1000) >  timeoutThreshold) {
+                    that.deviceList.splice(deviceIndex, 1);
                 }
 
-                that.deviceList.splice(index, 1);
+                that.renderList.splice(index, 1);
             }
         });
+        
     }
 
     updateDeviceName(device) {
         let that = this;
         that._getDeviceName(device.getAddress(), device.getDeviceId()).then(function(deviceName) {
-            device.setDeviceName(deviceName);
+            if(typeof deviceName == "string") {
+                device.setDeviceName(deviceName);
+            }
         });
     }
 
@@ -322,20 +328,22 @@ class BacnetClient extends EventEmitter {
             let bacnetResults = {};
             devicesToRead.forEach(function(key, index) {
                 let device = that.deviceList.find(ele => `${that.getDeviceAddress(ele)}-${ele.getDeviceId()}` == key);
-                let deviceName = device.getDeviceName();
-                let deviceKey = (typeof device.getAddress() == "object") ? device.getAddress().address + "-" + device.getDeviceId() : device.getAddress() + "-" + device.getDeviceId();            
-                let deviceObject = that.networkTree[deviceKey];
-                if(!bacnetResults[deviceName]) bacnetResults[deviceName] = {};
-                if(deviceObject) {
-                    for(const pointName in readConfig.pointsToRead[key]) {
-                        let bac_obj = that.getObjectType(readConfig.pointsToRead[key][pointName].objectID.type);
-                        let objectId = pointName + "_" + bac_obj + '_' + readConfig.pointsToRead[key][pointName].objectID.instance;
-                        let point = deviceObject[objectId];
-                        bacnetResults[deviceName][pointName] = point;
+                if(device) {
+                    let deviceName = device.getDeviceName();
+                    let deviceKey = (typeof device.getAddress() == "object") ? device.getAddress().address + "-" + device.getDeviceId() : device.getAddress() + "-" + device.getDeviceId();            
+                    let deviceObject = that.networkTree[deviceKey];
+                    if(!bacnetResults[deviceName]) bacnetResults[deviceName] = {};
+                    if(deviceObject) {
+                        for(const pointName in readConfig.pointsToRead[key]) {
+                            let bac_obj = that.getObjectType(readConfig.pointsToRead[key][pointName].objectID.type);
+                            let objectId = pointName + "_" + bac_obj + '_' + readConfig.pointsToRead[key][pointName].objectID.instance;
+                            let point = deviceObject[objectId];
+                            bacnetResults[deviceName][pointName] = point;
+                        }
                     }
                 }
 
-                if(index == devicesToRead.length - 1) that.emit('values', bacnetResults, outputType, objectPropertyType);
+                if(index == devicesToRead.length - 1 && Object.keys(readConfig.pointsToRead).length > 0) that.emit('values', bacnetResults, outputType, objectPropertyType);
             });
         } catch(e) {
             that.logOut("Issue doing read, see error: ", e);
@@ -375,10 +383,7 @@ class BacnetClient extends EventEmitter {
                                 let objectName = that._findValueById(point.values, baEnum.PropertyIdentifier.OBJECT_NAME);
                                 //checks for error code json structure, returned for invalid bacnet requests
                                 if(!object.value.value && toReadProperty !== -1 && objectName !== "") {      
-                                    var currobjectId = point.objectId.type
-                                    let bac_obj = that.getObjectType(currobjectId);                                
-                                    let objectId;
-                                    objectId = objectName;
+                                    let objectId = objectName;
 
                                     //init json object
                                     if(!values[objectId]) values[objectId] = {};
@@ -929,7 +934,7 @@ class BacnetClient extends EventEmitter {
                         let isMstpDevice = deviceInfo.getIsMstpDevice();
                         let manualDiscoveryMode = deviceInfo.getManualDiscoveryMode();
 
-                        if(deviceObject) {
+                        if(deviceObject && typeof deviceName !== "object") {
                             let children = [];
                             let pointIndex = 0;
 
@@ -982,7 +987,7 @@ class BacnetClient extends EventEmitter {
                                 children.push({"key": `${index}-${pointIndex}`, "label": displayName, "data": displayName, "pointName": pointName, "icon": that.getPointIcon(values.meta.objectId.type), "children": pointProperties, "type": "point", "parentDevice": deviceName, "showAdded": false, "bacnetType": values.meta.objectId.type})
                                 pointIndex++;
                             }
-                            let foundIndex = that.renderList.findIndex(ele => ele.key == index && ele.deviceId == deviceId);
+                            let foundIndex = that.renderList.findIndex(ele => ele.deviceId == deviceId && ele.ipAddr == ipAddr);
                             if(foundIndex !== -1) {
                                 that.renderList[foundIndex] = {"key": index, "label": deviceName, "data": deviceName, "icon": that.getDeviceIcon(isMstpDevice, manualDiscoveryMode), "children": children.sort(that.sortPoints), "type": "device", "lastSeen": deviceInfo.getLastSeen(), "showAdded": false, "ipAddr": ipAddr, "deviceId": deviceId, "isMstpDevice": isMstpDevice};
                             } else if(foundIndex == -1) {
@@ -996,7 +1001,7 @@ class BacnetClient extends EventEmitter {
                                 resolve({renderList: that.renderList, deviceList: that.deviceList, pointList: that.networkTree, pollFrequency: that.discover_polling_schedule});
                             }
                         }
-                        
+
                         release();
                     });
                 });
@@ -1082,9 +1087,7 @@ class BacnetClient extends EventEmitter {
                         try {
                             pointProperty.values.forEach(function(object, objectIndex) {
                                 //checks for error code json structure, returned for invalid bacnet requests
-                                //if(!object.value.value && !object.value[0].value.errorClass && !object.value.errorClass) {
                                 if(object && object.value && !object.value.errorClass) {
-
 
                                     if(!values[objectId]) values[objectId] = {};
                                     values[objectId].meta = {
