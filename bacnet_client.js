@@ -335,8 +335,8 @@ class BacnetClient extends EventEmitter {
                     if(!bacnetResults[deviceName]) bacnetResults[deviceName] = {};
                     if(deviceObject) {
                         for(const pointName in readConfig.pointsToRead[key]) {
-                            let bac_obj = that.getObjectType(readConfig.pointsToRead[key][pointName].objectID.type);
-                            let objectId = pointName + "_" + bac_obj + '_' + readConfig.pointsToRead[key][pointName].objectID.instance;
+                            let bac_obj = that.getObjectType(readConfig.pointsToRead[key][pointName].meta.objectId.type);
+                            let objectId = pointName + "_" + bac_obj + '_' + readConfig.pointsToRead[key][pointName].meta.objectId.instance;
                             let point = deviceObject[objectId];
                             bacnetResults[deviceName][pointName] = point;
                         }
@@ -358,108 +358,6 @@ class BacnetClient extends EventEmitter {
                 return device.getAddress();
             default:    
                 return device.getAddress();
-        }
-    }
-
-    readDeviceAndEmitJSON(readPromiseArray, device, outputType, propertiesToRead, objectPropertyType, msgId) {
-        let that = this;
-        let deviceName = device.getDeviceName();
-
-        let bacnetResults = {
-            [deviceName]: []
-        };
-
-        try{
-            Promise.all(readPromiseArray).then((result) => {
-                let values = {};
-
-                // remove errors and map to result element
-                let successfulResults = result.filter(element => !element.error).map(element => element.value);
-                successfulResults.forEach(element => {
-                    try {
-                        element.values.forEach(function(point){
-                            point.values.forEach(function(object) {                             
-                                let toReadProperty = propertiesToRead.findIndex(ele => ele.id == object.id);
-                                let objectName = that._findValueById(point.values, baEnum.PropertyIdentifier.OBJECT_NAME);
-                                //checks for error code json structure, returned for invalid bacnet requests
-                                if(!object.value.value && toReadProperty !== -1 && objectName !== "") {      
-                                    let objectId = objectName;
-
-                                    //init json object
-                                    if(!values[objectId]) values[objectId] = {};
-
-                                    switch(object.id) {
-                                        case baEnum.PropertyIdentifier.PRESENT_VALUE:
-                                            if(object.value[0] && 
-                                               object.value[0].value !== "undefined" && 
-                                               object.value[0].value !== null && 
-                                               typeof object.value[0].value == "number") {
-                                                    values[objectId].presentValue = roundDecimalPlaces(object.value[0].value, that.roundDecimal);
-                                               } else if(object.value[0] && 
-                                                object.value[0].value !== "undefined" && 
-                                                object.value[0].value !== null && 
-                                                typeof object.value[0].value == "string") {
-                                                    values[objectId].presentValue = object.value[0].value;
-                                               }
-                                            break;
-                                        case baEnum.PropertyIdentifier.DESCRIPTION:
-                                            if(object.value[0]) values[objectId].description = object.value[0].value;
-                                            break;
-                                        case baEnum.PropertyIdentifier.STATUS_FLAGS:
-                                            if(object.value[0] && object.value[0].value) values[objectId].statusFlags = that.getStatusFlags(object);
-                                            break;
-                                        case baEnum.PropertyIdentifier.RELIABILITY:
-                                            if(object.value[0]) values[objectId].reliability = that.getPROP_RELIABILITY(object.value[0].value);
-                                            break; 
-                                        case baEnum.PropertyIdentifier.OUT_OF_SERVICE:
-                                            if(object.value[0]) values[objectId].outOfService = object.value[0].value;
-                                            break;
-                                        case baEnum.PropertyIdentifier.UNITS:
-                                            if(object.value[0] && object.value[0].value) values[objectId].units = getUnit(object.value[0].value);
-                                            break;
-                                        case baEnum.PropertyIdentifier.OBJECT_NAME:
-                                            if(object.value[0] && object.value[0].value) values[objectId].objectName = object.value[0].value;
-                                            break;
-                                        case baEnum.PropertyIdentifier.SYSTEM_STATUS:
-                                            if(object.value[0]){
-                                                values[objectId].systemStatus = that.getPROP_SYSTEM_STATUS(object.value[0].value);
-                                            }
-                                            break;    
-                                        case baEnum.PropertyIdentifier.MODIFICATION_DATE:
-                                            if(object.value[0]) {
-                                                values[objectId].modificationDate = object.value[0].value;
-                                            }
-                                            break;      
-                                        case baEnum.PropertyIdentifier.PROGRAM_STATE:
-                                            if(object.value[0]){
-                                                values[objectId].programState = that.getPROP_PROGRAM_STATE(object.value[0].value);
-                                            }
-                                            break;
-                                        case baEnum.PropertyIdentifier.RECORD_COUNT:
-                                            if(object.value[0] ) {
-                                                values[objectId].recordCount = object.value[0].value;
-                                            }
-                                            break;
-                                    }
-                                }
-                            });
-                        }); 
-                        bacnetResults[deviceName] = values;
-
-                    } catch(e) {
-                        that.logOut("issue resolving bacnet payload, see error:  ", e);
-                    }
-                });
-                if(Object.keys(bacnetResults[deviceName]).length !== 0) {
-                    that.emit('values', bacnetResults, outputType, objectPropertyType);
-                }
-                
-            }).catch(function (error) {
-                logger.log('error', `Error while fetching values: ${error}`);
-            });
-
-        } catch(e){
-            that.logOut("Issue reading from device, see error: ", e);
         }
     }
 
@@ -1079,92 +977,91 @@ class BacnetClient extends EventEmitter {
                         let objectName = that._findValueById(pointProperty.values, baEnum.PropertyIdentifier.OBJECT_NAME);
                         let objectType = that._findValueById(pointProperty.values, baEnum.PropertyIdentifier.OBJECT_TYPE);
                         let objectId;
-                        if(objectName !== null) {
+                        if(objectName !== null && typeof objectName == "string") {
                             objectId = objectName + "_" + bac_obj + '_' + pointProperty.objectId.instance;
-                        } else {
-                            objectId = bac_obj + '_' + pointProperty.objectId.instance;
-                        }
-                        try {
-                            pointProperty.values.forEach(function(object, objectIndex) {
-                                //checks for error code json structure, returned for invalid bacnet requests
-                                if(object && object.value && !object.value.errorClass) {
+                        
+                            try {
+                                pointProperty.values.forEach(function(object, objectIndex) {
+                                    //checks for error code json structure, returned for invalid bacnet requests
+                                    if(object && object.value && !object.value.errorClass) {
 
-                                    if(!values[objectId]) values[objectId] = {};
-                                    values[objectId].meta = {
-                                        objectId: pointProperty.objectId
-                                    };
+                                        if(!values[objectId]) values[objectId] = {};
+                                        values[objectId].meta = {
+                                            objectId: pointProperty.objectId
+                                        };
 
-                                    switch(object.id) {
-                                        case baEnum.PropertyIdentifier.PRESENT_VALUE:
-                                            if(object.value[0] && object.value[0].value !== "undefined" && object.value[0].value !== null) {
-                                                //check for binary object type
-                                                if(objectType == 3 || objectType == 4 || objectType == 5) {
-                                                    if(object.value[0].value == 0) {
-                                                        values[objectId].presentValue = false;
-                                                    } else if(object.value[0].value == 1) {
-                                                        values[objectId].presentValue = true;
+                                        switch(object.id) {
+                                            case baEnum.PropertyIdentifier.PRESENT_VALUE:
+                                                if(object.value[0] && object.value[0].value !== "undefined" && object.value[0].value !== null) {
+                                                    //check for binary object type
+                                                    if(objectType == 3 || objectType == 4 || objectType == 5) {
+                                                        if(object.value[0].value == 0) {
+                                                            values[objectId].presentValue = false;
+                                                        } else if(object.value[0].value == 1) {
+                                                            values[objectId].presentValue = true;
+                                                        }
+                                                    } else if(objectType == 40) {
+                                                            //character string
+                                                            values[objectId].presentValue = object.value[0].value;
+                                                    } else {
+                                                        values[objectId].presentValue = roundDecimalPlaces(object.value[0].value, 2);
                                                     }
-                                                } else if(objectType == 40) {
-                                                        //character string
-                                                        values[objectId].presentValue = object.value[0].value;
-                                                } else {
-                                                    values[objectId].presentValue = roundDecimalPlaces(object.value[0].value, 2);
+                                                } 
+                                                values[objectId].meta.arrayIndex = object.index;
+                                                break;
+                                            case baEnum.PropertyIdentifier.DESCRIPTION:
+                                                if(object.value[0]) values[objectId].description = object.value[0].value;
+                                                break;
+                                            case baEnum.PropertyIdentifier.UNITS:
+                                                if(object.value[0] && object.value[0].value) values[objectId].units = getUnit(object.value[0].value);
+                                                break;
+                                            case baEnum.PropertyIdentifier.OBJECT_NAME:
+                                                if(object.value[0] && object.value[0].value) values[objectId].objectName = object.value[0].value;
+                                                break;
+                                            case baEnum.PropertyIdentifier.OBJECT_TYPE:
+                                                if(object.value[0] && object.value[0].value) values[objectId].objectType = object.value[0].value;
+                                                break;
+                                            case baEnum.PropertyIdentifier.OBJECT_IDENTIFIER:
+                                                if(object.value[0] && object.value[0].value) values[objectId].objectID = object.value[0].value;
+                                                break;    
+                                            case baEnum.PropertyIdentifier.PROPERTY_LIST:
+                                                if(object.value) values[objectId].propertyList = that.mapPropsToArray(object.value);
+                                                break;         
+                                                
+                                            case baEnum.PropertyIdentifier.SYSTEM_STATUS:
+                                                if(object.value[0]){
+                                                    values[objectId].systemStatus = that.getPROP_SYSTEM_STATUS(object.value[0].value);
+                                                } 
+                                                break;    
+
+                                            case baEnum.PropertyIdentifier.MODIFICATION_DATE:
+                                                if(object.value[0]) {
+                                                    values[objectId].modificationDate = object.value[0].value;
                                                 }
-                                            } 
-                                            values[objectId].meta.arrayIndex = object.index;
-                                            break;
-                                        case baEnum.PropertyIdentifier.DESCRIPTION:
-                                            if(object.value[0]) values[objectId].description = object.value[0].value;
-                                            break;
-                                        case baEnum.PropertyIdentifier.UNITS:
-                                            if(object.value[0] && object.value[0].value) values[objectId].units = getUnit(object.value[0].value);
-                                            break;
-                                        case baEnum.PropertyIdentifier.OBJECT_NAME:
-                                            if(object.value[0] && object.value[0].value) values[objectId].objectName = object.value[0].value;
-                                            break;
-                                        case baEnum.PropertyIdentifier.OBJECT_TYPE:
-                                            if(object.value[0] && object.value[0].value) values[objectId].objectType = object.value[0].value;
-                                            break;
-                                        case baEnum.PropertyIdentifier.OBJECT_IDENTIFIER:
-                                            if(object.value[0] && object.value[0].value) values[objectId].objectID = object.value[0].value;
-                                            break;    
-                                        case baEnum.PropertyIdentifier.PROPERTY_LIST:
-                                            if(object.value) values[objectId].propertyList = that.mapPropsToArray(object.value);
-                                            break;         
+                                                break;      
                                             
-                                        case baEnum.PropertyIdentifier.SYSTEM_STATUS:
-                                            if(object.value[0]){
-                                                values[objectId].systemStatus = that.getPROP_SYSTEM_STATUS(object.value[0].value);
-                                            } 
-                                            break;    
+                                            case baEnum.PropertyIdentifier.PROGRAM_STATE:
+                                                if(object.value[0]){
+                                                    values[objectId].programState = that.getPROP_PROGRAM_STATE(object.value[0].value);
+                                                }
+                                                break;
 
-                                        case baEnum.PropertyIdentifier.MODIFICATION_DATE:
-                                            if(object.value[0]) {
-                                                values[objectId].modificationDate = object.value[0].value;
-                                            }
-                                            break;      
-                                        
-                                        case baEnum.PropertyIdentifier.PROGRAM_STATE:
-                                            if(object.value[0]){
-                                                values[objectId].programState = that.getPROP_PROGRAM_STATE(object.value[0].value);
-                                            }
-                                            break;
-
-                                        case baEnum.PropertyIdentifier.RECORD_COUNT:
-                                            if(object.value[0] ) {
-                                                values[objectId].recordCount = object.value[0].value;
-                                            }
-                                            break;                                            
+                                            case baEnum.PropertyIdentifier.RECORD_COUNT:
+                                                if(object.value[0] ) {
+                                                    values[objectId].recordCount = object.value[0].value;
+                                                }
+                                                break;                                            
+                                        }
                                     }
-                                }
-                                if(pointPropertyIndex == successfulResult.values.length - 1 && objectIndex == pointProperty.values.length - 1 && i == fullObjects.length - 1) {
-                                    that.networkTree[deviceKey] = values;
-                                    resolve(that.networkTree);
-                                } 
-                            });
-                        } catch(e) {
-                            that.logOut("issue resolving bacnet payload, see error:  ", e);
-                            reject(e);
+                                    if(pointPropertyIndex == successfulResult.values.length - 1 && objectIndex == pointProperty.values.length - 1 && i == fullObjects.length - 1) {
+                                        that.networkTree[deviceKey] = values;
+                                        resolve(that.networkTree);
+                                    } 
+                                });
+                            } catch(e) {
+                                that.logOut("issue resolving bacnet payload, see error:  ", e);
+                                reject(e);
+                            }
                         }
                     });
                 } else {

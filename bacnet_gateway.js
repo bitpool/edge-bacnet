@@ -304,23 +304,26 @@ module.exports = function (RED) {
           if(device !== "_msgid") {
             let points = values[device];
             for(var point in points) {
-              let pointProps = Object.keys(points[point]);
-              pointProps.forEach(function(prop) {
-                let msg = {};
-                if(prop == "presentValue") {
-                  if(node.nodeName !== "gateway" && 
-                      node.nodeName !== "" && 
-                      node.nodeName !== "null" && 
-                      node.nodeName !== "undefined" && 
-                      typeof node.nodeName == "string") {
-                    msg.topic = `${node.nodeName}/${device}/${point}`;
-                  } else {
-                    msg.topic = `BITPOOL_BACNET_GATEWAY/${device}/${point}`;
+              if(points[point]){
+                let pointProps = Object.keys(points[point]);
+                pointProps.forEach(function(prop) {
+                  let msg = {};
+                  if(prop == "presentValue") {
+                    if(node.nodeName !== "gateway" && 
+                        node.nodeName !== "" && 
+                        node.nodeName !== "null" && 
+                        node.nodeName !== "undefined" && 
+                        typeof node.nodeName == "string") {
+                      msg.topic = `${node.nodeName}/${device}/${point}`;
+                    } else {
+                      msg.topic = `BITPOOL_BACNET_GATEWAY/${device}/${point}`;
+                    }
+                    msg.payload = points[point][prop];
+                    node.send(msg);
                   }
-                  msg.payload = points[point][prop];
-                  node.send(msg);
-                }
-              });
+                });
+
+              }
             }
           }
         });
@@ -333,23 +336,25 @@ module.exports = function (RED) {
           if(device !== "_msgid") {
             let points = values[device];
             for(var point in points) {
-              let pointProps = Object.keys(points[point]);
-              pointProps.forEach(function(prop) {
-                let msg = {};
-                if(prop !== "objectName") {
-                  if(node.nodeName !== "gateway" && 
-                      node.nodeName !== "" && 
-                      node.nodeName !== "null" && 
-                      node.nodeName !== "undefined" && 
-                      typeof node.nodeName == "string") {
-                    msg.topic = `${node.nodeName}/${device}/${point}/${prop}`;
-                  } else {
-                    msg.topic = `BITPOOL_BACNET_GATEWAY/${device}/${point}/${prop}`;
+              if(points[point]){
+                let pointProps = Object.keys(points[point]);
+                pointProps.forEach(function(prop) {
+                  let msg = {};
+                  if(prop !== "objectName") {
+                    if(node.nodeName !== "gateway" && 
+                        node.nodeName !== "" && 
+                        node.nodeName !== "null" && 
+                        node.nodeName !== "undefined" && 
+                        typeof node.nodeName == "string") {
+                      msg.topic = `${node.nodeName}/${device}/${point}/${prop}`;
+                    } else {
+                      msg.topic = `BITPOOL_BACNET_GATEWAY/${device}/${point}/${prop}`;
+                    }
+                    msg.payload = points[point][prop];
+                    node.send(msg);
                   }
-                  msg.payload = points[point][prop];
-                  node.send(msg);
-                }
-              });
+                });
+              }
             }
           }
         });
@@ -358,22 +363,37 @@ module.exports = function (RED) {
       sendSimpleJson = function(values) {
         let devices = Object.keys(values);
         devices.forEach(function(device) {
+          let msgg = {};
           if(device !== "_msgid") {
             let value = {
               [device]: {}
             };
             let points = values[device];
+          
             for(var point in points) {
-              let pointProps = Object.keys(points[point]);
-              pointProps.forEach(function(prop) {
-                if(prop == "presentValue") {
-                  value[device][point] = {
-                    "presentValue": points[point][prop]
-                  };
-                }
-              });
+              if(points[point]){
+                let pointProps = Object.keys(points[point]);
+                pointProps.forEach(function(prop) {
+                  if(prop == "presentValue") {
+                    value[device][point] = {
+                      "presentValue": points[point][prop]
+                    };
+                  }
+                });
+              }
+
             }
-            node.send(value);
+            if(node.nodeName !== "gateway" && 
+            node.nodeName !== "" && 
+            node.nodeName !== "null" && 
+            node.nodeName !== "undefined" && 
+            typeof node.nodeName == "string") {
+              msgg.topic = `${node.nodeName}/${device}`;
+            } else {
+              msgg.topic = `BITPOOL_BACNET_GATEWAY/${device}`;
+            }
+            msgg.payload = value[device];
+            node.send(msgg);
           }
         });
       };
