@@ -1,6 +1,6 @@
 {
   "name": "@bitpoolos/edge-bacnet",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "description": "A bacnet gateway for node-red",
   "dependencies": {
     "async-mutex": "^0.4.0",

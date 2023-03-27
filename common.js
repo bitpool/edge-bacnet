@@ -233,6 +233,34 @@ function Read_Config_Sync() {
   return data;
 };
 
+// STORE CONFIG FUNCTION - BACNET SERVER ==========================================
+//
+// ================================================================================
+async function Store_Config_Server(data) {
+  await fs.writeFile("edge-bacnet-server-datastore.cfg", data, (err) => {
+    if (err) {
+      console.log("Store_Config_Server writeFile error: ", err);
+    }
+  });
+};
+
+// READ CONFIG SYNC FUNCTION - BACNET SERVER ======================================
+//
+// ================================================================================
+function Read_Config_Sync_Server() {
+  var data = "{}";
+  try {
+    data = fs.readFileSync("edge-bacnet-server-datastore.cfg", {encoding:'utf8', flag:'r'});
+  }
+  catch(err) {
+    console.log("Read_Config_Sync_Server error:", err);
+    if(err.errno == -4058) console.log("Edge-BACnet Server: No save file found, creating new file");
+    data = '{}';
+    Store_Config_Server(data);
+  }
+  return data;
+};
+
 module.exports = {
   DeviceObjectId, 
   DeviceObject, 
@@ -247,5 +275,7 @@ module.exports = {
   roundDecimalPlaces, 
   doNodeRedRestart,
   Store_Config,
-  Read_Config_Sync
+  Read_Config_Sync,
+  Store_Config_Server,
+  Read_Config_Sync_Server
 };

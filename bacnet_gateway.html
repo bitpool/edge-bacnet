@@ -81,6 +81,9 @@
         rebuildDataModel() {
             return fetch('/bitpool-bacnet-data/rebuildDataModel').then(res => res.json());
         };
+        clearBacnetServerPoints() {
+            return fetch('/bitpool-bacnet-data/clearBacnetServerPoints').then(res => res.json());
+        };
     };
     RED.nodes.registerType('Bacnet-Gateway', {
         category: 'Bitpool BACnet',
@@ -186,18 +189,6 @@
 
             queryAdapters();
 
-            // function setBroadCastAddress() {
-            //     let nicSelector = document.getElementById("node-input-local_device_address");
-            //     nicSelector.onchange = function(e) {
-            //         if(typeof e.target.value == "string" && e.target.value !== ""){
-            //             let broadcastAddrPrefill = e.target.value.split(".").slice(0, 3).join(".") + ".255";
-            //             document.getElementById("node-input-broadCastAddr").value = broadcastAddrPrefill;
-            //         }
-            //     };
-            // }
-
-            // setBroadCastAddress();
-
             function setDeviceIdRangeState(state) {
                 let deviceIdRangeStart = $("#node-input-device_id_range_start");
                 let deviceIdRangeEnd = $("#node-input-device_id_range_end");
@@ -233,6 +224,52 @@
             $("#node-input-manual_instance_range_enabled").change(function(e) {
                 setManualInstanceRangeState(this.checked);
             });
+
+            if(node.vm == undefined) {
+                const confirmDialog = document.createElement('p-confirm-dialog');
+                document.getElementById("clearServerContainer").appendChild(confirmDialog);
+            }
+
+            const {createApp, ref, onMounted} = Vue;
+            const ConfirmDialog = primevue.confirmdialog;
+            const ConfirmationService = primevue.confirmationservice;
+
+            //prime vue app
+            const App = {
+                data() {
+                    return {
+                        nodeService: ref(new NodeService())
+                    }
+                },
+                methods: {
+                    confirm(event) {
+                        this.$confirm.require({
+                            message: 'Do you want to clear all the BACnet server points? This action is not reversible',
+                            header: 'Delete Confirmation',
+                            icon: 'pi pi-info-circle',
+                            acceptClass: 'p-button-danger',
+                            accept: () => {
+                                //handle accept 
+                                this.nodeService.clearBacnetServerPoints();
+                            },
+                            reject: () => {
+                                //handle reject
+                            }
+                        });
+                    }
+                },
+                components: {
+                    "p-button": primevue.button,
+                    "p-confirm-dialog": primevue.confirmdialog
+                }
+            };
+
+            let vueapp = createApp(App);
+            vueapp.use(primevue.config.default);
+            vueapp.use(primevue.confirmpopup);
+            vueapp.use(primevue.confirmationservice);
+            node.vm = vueapp.mount("#clearServerContainer");
+            
 
         },
         oneditsave: function (test) {
@@ -283,25 +320,38 @@
                 align-items: center;
                 padding-top: 20px;
             }
-    
             .point {
                 padding-left: 50px
             }
-
             .pointButton {
                 color: inherit; 
                 border: none;
                 display: flex;
                 align-items: center;
             }
-
             .networkTreeContent {
                 margin-top: 20px;
                 margin-left: 50px;
             }
-
+            .p-confirm-dialog-accept > .p-button-label, .bacnetServerRebuildSchedule_clearButton > .p-button-label {
+                color: white;
+            }
             .red-ui-editor label {
                 font-size: 12px;
+            }
+            .bacnetServerRebuildSchedule_clearButton {
+                box-shadow: 0 0 0 0.2rem #edacac !important;
+                width: 200px;
+                border-radius: 3px;
+                margin-left: 140px !important;
+            }
+            .clear_server_span {
+                width: 0px;
+            }
+            .read_server_parent_div {
+                display: flex;
+                align-items: center;
+                justify-content: space-around;
             }
 
         </style>
@@ -419,25 +469,21 @@
 
             </div>
             <div id='read-server-tab' style='display:none'>
-                <div class="form-row">
-                    <label for="node-input-serverEnabled">
-                        Enabled: 
-                    </label>
-                    <input type="checkbox" id="node-input-serverEnabled" style="width: auto;"/>
+                <div class="read_server_parent_div">
+                    <div class="form-row">
+                        <label for="node-input-serverEnabled">
+                            Enabled: 
+                        </label>
+                        <input type="checkbox" id="node-input-serverEnabled" style="width: auto;"/>
+                    </div>
+                    
+                    <div class="form-row" id="clearServerContainer" style="align-items: center; display: flex;">
+                        <label for="node-input-bacnetServerRebuildSchedule_value" class="clear_server_span"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.bacnetServerRebuildSchedule"></span>  </label>
+                        <p-button class="bacnetServerRebuildSchedule_clearButton p-button-danger" @click="confirm($event)" label="Reinitialize Server" ></p-button>
+                        
+                    </div>
                 </div>
 
-                <div class="form-row" style="align-items: center; display: flex;">
-                    <label for="node-input-bacnetServerRebuildSchedule_value"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.bacnetServerRebuildSchedule"></span>Clear Server Points:</label>
-                    <p style="margin-right: 5px; margin-bottom: 0px; padding-left: 7px;">Every</p>
-                    <input type="text" id="node-input-bacnetServerRebuildSchedule" style="display: none;">
-                    <input type="text" id="node-input-bacnetServerRebuildSchedule_value" placeholder="5" style="width: 70px; margin-right: 5px;">
-                    <select name="timePeriod" id="node-input-bacnetServerRebuildSchedule_options" style="width: 120px; margin-right: 5px;">
-                        <option value="Seconds">Seconds</option>
-                        <option value="Minutes">Minutes</option>
-                        <option value="Hours">Hours</option>
-                        <option value="Days">Days</option>
-                    </select>
-                </div>
             </div>
 
     </script>

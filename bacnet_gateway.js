@@ -153,10 +153,20 @@ module.exports = function (RED) {
         // No client information found
         node.status({fill:"red",shape:"dot",text:"Please define client"})
       }
+
+      if(node.nodeName !== "gateway" && 
+        node.nodeName !== "" && 
+        node.nodeName !== "null" && 
+        node.nodeName !== "undefined" && 
+        typeof node.nodeName == "string") {
+        if(node.bacnetServerEnabled == true && node.bacnetClient) {
+          node.bacnetServer.setDeviceName(node.nodeName);
+        }
+      }
       
       node.on('input', function(msg) {
 
-        if(msg.topic && msg.payload) {
+        if(msg.topic && msg.payload !== null) {
           if(node.bacnetServer) {
             node.bacnetServer.addObject(msg.topic, msg.payload);
           }
@@ -218,6 +228,16 @@ module.exports = function (RED) {
             logOut("Error getting network data:  ", error);
           });
         }   
+      });
+
+      //route handler for the clear Bacnet server points function
+      RED.httpAdmin.get('/bitpool-bacnet-data/clearBacnetServerPoints', function(req, res) {
+        if(node.bacnetServerEnabled == true && node.bacnetClient) {
+          node.bacnetServer.clearServerPoints();
+          res.send(true);
+        } else {
+          res.send(false);
+        }
       });
 
       //route handler for network data

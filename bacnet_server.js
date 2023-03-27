@@ -1,14 +1,12 @@
 const bacnet = require('./resources/node-bacnet/index.js');
 const baEnum = bacnet.enum;
-const { ToadScheduler, SimpleIntervalJob, Task } = require('toad-scheduler')
+const {Store_Config_Server, Read_Config_Sync_Server } = require('./common');
 
 class BacnetServer {
 
-    constructor(client, deviceId, rebuildSchedule, nodeRedVersion){
+    constructor(client, deviceId, rebuildSchedule, nodeRedVersion) {
         let that = this;        
         that.bacnetClient = client;
-        that.rebuildScheduleSeconds = rebuildSchedule;
-        that.scheduler = new ToadScheduler();
         that.objectIdNumber = 1;
         that.nodeRedVersion = nodeRedVersion;
         that.deviceId = deviceId;
@@ -31,6 +29,18 @@ class BacnetServer {
             [baEnum.ObjectType.ANALOG_VALUE]: [],
             [baEnum.ObjectType.CHARACTERSTRING_VALUE]: []
         };
+
+        try {
+            let cachedData = JSON.parse(Read_Config_Sync_Server());
+            if(typeof cachedData == "object") {
+                if(cachedData.objectList) that.objectList = cachedData.objectList;
+                if(cachedData.objectStore) that.objectStore = cachedData.objectStore;
+            }
+        } catch (error) {
+            //do nothing
+        }
+
+
 
         that.bacnetClient.client.on('whoIs', (device) => {
             that.bacnetClient.client.iAmResponse(that.bacnetClient.broadCastAddr, that.deviceId, baEnum.Segmentation.SEGMENTED_BOTH, 27823);
@@ -111,28 +121,20 @@ class BacnetServer {
 
         //do initial iAm broadcast when BACnet server starts
         that.bacnetClient.client.iAmResponse(that.bacnetClient.broadCastAddr, that.deviceId, baEnum.Segmentation.SEGMENTED_BOTH, 27823);
+    }
 
-        try {
-            //add clear server job to schedule
-            const task = new Task('simple task', () => {
-                that.clearServerPoints(); 
-            });
-
-            const job = new SimpleIntervalJob({ seconds: parseInt(that.rebuildScheduleSeconds), }, task)
-            
-            that.scheduler.addSimpleIntervalJob(job)
-
-        } catch (error) {
-            
+    setDeviceName(nodeName) {
+        let that = this;
+        if(typeof nodeName == "string" && nodeName !== "") {
+            that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_NAME][0].value = nodeName;
         }
     }
 
     addObject(name, value) {
         let that = this;
-        if(name && value) {
+        let objectType = that.getBacnetObjectType(value);
+        if(name && objectType) {
             let formattedName = name.replaceAll('.', '');
-            let objectType = that.getBacnetObjectType(value);
-
             if(objectType == "number") {
                 let foundIndex = that.objectStore[baEnum.ObjectType.ANALOG_VALUE].findIndex(ele => ele[baEnum.PropertyIdentifier.OBJECT_NAME][0].value == formattedName);
                 if(foundIndex == -1) {
@@ -155,10 +157,11 @@ class BacnetServer {
                  });
      
                  that.objectList.push({value: {type: baEnum.ObjectType.ANALOG_VALUE, instance: objectId}, type: 12})
+                 that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
                 } else if(foundIndex !== -1) {
-
                     let foundObject = that.objectStore[baEnum.ObjectType.ANALOG_VALUE][foundIndex];
                     foundObject[baEnum.PropertyIdentifier.PRESENT_VALUE][0].value = value;
+                    that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
                 }
             } else if(objectType == "string") {
                 let foundIndex = that.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE].findIndex(ele => ele[baEnum.PropertyIdentifier.OBJECT_NAME][0].value == formattedName);
@@ -182,12 +185,15 @@ class BacnetServer {
                  });
      
                  that.objectList.push({value: {type: baEnum.ObjectType.CHARACTERSTRING_VALUE, instance: objectId}, type: 12})
+                 that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
                 } else if(foundIndex !== -1) {
                     let foundObject = that.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE][foundIndex];
                     foundObject[baEnum.PropertyIdentifier.PRESENT_VALUE][0].value = value;
+                    that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
                 }
             }
         }
+        Store_Config_Server(JSON.stringify({objectList: that.objectList, objectStore: that.objectStore}));
     }
 
     getObject(objectId, propId, instance) {
@@ -270,8 +276,8 @@ class BacnetServer {
                 }
             }
 
-        } catch(e){
-            //console.log("properties error: ", e);
+        } catch(e) {
+            //do nothing
         }
         
         return null;
@@ -280,14 +286,31 @@ class BacnetServer {
     clearServerPoints() {
         let that = this;
 
-        that.objectStore[baEnum.ObjectType.ANALOG_VALUE] = [];
-        that.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE] = [];
+        let currentDeviceName = that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_NAME][0].value;
 
         that.objectList = [
             {value: {type: baEnum.ObjectType.DEVICE, instance: that.deviceId}, type: 12}
         ];
+        that.objectStore = {
+            [baEnum.ObjectType.DEVICE]: {
+                [baEnum.PropertyIdentifier.OBJECT_IDENTIFIER]: [{value: {type: baEnum.ObjectType.DEVICE, instance: that.deviceId}, type: 12}],  // OBJECT_IDENTIFIER
+                [baEnum.PropertyIdentifier.OBJECT_LIST]: that.objectList,                                                  // OBJECT_IDENTIFIER
+                [baEnum.PropertyIdentifier.OBJECT_NAME]: [{value: currentDeviceName, type: 7}],            // OBJECT_NAME
+                [baEnum.PropertyIdentifier.OBJECT_TYPE]: [{value: 8, type: 9}],                          // OBJECT_TYPE
+                [baEnum.PropertyIdentifier.DESCRIPTION]: [{value: 'Bitpool Edge BACnet gateway', type: 7}],          // DESCRIPTION
+                [baEnum.PropertyIdentifier.SYSTEM_STATUS]: [{value: 0, type: 9}], // SYSTEM_STATUS
+                [baEnum.PropertyIdentifier.VENDOR_NAME]:  [{value: "Bitpool", type: 7}], //VENDOR_NAME
+                [baEnum.PropertyIdentifier.VENDOR_IDENTIFIER]:  [{value: 1401, type: 7}], //VENDOR_IDENTIFIER
+                [baEnum.PropertyIdentifier.MODEL_NAME]:  [{value: "bitpool-edge", type: 7}],  //MODEL_NAME
+                [baEnum.PropertyIdentifier.FIRMWARE_REVISION]:  [{value: "Node-Red " + that.nodeRedVersion, type: 7}], //FIRMWARE_REVISION
+            },
+            [baEnum.ObjectType.ANALOG_VALUE]: [],
+            [baEnum.ObjectType.CHARACTERSTRING_VALUE]: []
+        };
 
         that.objectIdNumber = 1;
+
+        Store_Config_Server(JSON.stringify({objectList: that.objectList, objectStore: that.objectStore}));
     }
 
     getRandomArbitrary(min, max) {
