@@ -907,7 +907,7 @@ class BacnetClient extends EventEmitter {
         });
     }
 
-    buildJsonObject(device, result) {
+    buildJsonObject(device) {
         let that = this;    
         let address = device.address;
         let pointList = device.getPointsList();

@@ -97,7 +97,7 @@ module.exports = function (RED) {
 
           if(node.bacnetServerEnabled == true && node.bacnetClient) {
             if(node.bacnetServer == null) {
-              node.bacnetServer = new BacnetServer(node.bacnetClient, node.deviceId, node.bacnetServerRebuildSchedule, RED.version());
+              node.bacnetServer = new BacnetServer(node.bacnetClient, node.deviceId, RED.version());
               nodeContext.set("bacnetServer", node.bacnetServer);
             }
           } else if(node.bacnetServerEnabled == false) {
@@ -151,7 +151,7 @@ module.exports = function (RED) {
 
       } else {
         // No client information found
-        node.status({fill:"red",shape:"dot",text:"Please define client"})
+        //node.status({fill:"red",shape:"dot",text:"Please define client"})
       }
 
       if(node.nodeName !== "gateway" && 
@@ -201,7 +201,7 @@ module.exports = function (RED) {
         if(!node.bacnetClient) {
           logOut("Issue with the bacnetClient: ", node.bacnetClient);
           //no bacnet client present
-          node.status({fill:"red",shape:"dot",text:"Please define client"});
+          //node.status({fill:"red",shape:"dot",text:"Please define client"});
           res.send(false);
         } else {
           node.bacnetClient.getNetworkTreeData().then(function(result) {
@@ -218,7 +218,7 @@ module.exports = function (RED) {
         if(!node.bacnetClient) {
           logOut("Issue with the bacnetClient: ", node.bacnetClient);
           //no bacnet client present
-          node.status({fill:"red",shape:"dot",text:"Please define client"});
+          //node.status({fill:"red",shape:"dot",text:"Please define client"});
           res.send(false);
         } else {
           node.bacnetClient.rebuildDataModel().then(function(result) {
