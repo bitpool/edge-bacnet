@@ -1,4 +1,5 @@
 const bacnet = require('./resources/node-bacnet/index.js');
+const pjson = require('./package.json');
 const baEnum = bacnet.enum;
 const {Store_Config_Server, Read_Config_Sync_Server } = require('./common');
 
@@ -15,17 +16,51 @@ class BacnetServer {
         ];
         that.objectStore = {
             [baEnum.ObjectType.DEVICE]: {
-                [baEnum.PropertyIdentifier.OBJECT_IDENTIFIER]: [{value: {type: baEnum.ObjectType.DEVICE, instance: that.deviceId}, type: 12}],  // OBJECT_IDENTIFIER
-                [baEnum.PropertyIdentifier.OBJECT_LIST]: that.objectList,                                                  // OBJECT_IDENTIFIER
-                [baEnum.PropertyIdentifier.OBJECT_NAME]: [{value: 'Bitpool Edge BACnet Gateway', type: 7}],            // OBJECT_NAME
-                [baEnum.PropertyIdentifier.OBJECT_TYPE]: [{value: 8, type: 9}],                          // OBJECT_TYPE
-                [baEnum.PropertyIdentifier.DESCRIPTION]: [{value: 'Bitpool Edge BACnet gateway', type: 7}],          // DESCRIPTION
-                [baEnum.PropertyIdentifier.SYSTEM_STATUS]: [{value: 0, type: 9}], // SYSTEM_STATUS
-                [baEnum.PropertyIdentifier.VENDOR_NAME]:  [{value: "Bitpool", type: 7}], //VENDOR_NAME
-                [baEnum.PropertyIdentifier.VENDOR_IDENTIFIER]:  [{value: 1401, type: 7}], //VENDOR_IDENTIFIER
-                [baEnum.PropertyIdentifier.MODEL_NAME]:  [{value: "bitpool-edge", type: 7}],  //MODEL_NAME
-                [baEnum.PropertyIdentifier.FIRMWARE_REVISION]:  [{value: "Node-Red " + that.nodeRedVersion, type: 7}], //FIRMWARE_REVISION
-            },
+                [baEnum.PropertyIdentifier.OBJECT_IDENTIFIER]: [{value: {type: baEnum.ObjectType.DEVICE, instance: that.deviceId}, type: 12}],
+                [baEnum.PropertyIdentifier.OBJECT_LIST]: that.objectList, 
+                [baEnum.PropertyIdentifier.OBJECT_NAME]: [{value: 'Bitpool Edge BACnet Gateway', type: 7}],
+                [baEnum.PropertyIdentifier.OBJECT_TYPE]: [{value: 8, type: 9}],
+                [baEnum.PropertyIdentifier.DESCRIPTION]: [{value: 'Bitpool Edge BACnet gateway', type: 7}],
+                [baEnum.PropertyIdentifier.SYSTEM_STATUS]: [{value: 0, type: 9}], 
+                [baEnum.PropertyIdentifier.VENDOR_NAME]:  [{value: "Bitpool", type: 7}], 
+                [baEnum.PropertyIdentifier.VENDOR_IDENTIFIER]:  [{value: 1401, type: 2}],
+                [baEnum.PropertyIdentifier.MODEL_NAME]:  [{value: "bitpool-edge", type: 7}],  
+                [baEnum.PropertyIdentifier.FIRMWARE_REVISION]:  [{value: "Node-Red " + that.nodeRedVersion, type: 7}], 
+                [baEnum.PropertyIdentifier.PROTOCOL_REVISION]:  [{value: 19, type: 2}],
+                [baEnum.PropertyIdentifier.PROTOCOL_VERSION]:  [{value: 0, type: 2}],
+                [baEnum.PropertyIdentifier.APPLICATION_SOFTWARE_VERSION]:  [{value: pjson.version, type: 7}],
+                [baEnum.PropertyIdentifier.PROTOCOL_SERVICES_SUPPORTED]:  [{value: { value: [ 0, 80, 0, 4, 4 ], bitsUsed: 40 }, type: 8}],
+                [baEnum.PropertyIdentifier.PROTOCOL_OBJECT_TYPES_SUPPORTED]:  [{value: { value: [ 0, 80, 0, 4, 4 ], bitsUsed: 40 }, type: 8}],
+                [baEnum.PropertyIdentifier.MAX_APDU_LENGTH_ACCEPTED]:  [{value: 1476, type: 2}],
+                [baEnum.PropertyIdentifier.SEGMENTATION_SUPPORTED]:  [{value: 0, type: 9}],
+                [baEnum.PropertyIdentifier.APDU_TIMEOUT]:  [{value: that.bacnetClient.config.apduTimeout, type: 2}],
+                [baEnum.PropertyIdentifier.NUMBER_OF_APDU_RETRIES]:  [{value: 3, type: 2}],
+                [baEnum.PropertyIdentifier.DEVICE_ADDRESS_BINDING]:  [{value: 0, type: 12}],
+                [baEnum.PropertyIdentifier.DATABASE_REVISION]:  [{value: 19, type: 2}],
+                [baEnum.PropertyIdentifier.PROPERTY_LIST]:  [
+                    {value: baEnum.PropertyIdentifier.OBJECT_IDENTIFIER, type: 9 }, 
+                    {value: baEnum.PropertyIdentifier.OBJECT_LIST, type: 9 },
+                    {value: baEnum.PropertyIdentifier.OBJECT_NAME, type: 9 },
+                    {value: baEnum.PropertyIdentifier.OBJECT_TYPE, type: 9 },
+                    {value: baEnum.PropertyIdentifier.DESCRIPTION, type: 9 },
+                    {value: baEnum.PropertyIdentifier.SYSTEM_STATUS, type: 9 },
+                    {value: baEnum.PropertyIdentifier.VENDOR_NAME, type: 9 },
+                    {value: baEnum.PropertyIdentifier.VENDOR_IDENTIFIER, type: 9 },
+                    {value: baEnum.PropertyIdentifier.MODEL_NAME, type: 9 },
+                    {value: baEnum.PropertyIdentifier.FIRMWARE_REVISION, type: 9 },
+                    {value: baEnum.PropertyIdentifier.PROTOCOL_REVISION, type: 9 },
+                    {value: baEnum.PropertyIdentifier.PROTOCOL_VERSION, type: 9 },
+                    {value: baEnum.PropertyIdentifier.APPLICATION_SOFTWARE_VERSION, type: 9 },
+                    {value: baEnum.PropertyIdentifier.PROTOCOL_SERVICES_SUPPORTED, type: 9 },
+                    {value: baEnum.PropertyIdentifier.PROTOCOL_OBJECT_TYPES_SUPPORTED, type: 9 },
+                    {value: baEnum.PropertyIdentifier.MAX_APDU_LENGTH_ACCEPTED, type: 9 },
+                    {value: baEnum.PropertyIdentifier.SEGMENTATION_SUPPORTED, type: 9 },
+                    {value: baEnum.PropertyIdentifier.APDU_TIMEOUT, type: 9 },
+                    {value: baEnum.PropertyIdentifier.NUMBER_OF_APDU_RETRIES, type: 9 },
+                    {value: baEnum.PropertyIdentifier.DEVICE_ADDRESS_BINDING, type: 9 },
+                    {value: baEnum.PropertyIdentifier.DATABASE_REVISION, type: 9 },
+                ],
+            }, 
             [baEnum.ObjectType.ANALOG_VALUE]: [],
             [baEnum.ObjectType.CHARACTERSTRING_VALUE]: []
         };
@@ -45,7 +80,8 @@ class BacnetServer {
         }
 
         that.bacnetClient.client.on('whoIs', (device) => {
-            that.bacnetClient.client.iAmResponse(that.bacnetClient.broadCastAddr, that.deviceId, baEnum.Segmentation.SEGMENTED_BOTH, 27823);
+            that.bacnetClient.client.iAmResponse(that.bacnetClient.broadCastAddr, that.deviceId, baEnum.Segmentation.SEGMENTED_BOTH, 1401);
+            that.lastWhoIsRecived = Date.now();
         });
 
         that.bacnetClient.client.on('readPropertyMultiple', (data) => {
@@ -70,7 +106,6 @@ class BacnetServer {
                         
                         if(i == requestProps.length - 1) {
                             if(responseObject.length > 0) {
-
                                 that.bacnetClient.client.readPropertyMultipleResponse(senderAddress, data.invokeId, responseObject);
                             } else {
                                 that.bacnetClient.client.errorResponse(
@@ -105,8 +140,11 @@ class BacnetServer {
                 let propId = data.payload.property.id.toString();
                 let responseObj = that.getObject(objectId, propId, objectInstance);
 
+                if(propId == baEnum.PropertyIdentifier.OBJECT_LIST &&  ((Date.now() - that.lastWhoIsRecived) / 1000) < 0.7) {
+                    responseObj = [{value:that.objectList.length, type: 2}];
+                }
                 if(responseObj !== null && responseObj !== undefined && typeof responseObj !== "undefined") {
-                    that.bacnetClient.client.readPropertyResponse(data.header.sender.address, data.invokeId, objectId, data.payload.property, responseObj);
+                    that.bacnetClient.client.readPropertyResponse(data.header.sender.address, data.invokeId, data.payload.objectId, data.payload.property, responseObj);
                 } else {
                     that.bacnetClient.client.errorResponse(
                         data.address, 
@@ -152,7 +190,27 @@ class BacnetServer {
                      [baEnum.PropertyIdentifier.STATUS_FLAGS]: [{value: 0, type: 8}],
                      [baEnum.PropertyIdentifier.EVENT_STATE]: [{value: 0, type: 9}],
                      [baEnum.PropertyIdentifier.OUT_OF_SERVICE]: [{value: 0, type: 9}],
-                     [baEnum.PropertyIdentifier.UNITS]: [{value: 95, type: 9}]
+                     [baEnum.PropertyIdentifier.UNITS]: [{value: 95, type: 9}],
+                     [baEnum.PropertyIdentifier.PRIORITY_ARRAY]: [{value: 0, type: 9}],
+                     [baEnum.PropertyIdentifier.MAX_PRES_VALUE]: [{value: value, type: 4}],
+                     [baEnum.PropertyIdentifier.MIN_PRES_VALUE]: [{value: value, type: 4}],
+                     [baEnum.PropertyIdentifier.RESOLUTION]: [{value: 0, type: 4}],
+                     [baEnum.PropertyIdentifier.PROPERTY_LIST]:
+                     [
+                         {value: baEnum.PropertyIdentifier.OBJECT_NAME, type: 9 }, 
+                         {value: baEnum.PropertyIdentifier.OBJECT_TYPE, type: 9 },
+                         {value: baEnum.PropertyIdentifier.DESCRIPTION, type: 9 },
+                         {value: baEnum.PropertyIdentifier.OBJECT_IDENTIFIER, type: 9 },
+                         {value: baEnum.PropertyIdentifier.PRESENT_VALUE, type: 9 },
+                         {value: baEnum.PropertyIdentifier.STATUS_FLAGS, type: 9 },
+                         {value: baEnum.PropertyIdentifier.EVENT_STATE, type: 9 },
+                         {value: baEnum.PropertyIdentifier.OUT_OF_SERVICE, type: 9 },
+                         {value: baEnum.PropertyIdentifier.UNITS, type: 9 },
+                         {value: baEnum.PropertyIdentifier.PRIORITY_ARRAY, type: 9 },
+                         {value: baEnum.PropertyIdentifier.MAX_PRES_VALUE, type: 9 },
+                         {value: baEnum.PropertyIdentifier.MIN_PRES_VALUE, type: 9 },
+                         {value: baEnum.PropertyIdentifier.RESOLUTION, type: 9 },
+                     ],
                  });
      
                  that.objectList.push({value: {type: baEnum.ObjectType.ANALOG_VALUE, instance: objectId}, type: 12})

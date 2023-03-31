@@ -9,7 +9,7 @@ A Node-RED node that reads and writes to BACnet devices.
 
 ## Getting Started 
 
-Use the procedures below to install the Bitpool-Edge BACnet node onto your running instance. Then either use the Node-RED help, or read the [wiki](https://wiki.bitpool.com/en/edge/apps/bitpool-edge/nr-bacnet) page to get you started on your next new project.
+Use the procedures below to install the Bitpool-Edge BACnet node onto your running instance. Then either use the Node-RED help, or read the [wiki](https://wiki.bitpool.com/bitpool-edge/connectors/bitpool-edge-bacnet) page to get you started on your next new project.
 
 *- Examples are available using the Import->Examples->Flows menu.*
 
@@ -50,7 +50,7 @@ $ npm install @bitpoolos/edge-bacnet
 
 ## Contributions
 
-This node utilises v0.0.1-beta.13 of the node-bacstack package (https://github.com/fh1ch/node-bacstack). None of the functionality here would be possible without the fantastic work done by the contributors of that project.
+This node utilises v0.2.4 of the node-bacnet package (https://github.com/BiancoRoyal/node-bacstack). None of the functionality here would be possible without the fantastic work done by the contributors of that project.
 
 ## License
 
