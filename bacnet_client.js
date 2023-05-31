@@ -231,8 +231,14 @@ class BacnetClient extends EventEmitter {
                     that.logOut("queryDevices: invalid device found: ", device);
                     query(index);
                 }
-            } else if(index == that.deviceList.length){
-                that.queryDevicesManually();
+            } else if(index == that.deviceList.length) {
+
+                if(that.manualDiscoverQueue.length > 0) {
+                    that.queryDevicesManually();
+                } else {
+                    that.pollInProgress = false;
+                }
+                
             }
         }
     }
@@ -385,7 +391,6 @@ class BacnetClient extends EventEmitter {
             const queryDevices = new Task('simple task', () => {
                 if(!that.pollInProgress) that.queryDevices(); 
                 that.sanitizeDeviceList();
-                //that.queryDevicesManually();
             });
 
             const queryJob = new SimpleIntervalJob({ seconds: parseInt(config.device_read_schedule), }, queryDevices)
