@@ -106,8 +106,17 @@
                             app.pollFrequency = parseInt(result.pollFrequency);
                             app.deviceCount = result.deviceList.length;
                             //progress bar percentage
-                            app.progressBarValue = parseInt((result.renderList.length / result.deviceList.length) * 100);
+                            let progressVal = parseInt((result.renderList.length / result.deviceList.length) * 100);
+                            if(typeof progressVal == "number" && !isNaN(progressVal)) {
+                                app.progressBarValue = progressVal;
+                            } else {
+                                app.progressBarValue = 0;
+                            }
+
+                            app.$forceUpdate();
                         });
+
+                        app.$forceUpdate();
                     },
                     rebuildDataModel() {
                         let app = this;
@@ -116,15 +125,14 @@
                                 app.progressBarValue = 0;
                             }
                         });
-
-
+                        app.$forceUpdate();
                     },
                     addAllDevices() {
                         let app = this;
                         app.devices.forEach(function (device) {
                             app.addAllClicked({"node": device});
                         });
-
+                        app.$forceUpdate();
                     },
                     addAllClicked(slotProps) {
                         //update UI 
@@ -169,7 +177,7 @@
                         node.hiddenDeployToggle = !node.prevHiddenToggleState;
                     },
                     removeAllDevices() {
-                        let app = this;
+                        let app = this;                        
 
                         let clone = JSON.parse(JSON.stringify(app.readDevices));
 
@@ -214,6 +222,7 @@
                             console.log("removeAllClicked error: ", e);
                         }
 
+                        app.$forceUpdate();
                     },
                     addPointClicked(slotProps) {
                         let app = this;
@@ -258,6 +267,8 @@
 
                         //force a deploy state
                         node.hiddenDeployToggle = !node.prevHiddenToggleState;
+
+                        app.$forceUpdate();
                     },
                     removePointClicked(slotProps) {
                         let app = this;
@@ -291,6 +302,8 @@
 
                         //force a deploy state
                         node.hiddenDeployToggle = !node.prevHiddenToggleState;
+
+                        app.$forceUpdate();
                     },
                     getDeviceAddress(addr) {
                         switch(typeof addr) {
@@ -420,16 +433,24 @@
         },
         oneditsave: function () {
             let node = this;
-            if (node.vm.$data.devices && node.vm.$data.devices.length > 0) node.devices = node.vm.$data.devices;
-            if (node.vm.$data.readDevices && node.vm.$data.readDevices.length > 0) node.readDevices = node.vm.$data.readDevices;
-            if (node.vm.$data.pointsToRead && node.vm.$data.pointsToRead.length > 0) node.pointsToRead = node.vm.$data.pointsToRead;
+            if (node.vm.$data.devices) node.devices = node.vm.$data.devices;
+            if (node.vm.$data.readDevices) node.readDevices = node.vm.$data.readDevices;
+            if (node.vm.$data.pointsToRead) node.pointsToRead = node.vm.$data.pointsToRead;
+
+            // if (node.vm.$data.devices && node.vm.$data.devices.length > 0) node.devices = node.vm.$data.devices;
+            // if (node.vm.$data.readDevices && node.vm.$data.readDevices.length > 0) node.readDevices = node.vm.$data.readDevices;
+            // if (node.vm.$data.pointsToRead && node.vm.$data.pointsToRead.length > 0) node.pointsToRead = node.vm.$data.pointsToRead;
 
         },
         oneditcancel: function () {
             let node = this;
-            if (node.vm.$data.devices && node.vm.$data.devices.length > 0) node.devices = node.vm.$data.devices;
-            if (node.vm.$data.readDevices && node.vm.$data.readDevices.length > 0) node.readDevices = node.vm.$data.readDevices;
-            if (node.vm.$data.pointsToRead && node.vm.$data.pointsToRead.length > 0) node.pointsToRead = node.vm.$data.pointsToRead;
+            if (node.vm.$data.devices) node.devices = node.vm.$data.devices;
+            if (node.vm.$data.readDevices) node.readDevices = node.vm.$data.readDevices;
+            if (node.vm.$data.pointsToRead) node.pointsToRead = node.vm.$data.pointsToRead;
+
+            // if (node.vm.$data.devices && node.vm.$data.devices.length > 0) node.devices = node.vm.$data.devices;
+            // if (node.vm.$data.readDevices && node.vm.$data.readDevices.length > 0) node.readDevices = node.vm.$data.readDevices;
+            // if (node.vm.$data.pointsToRead && node.vm.$data.pointsToRead.length > 0) node.pointsToRead = node.vm.$data.pointsToRead;
         }
     });
 

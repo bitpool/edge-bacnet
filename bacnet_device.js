@@ -14,40 +14,74 @@ class BacnetDevice {
             that.pointsList = config.pointsList;
             that.pointListUpdateTs = config.pointListUpdateTs;
             that.manualDiscoveryMode = config.manualDiscoveryMode;
+            that.mDiscoverInstanceRange = config.mDiscoverInstanceRange;
+            that.pointListRetryCount = config.pointListRetryCount;
 
         } else if(fromImport == false) {
-
-            if(config.header.source) {
-                that.address = {address: config.header.sender.address, net: config.header.source.net, adr: config.header.source.adr};
+            if(config.net && config.adr) {
+                that.address = {address: config.address, net: config.net, adr: config.adr};
                 that.isMstp = true;
             } else {
-                that.address = config.header.sender.address;
+                that.address = config.address;
                 that.isMstp = false;
             }
-            that.deviceId = config.payload.deviceId;
-            that.maxApdu = config.payload.maxApdu;
-            that.segmentation = config.payload.segmentation;
-            that.vendorId = config.payload.vendorId;
+            that.deviceId = config.deviceId;
+            that.maxApdu = config.maxApdu;
+            that.segmentation = config.segmentation;
+            that.vendorId = config.vendorId;
             that.lastSeen = null;
             that.deviceName = null;
             that.pointsList = [];
             that.pointListUpdateTs = null;
             that.manualDiscoveryMode = false;
+            that.mDiscoverInstanceRange = {start: 0, end: 100};
+            that.pointListRetryCount = 0;
         }
     }
 
     updateDeviceConfig(config) {
-        if(config.header.sender.address !== "" && config.header.sender.address !== null && config.header.sender.address !== "undefined") {
-            if(config.header.source) {
-                this.address = {address: config.header.sender.address, net: config.header.source.net, adr: config.header.source.adr};
+        if(config.address !== "" && config.address !== null && config.address !== "undefined") {
+            if(config.net && config.adr) {
+                this.address = {address: config.address, net: config.net, adr: config.adr};
             } else {
-                this.address = config.header.sender.address;
+                this.address = config.address;
             }
         }
-        if(Number.isInteger(config.deviceId)) this.deviceId = config.payload.deviceId;
-        if(Number.isInteger(config.maxApdu)) this.maxApdu = config.payload.maxApdu;
-        if(Number.isInteger(config.segmentation)) this.segmentation = config.payload.segmentation;
-        if(Number.isInteger(config.vendorId)) this.vendorId = config.payload.vendorId;
+        if(Number.isInteger(config.deviceId)) this.deviceId = config.deviceId;
+        if(Number.isInteger(config.maxApdu)) this.maxApdu = config.maxApdu;
+        if(Number.isInteger(config.segmentation)) this.segmentation = config.segmentation;
+        if(Number.isInteger(config.vendorId)) this.vendorId = config.vendorId;
+    }
+
+    getPointListRetryCount() {
+        return this.pointListRetryCount;
+    }
+
+    incrementPointListRetryCount() {
+        this.pointListRetryCount++;
+    }
+
+    clearPointListRetryCount() {
+        this.pointListRetryCount = 0;
+    }
+
+    getmDiscoverInstanceRange() {
+        return this.mDiscoverInstanceRange;
+    }
+
+    setmDiscoverInstanceRange(range) {
+        this.mDiscoverInstanceRange = range;
+    }
+
+    updatemDiscoverInstanceRange(position, value) {
+        this.mDiscoverInstanceRange[position] = value;
+    }
+
+    shouldBeInManualMode() {
+        if(this.mDiscoverInstanceRange.start >= 1000000 || this.mDiscoverInstanceRange.end >= 1000000) {
+            return false;
+        }
+        return true;
     }
 
     setManualDiscoveryMode(bool) {

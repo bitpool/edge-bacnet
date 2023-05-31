@@ -1,15 +1,15 @@
 /*
   MIT License Copyright 2021, 2022 - Bitpool Pty Ltd
 */
-const bacnet = require('./resources/node-bacnet/index.js');
-const { BacnetServer } = require("./bacnet_server.js");
+
+const bacnet = require('./resources/node-bacstack-ts/dist/index.js');
 const baEnum = bacnet.enum;
 const bacnetIdMax = baEnum.ASN1_MAX_PROPERTY_ID;
-const { EventEmitter, captureRejectionSymbol } = require('events');
-const { DeviceObjectId, DeviceObject, logger, getUnit, roundDecimalPlaces, Store_Config, Read_Config_Sync } = require('./common');
+const { EventEmitter } = require('events');
+const { getUnit, roundDecimalPlaces, Store_Config, Read_Config_Sync } = require('./common');
 const { ToadScheduler, SimpleIntervalJob, Task } = require('toad-scheduler');
 const { BacnetDevice } = require('./bacnet_device');
-const {Mutex, Semaphore, withTimeout} = require("async-mutex");
+const {Mutex} = require("async-mutex");
 
 class BacnetClient extends EventEmitter {
 
@@ -17,29 +17,31 @@ class BacnetClient extends EventEmitter {
     constructor(config) {
         super();
         let that = this;
-
-        let cachedData = JSON.parse(Read_Config_Sync());
-
         that.deviceList = [];
+        that.manualDiscoverQueue = [];
         that.networkTree = {};
         that.lastWhoIs = null;
         that.client = null;
         that.lastNetworkPoll = null;
         that.scheduler = new ToadScheduler();
         that.mutex = new Mutex();
-
-        if(typeof cachedData == "object") {
-            if(cachedData.renderList) that.renderList = cachedData.renderList;
-            if(cachedData.deviceList) {
-                cachedData.deviceList.forEach(function(device) {
-                    let newBacnetDevice = new BacnetDevice(true, device);
-                    that.deviceList.push(newBacnetDevice);
-                });
-            }
-            if(cachedData.pointList) that.networkTree = cachedData.pointList;
-        }
+        that.manualMutex = new Mutex();
+        that.pollInProgress = false;
 
         try {
+            
+            let cachedData = JSON.parse(Read_Config_Sync());
+            if(typeof cachedData == "object") {
+                if(cachedData.renderList) that.renderList = cachedData.renderList;
+                if(cachedData.deviceList) {
+                    cachedData.deviceList.forEach(function(device) {
+                        let newBacnetDevice = new BacnetDevice(true, device);
+                        that.deviceList.push(newBacnetDevice);
+                    });
+                }
+                if(cachedData.pointList) that.networkTree = cachedData.pointList;
+            }
+
             that.config = config;
             that.roundDecimal = config.roundDecimal;
             that.apduSize = config.apduSize;
@@ -53,7 +55,8 @@ class BacnetClient extends EventEmitter {
             that.manual_instance_range_enabled = config.manual_instance_range_enabled;
             that.manual_instance_range_start = config.manual_instance_range_start;
             that.manual_instance_range_end = config.manual_instance_range_end;
-            that.bacnetServerEnabled = config.bacnetServerEnabled;
+            that.device_read_schedule = config.device_read_schedule;
+            that.deviceRetryCount = parseInt(config.retries);
 
             that.readPropertyMultipleOptions = {
                 maxSegments: that.maxSegments,
@@ -62,10 +65,10 @@ class BacnetClient extends EventEmitter {
 
             try {
 
-                that.client = new bacnet({ apduTimeout: config.apduTimeout, interface: config.localIpAdrress, port: config.port, broadcastAddress: config.broadCastAddr});
+                that.client = new bacnet.Client({ apduTimeout: config.apduTimeout, interface: config.localIpAdrress, port: config.port, broadcastAddress: config.broadCastAddr});
                 that.setMaxListeners(1);
 
-                const task = new Task('simple task', () => { 
+                const task = new Task('simple task', () => {
                     that.globalWhoIs(); 
                 });
 
@@ -75,11 +78,12 @@ class BacnetClient extends EventEmitter {
 
                 //query device task
                 const queryDevices = new Task('simple task', () => {
-                    that.queryDevices(); 
+                    if(!that.pollInProgress) that.queryDevices(); 
                     that.sanitizeDeviceList();
+                    //that.queryDevicesManually(); 
                 });
 
-                const queryJob = new SimpleIntervalJob({ seconds: parseInt(that.discover_polling_schedule), }, queryDevices)
+                const queryJob = new SimpleIntervalJob({ seconds: parseInt(that.device_read_schedule), }, queryDevices)
                 
                 that.scheduler.addSimpleIntervalJob(queryJob);
 
@@ -88,7 +92,7 @@ class BacnetClient extends EventEmitter {
                     that.buildNetworkTreeData();
                 });
 
-                const buildNetworkTreeJob = new SimpleIntervalJob({ seconds: 5, }, buildNetworkTree)
+                const buildNetworkTreeJob = new SimpleIntervalJob({ seconds: 10, }, buildNetworkTree)
                 
                 that.scheduler.addSimpleIntervalJob(buildNetworkTreeJob);
 
@@ -97,19 +101,21 @@ class BacnetClient extends EventEmitter {
                 setTimeout(() => {
                     that.queryDevices();
                     that.sanitizeDeviceList();
+                    that.buildNetworkTreeData();
                   }, "5000")
 
             } catch(e) {
+                console.log("Issue initializing client: ", e)
                 that.logOut("Issue initializing client: ", e)
             }
 
             //who is callback
             that.client.on('iAm', (device) => {
-                if(device.header.sender.address !== that.config.localIpAdrress) {
+                if(device.address !== that.config.localIpAdrress) {
                     if(that.device_id_range_enabled) {
-                        if(device.payload.deviceId >= that.device_id_range_start && device.payload.deviceId <= that.device_id_range_end) {
+                        if(device.deviceId >= that.device_id_range_start && device.deviceId <= that.device_id_range_end) {
                             //only add unique device to array
-                            let foundIndex = that.deviceList.findIndex(ele => ele.getDeviceId() == device.payload.deviceId);
+                            let foundIndex = that.deviceList.findIndex(ele => ele.getDeviceId() == device.deviceId);
                             if(foundIndex == -1) {
                                 let newBacnetDevice = new BacnetDevice(false, device);
                                 newBacnetDevice.setLastSeen(Date.now());
@@ -127,7 +133,7 @@ class BacnetClient extends EventEmitter {
                         }
                     } else {
                         //only add unique device to array
-                        let foundIndex = that.deviceList.findIndex(ele => ele.getDeviceId() == device.payload.deviceId);
+                        let foundIndex = that.deviceList.findIndex(ele => ele.getDeviceId() == device.deviceId);
                         if(foundIndex == -1) {
                             let newBacnetDevice = new BacnetDevice(false, device);
                             newBacnetDevice.setLastSeen(Date.now());
@@ -174,6 +180,7 @@ class BacnetClient extends EventEmitter {
                 that.deviceList = [];
                 that.renderList = [];
                 that.networkTree = {};
+                that.pollInProgress = false;
                 resolve(true);
             } catch(e) {
                 that.logOut("Error clearing BACnet data model: ", e);
@@ -184,50 +191,129 @@ class BacnetClient extends EventEmitter {
 
     queryDevices() {
         let that = this;
-        that.deviceList.forEach(function(device, index){
-            that.mutex
-            .acquire()
-            .then(function(release) {
-                try {
-                    that.getDevicePointList(device).then(function() {
-                        that.buildJsonObject(device).then(function() {
-                            release();
-                        }).catch(function(e) {
-                            release();
-                        });
-                    }).catch(function(e) {
-                        that.getDevicePointListWithoutObjectList(device).then(function() {
-                            that.buildJsonObject(device).then(function() {
-                                release();
+
+        that.pollInProgress = true;
+
+        let index = 0;
+
+        query(index);
+
+        function query(index) {
+            let device = that.deviceList[index];
+
+            if(index < that.deviceList.length) {
+                index++;
+            
+                if(typeof device == "object") {
+                    if(!device.getManualDiscoveryMode()) {
+                        try {
+                            that.getDevicePointList(device).then(function() {
+                                that.removeDeviceFromManualQueue(device);
+                                that.buildJsonObject(device).then(function() {
+                                    query(index);
+                                }).catch(function(e) {
+                                    that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
+                                    query(index);
+                                });
                             }).catch(function(e) {
-                                release();
+                                that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
+                                that.addDeviceToManualQueue(device);
+                                query(index);
                             });
-                        }).catch(function(e) {
-                            release();
-                        });
-                        release();
-                    });
-                } catch(e) {
-                    that.logOut("Error while querying devices: ", e);
-                    release();
+                        } catch(e) {
+                            that.logOut("Error while querying devices: ", e);
+                            query(index);
+                        }
+                    } else {
+                        query(index);
+                    }
+                } else {
+                    that.logOut("queryDevices: invalid device found: ", device);
+                    query(index);
                 }
-            });
-        });
-        Store_Config(JSON.stringify({renderList: that.renderList, deviceList: that.deviceList, pointList: that.networkTree}));
+            } else if(index == that.deviceList.length){
+                that.queryDevicesManually();
+            }
+        }
+    }
+
+    queryDevicesManually() {
+        let that = this;
+
+        let index = 0;
+
+        query(index);
+
+        function query(index) {
+            let device = that.manualDiscoverQueue[index];
+
+            if(index < that.manualDiscoverQueue.length) {
+                index++;
+            
+                if(typeof device == "object") {
+                    try {
+                        if(device.shouldBeInManualMode()) {
+                            that.getDevicePointListWithoutObjectList(device).then(function() {
+                                that.buildJsonObject(device).then(function() {
+                                    query(index);
+                                }).catch(function(e) {
+                                    that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
+                                    query(index);
+                                });
+                            }).catch(function(e){
+                                query(index);
+                            });
+                        } else {
+                            that.removeDeviceFromManualQueue(device);
+                            query(index);
+                        }
+                    } catch(e) {
+                        query(index);
+                    }
+                } else {
+                    query(index);
+                }
+            } else if(index == that.manualDiscoverQueue.length) {
+                that.pollInProgress = false;
+            }
+        }
+    }
+
+    addDeviceToManualQueue(device) {
+        let that = this;
+
+        if(device.getPointListRetryCount() > that.deviceRetryCount) {
+            device.setManualDiscoveryMode(true);
+            let index = that.manualDiscoverQueue.findIndex(ele => ele.getDeviceId() == device.getDeviceId());
+            if(index == -1) {
+                that.manualDiscoverQueue.push(device);  
+            }
+        } else {
+            device.incrementPointListRetryCount();
+        }
+    }
+
+    removeDeviceFromManualQueue(device) {
+        let that = this;
+        device.setManualDiscoveryMode(false);
+        device.clearPointListRetryCount()
+        let index = that.manualDiscoverQueue.findIndex(ele => ele.getDeviceId() == device.getDeviceId());
+        if(index !== -1) {
+            that.manualDiscoverQueue.splice(index, 1);  
+        }
     }
 
     sanitizeDeviceList() {
         let that = this;
         
         //1 hour in seconds
-        let timeoutThreshold = 3600;
+        let timeoutThreshold = parseInt(that.discover_polling_schedule);
 
-        that.renderList.forEach(function(item, index) {
-            if(((Date.now() - item.lastSeen) / 1000) >  timeoutThreshold) {
-                //render item hasnt responded to whoIs for over an hour
+        that.deviceList.forEach(function(device, index) {
+            if(((Date.now() - device.lastSeen) / 1000) >  timeoutThreshold) {
+                //render device hasnt responded to whoIs for over an hour
 
-                let deviceIndex = that.deviceList.findIndex(ele => ele.deviceId == item.deviceId);
-                let device = that.deviceList[deviceIndex];
+                let renderListIndex = that.renderList.findIndex(ele => ele.deviceId == device.getDeviceId());
 
                 let ipAddr = typeof device.getAddress() == "object" ? device.getAddress().address : device.getAddress();
                 let deviceKey = ipAddr + "-" + device.getDeviceId();            
@@ -235,10 +321,10 @@ class BacnetClient extends EventEmitter {
                 delete that.networkTree[deviceKey];
 
                 if(((Date.now() - device.getLastSeen()) / 1000) >  timeoutThreshold) {
-                    that.deviceList.splice(deviceIndex, 1);
+                    that.renderList.splice(renderListIndex, 1);
                 }
 
-                that.renderList.splice(index, 1);
+                that.deviceList.splice(index, 1);
             }
         });
         
@@ -246,9 +332,10 @@ class BacnetClient extends EventEmitter {
 
     updateDeviceName(device) {
         let that = this;
-        that._getDeviceName(device.getAddress(), device.getDeviceId()).then(function(deviceName) {
-            if(typeof deviceName == "string") {
-                device.setDeviceName(deviceName);
+        that._getDeviceName(device.getAddress(), device.getDeviceId()).then(function(deviceObject) {
+            if(typeof deviceObject.name == "string") {
+                device.setDeviceName(deviceObject.name);
+                device.setPointsList(deviceObject.devicePointEntry);
             }
         });
     }
@@ -269,7 +356,7 @@ class BacnetClient extends EventEmitter {
         that.manual_instance_range_enabled = config.manual_instance_range_enabled;
         that.manual_instance_range_start = config.manual_instance_range_start;
         that.manual_instance_range_end = config.manual_instance_range_end;
-        that.bacnetServerEnabled = config.bacnetServerEnabled;
+        that.device_read_schedule = config.device_read_schedule;
 
         if(that.scheduler !== null) {
             that.scheduler.stop();
@@ -293,7 +380,26 @@ class BacnetClient extends EventEmitter {
             
             that.scheduler.addSimpleIntervalJob(job);
 
-            that.globalWhoIs();
+
+            // //query device task
+            const queryDevices = new Task('simple task', () => {
+                if(!that.pollInProgress) that.queryDevices(); 
+                that.sanitizeDeviceList();
+                //that.queryDevicesManually();
+            });
+
+            const queryJob = new SimpleIntervalJob({ seconds: parseInt(config.device_read_schedule), }, queryDevices)
+            
+            that.scheduler.addSimpleIntervalJob(queryJob);
+
+            //buildNetworkTreeData task
+            const buildNetworkTree = new Task('simple task', () => {
+                that.buildNetworkTreeData();
+            });
+
+            const buildNetworkTreeJob = new SimpleIntervalJob({ seconds: 10, }, buildNetworkTree)
+            
+            that.scheduler.addSimpleIntervalJob(buildNetworkTreeJob);
 
         } catch(e){
             that.logOut("Error reinitializing bacnet client: ", e)
@@ -366,18 +472,20 @@ class BacnetClient extends EventEmitter {
         return new Promise((resolve, reject) => {
             that._readDeviceName(address, deviceId, (err, result) => {
                 if(result) {
-                    result.values[0].values.forEach(object => {
-                        try {
-                            if(object.value[0]) {
-                                resolve(object.value[0].value);
-                            } else {
-                                that.logOut("Issue with deviceName payload, see object: ", object);
-                            }
-                        } catch(e){
-                            that.logOut("Unable to get device name: ", e);
+                    try {
+                        if(result.values[0].value) {
+                            const deviceObject = {
+                                name: result.values[0].value,
+                                devicePointEntry: [{ value: { type: 8, instance: deviceId }, type: 12 }]
+                            };
+                            resolve(deviceObject);
+                        } else {
+                            that.logOut("Issue with deviceName payload, see object: ", object);
                         }
-                    });
-                }            
+                    } catch(e){
+                       that.logOut("Unable to get device name: ", e);
+                    }
+                }
             });
         });
     }
@@ -429,7 +537,7 @@ class BacnetClient extends EventEmitter {
                 device.setPointsList(result);
                 resolve(result);
             } catch(e) {
-                that.logOut(`Error getting point list for ${device.getAddress()} - ${device.getDeviceId()}: `, e);
+                that.logOut(`Error getting point list for ${device.getAddress().toString()} - ${device.getDeviceId()}: `, e);
                 reject(e);
             }
         });
@@ -439,14 +547,12 @@ class BacnetClient extends EventEmitter {
         let that = this;
         return new Promise(function(resolve, reject) {
             try {
-                device.setManualDiscoveryMode(true);
                 that.scanDeviceManually(device).then(function(result) {
                     device.setPointsList(result);
                     resolve(result);
                 }).catch(function(error) {
                     reject(error);
                 });
-
 
             } catch(e) {
                 that.logOut("Error getting point list: ", e);
@@ -458,11 +564,15 @@ class BacnetClient extends EventEmitter {
 
     scanDeviceManually(device) {
         let that = this;
+
         return new Promise(function(resolve, reject) {
+    
             let objectNameProperty = [{ id: baEnum.PropertyIdentifier.OBJECT_NAME }];
             let address = device.getAddress();
-            let objectTypeList = [0, 1, 2, 3];
-            let instanceRange = {start: 0, end: 100};
+            let objectTypeList = [0, 1, 2, 3, 4, 5, 13, 14, 19];
+            //let objectTypeList = [0, 1, 2, 3, 4, 5, 6, 10, 13, 14, 15, 16, 17, ,19, 20, 56, 178];
+            //let instanceRange = {start: 0, end: 100};
+            let instanceRange = device.getmDiscoverInstanceRange();
             let requestArray = [];
             let maxRequestThreshold = 1000;
             let requestRate = 20;
@@ -491,8 +601,8 @@ class BacnetClient extends EventEmitter {
                         instanceRange.end += requestRate;
                         requestArray = [];
                         if(i >= maxRequestThreshold) {
-                            instanceRange.end = maxRequestThreshold;
                             if(typeListIndex == objectTypeList.length-1) {
+                                device.setmDiscoverInstanceRange({start: instanceRange.end, end: instanceRange.end + 100})
                                 send();
                             }
                             
@@ -501,7 +611,6 @@ class BacnetClient extends EventEmitter {
                     }
                 }
 
-                instanceRange.end = 100;
             };
 
             function send() {
@@ -510,7 +619,6 @@ class BacnetClient extends EventEmitter {
                     let promise = requestBuffer[index];
                     try {
                         Promise.resolve(promise).then(function(result) {
-                            let keys = Object.keys(result);
                             for (const [key, value] of Object.entries(result)) {
                                 if(key == "value" && typeof value == "object") {
                                     for(let x = 0; x < value.values.length; x++) {
@@ -535,6 +643,7 @@ class BacnetClient extends EventEmitter {
                     }
                 }
             }
+            
         });
     }
 
@@ -548,6 +657,34 @@ class BacnetClient extends EventEmitter {
                 });
             });
         });
+    }
+
+    _readDeviceName(deviceAddress, deviceId, callback){
+        let that = this;
+        that.client.readProperty(
+            deviceAddress, 
+            {type: baEnum.ObjectType.DEVICE, instance: deviceId }, 
+            baEnum.PropertyIdentifier.OBJECT_NAME, 
+            that.readPropertyMultipleOptions, 
+            callback
+        );        
+    }
+
+    _readObjectList(deviceAddress, deviceId, callback) {
+        let that = this;
+
+        try {
+            that.client.readProperty(
+                deviceAddress, 
+                {type: baEnum.ObjectType.DEVICE, instance: deviceId }, 
+                baEnum.PropertyIdentifier.OBJECT_LIST,
+                that.readPropertyMultipleOptions, 
+                callback
+            );
+
+        } catch(e) {
+            that.logOut("Error reading object list:  ", e);
+        }
     }
 
     _readObject(deviceAddress, type, instance, properties) {
@@ -566,38 +703,49 @@ class BacnetClient extends EventEmitter {
         });
     }
 
-    _readDeviceName(deviceAddress, deviceId, callback){
-        let that = this;
-        const requestArray = [{
-            objectId: { type: baEnum.ObjectType.DEVICE, instance: deviceId },
-            properties: [
-                { id: baEnum.PropertyIdentifier.OBJECT_NAME }
-            ]
-        }];
-
-        this.client.readPropertyMultiple(deviceAddress, requestArray, that.readPropertyMultipleOptions, callback);
-    }
-
-    _readObjectList(deviceAddress, deviceId, callback) {
-        let that = this;
-        const requestArray = [{
-            objectId: { type: baEnum.ObjectType.DEVICE, instance: deviceId },
-            properties: [{ id: baEnum.PropertyIdentifier.OBJECT_LIST }
-            ]
-        }];
-        
-        try {
-            that.client.readPropertyMultiple(deviceAddress, requestArray, that.readPropertyMultipleOptions, callback);
-        } catch(e) {
-            that.logOut("Error reading object list:  ", e);
-        }
-    }
-
     _readObjectFull(deviceAddress, type, instance) {
+        let that = this;
 
-        return this._readObject(deviceAddress, type, instance, [
-            { id: baEnum.PropertyIdentifier.ALL }
-        ]);
+        const allProperties = [
+            { id: baEnum.PropertyIdentifier.PRESENT_VALUE },
+            { id: baEnum.PropertyIdentifier.DESCRIPTION },
+            { id: baEnum.PropertyIdentifier.UNITS },
+            { id: baEnum.PropertyIdentifier.OBJECT_NAME },
+            { id: baEnum.PropertyIdentifier.OBJECT_TYPE },
+            { id: baEnum.PropertyIdentifier.OBJECT_IDENTIFIER },
+            { id: baEnum.PropertyIdentifier.SYSTEM_STATUS },
+            { id: baEnum.PropertyIdentifier.MODIFICATION_DATE },
+            { id: baEnum.PropertyIdentifier.PROGRAM_STATE },
+            { id: baEnum.PropertyIdentifier.RECORD_COUNT }
+        ];
+
+        return new Promise((resolve, reject) => {
+            that._readObject(deviceAddress, type, instance, [{ id: baEnum.PropertyIdentifier.ALL }]).then(function(result) {
+                
+                if(result.value) {
+                    resolve(result);
+                }
+
+                if(result.error) {
+                    const requestArray = [{
+                        objectId: { type: type, instance: instance },
+                        properties: allProperties
+                    }];
+
+                    that._readObjectWithRequestArray(deviceAddress, requestArray).then(function(manualRequest) {
+                        if(manualRequest.value) {
+                            resolve(manualRequest);
+                        }
+                        if(manualRequest.error) {
+                            reject(manualRequest.error);
+                        }
+                    })
+                }
+                
+            }).catch(function(error) {
+                reject(error);
+            });
+        });
 
     };
 
@@ -695,59 +843,13 @@ class BacnetClient extends EventEmitter {
         }
     };
 
-    _mapToDeviceObject(object) {
-        if (!object || !object.values) {
-            return null;
-        }
-
-        const objectInfo = object.values[0].objectId;
-        const deviceObjectId = new DeviceObjectId(objectInfo.type, objectInfo.instance);
-        const objectProperties = object.values[0].values;
-        const name = this._findValueById(objectProperties, baEnum.PropertyIdentifier.OBJECT_NAME);
-        const PROP_DESCRIPTION = this._findValueById(objectProperties, baEnum.PropertyIdentifier.DESCRIPTION);
-        const type = this._findValueById(objectProperties, baEnum.PropertyIdentifier.OBJECT_TYPE);
-        const PROP_UNITS = this._findValueById(objectProperties, baEnum.PropertyIdentifier.UNITS);
-        const presentValue = this._findValueById(objectProperties, baEnum.PropertyIdentifier.PRESENT_VALUE);
-
-        return new DeviceObject(deviceObjectId, name, PROP_DESCRIPTION, type, PROP_UNITS, presentValue);
-    }
-
-    scanForDevices(config) {
-        let that = this;
-
-        //scan on first poll
-        if(that.lastWhoIs == null){
-            doScan();
-            that.lastWhoIs = Date.now();
-        
-        //scan every hour 
-        } else if (((Date.now() / 1000) - (that.lastWhoIs  / 1000)) >= 3600) {
-            doScan();
-            that.lastWhoIs = Date.now();
-        }
-
-        function doScan() {
-            let deviceIdRange = config.device.deviceId.split("-").sort(function(a, b){return a-b});
-            let options = {
-                lowLimit: deviceIdRange[0],
-                highLimit: deviceIdRange[1]
-            };
-
-            if(that.client) {
-                that.client.whoIs(options);
-            } else {
-                that.reinitializeClient(that.config);
-            }
-        }
-    }
-
     scanDevice(device) {
         let that = this;
         return new Promise((resolve, reject) => {
             this._readObjectList(device.getAddress(), device.getDeviceId(), (err, result) => {
                 if (!err) {
                     try {
-                        resolve(result.values[0].values[0].value);
+                        resolve(result.values);
                     } catch(e) {
                         that.logOut("Issue with getting device point list, see error:  ", e);
                     }
@@ -800,6 +902,51 @@ class BacnetClient extends EventEmitter {
         });
     }
 
+    getDeviceList() {
+        let that = this;
+        return new Promise(async function(resolve, reject) {
+            try {
+                resolve({"deviceList": that.deviceList});
+            } catch(e){
+                reject(e);
+            }
+        });
+    }
+
+    updateDeviceList(json) {
+        let that = this;
+        return new Promise(async function(resolve, reject) {
+            try {
+                let deviceL = json.body.deviceList;
+                deviceL.forEach(function(device) {
+                    let foundIndex = that.deviceList.findIndex(ele => ele.getDeviceId() == device.deviceId);
+                    if(foundIndex == -1) {
+                        let newBacnetDevice = new BacnetDevice(false, device);
+                        newBacnetDevice.setLastSeen(Date.now());
+                        that.deviceList.push(newBacnetDevice);
+    
+                    } else if(foundIndex !== -1) {
+                        that.deviceList[foundIndex].updateDeviceConfig(device);
+                        that.deviceList[foundIndex].setLastSeen(Date.now());
+                    }
+                });
+
+                resolve(true);
+            } catch(e) {
+                reject(e);
+            }
+        });
+    }
+
+    sortDevices(a, b) {
+        if (a.deviceId < b.deviceId) {
+            return -1;
+        } else if (a.deviceId > b.deviceId) {
+            return 1;
+        }
+        return 0; // deviceIds are equal
+    }
+
     sortPoints(a, b) {
         if(a.bacnetType > b.bacnetType) {
             return 1;
@@ -816,6 +963,9 @@ class BacnetClient extends EventEmitter {
         let that = this;  
         that.buildTreeMutex = new Mutex();
         let displayNameCharThreshold = 40;
+
+        Store_Config(JSON.stringify({renderList: that.renderList, deviceList: that.deviceList, pointList: that.networkTree}));
+
         return new Promise(async function(resolve, reject) {
             if(!that.renderList) that.renderList = [];
             if(that.deviceList && that.networkTree) {
@@ -892,23 +1042,37 @@ class BacnetClient extends EventEmitter {
                                 that.renderList.push({"key": index, "label": deviceName, "data": deviceName, "icon": that.getDeviceIcon(isMstpDevice, manualDiscoveryMode), "children": children.sort(that.sortPoints), "type": "device", "lastSeen": deviceInfo.getLastSeen(), "showAdded": false, "ipAddr": ipAddr, "deviceId": deviceId, "isMstpDevice": isMstpDevice});
                             }
                             if(index == that.deviceList.length - 1) {
+                                that.renderList.sort(that.sortDevices);
                                 resolve({renderList: that.renderList, deviceList: that.deviceList, pointList: that.networkTree, pollFrequency: that.discover_polling_schedule});
                             }
                         } else {
                             if(index == that.deviceList.length - 1) {
+                                that.renderList.sort(that.sortDevices);
                                 resolve({renderList: that.renderList, deviceList: that.deviceList, pointList: that.networkTree, pollFrequency: that.discover_polling_schedule});
                             }
                         }
 
                         release();
                     });
+                    
                 });
             }
         });
     }
 
+    buildObjects() {
+        let that = this;
+
+        that.deviceList.forEach(function(device) {
+            that.buildJsonObject(device).then(function() {
+            }).catch(function(e) {
+                that.logOut(device.getAddress(), e)
+            });
+        });
+    }
+
     buildJsonObject(device) {
-        let that = this;    
+        let that = this;
         let address = device.address;
         let pointList = device.getPointsList();
         let requestMutex = new Mutex();
@@ -951,7 +1115,6 @@ class BacnetClient extends EventEmitter {
                                     reject(e);
                                 });
                             }
-
                         });
                     });
                 });
@@ -964,6 +1127,7 @@ class BacnetClient extends EventEmitter {
     // Builds response object for a fully qualified 
     buildResponse(fullObjects, device) {
         let that = this;
+
         return new Promise(function(resolve, reject) {
             let deviceKey = (typeof device.getAddress() == "object") ? device.getAddress().address + "-" + device.getDeviceId() : device.getAddress() + "-" + device.getDeviceId();            
             let values = that.networkTree[deviceKey] ? that.networkTree[deviceKey] : {};
@@ -1072,7 +1236,7 @@ class BacnetClient extends EventEmitter {
                     }
                 }
             }
-            reject("Unexpectedly found end of loop, line 1170");
+            reject("Unexpectedly found end of loop, line 1214");
         });
     }
 
@@ -1169,9 +1333,7 @@ class BacnetClient extends EventEmitter {
             case 56:
                 return "pi pi-sitemap";
             case 178:
-                return "pi pi-lock";
-            case 20:
-                return "pi pi-chart-line";        
+                return "pi pi-lock";    
             case 17:
                 return "pi pi-calendar";
             case 6:
@@ -1252,6 +1414,7 @@ class BacnetClient extends EventEmitter {
 
     getDeviceIcon(isMstp, manualDiscoveryMode) {
         if(manualDiscoveryMode == true) {
+            //return "pi pi-server"
             return "pi pi-exclamation-triangle"
         } else if(manualDiscoveryMode == false) {
             if(isMstp == true) {

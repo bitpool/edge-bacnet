@@ -6,7 +6,7 @@
 
 module.exports = function (RED) {
     const { ReadCommandConfig } = require('./common');
-    const baEnum = require('./resources/node-bacnet/index.js').enum;
+    const baEnum = require('./resources/node-bacstack-ts/dist/index.js').enum;
 
     function BitpoolBacnetReadDevice (config) {
       RED.nodes.createNode(this, config);

@@ -1,4 +1,4 @@
-const bacnet = require('./resources/node-bacnet/index.js');
+const bacnet = require('./resources/node-bacstack-ts/dist/index.js');
 const pjson = require('./package.json');
 const baEnum = bacnet.enum;
 const {Store_Config_Server, Read_Config_Sync_Server } = require('./common');
@@ -11,6 +11,7 @@ class BacnetServer {
         that.objectIdNumber = 1;
         that.nodeRedVersion = nodeRedVersion;
         that.deviceId = deviceId;
+        that.vendorId = 1401;
         that.objectList = [
             {value: {type: baEnum.ObjectType.DEVICE, instance: that.deviceId}, type: 12}
         ];
@@ -23,7 +24,7 @@ class BacnetServer {
                 [baEnum.PropertyIdentifier.DESCRIPTION]: [{value: 'Bitpool Edge BACnet gateway', type: 7}],
                 [baEnum.PropertyIdentifier.SYSTEM_STATUS]: [{value: 0, type: 9}], 
                 [baEnum.PropertyIdentifier.VENDOR_NAME]:  [{value: "Bitpool", type: 7}], 
-                [baEnum.PropertyIdentifier.VENDOR_IDENTIFIER]:  [{value: 1401, type: 2}],
+                [baEnum.PropertyIdentifier.VENDOR_IDENTIFIER]:  [{value: that.vendorId, type: 2}],
                 [baEnum.PropertyIdentifier.MODEL_NAME]:  [{value: "bitpool-edge", type: 7}],  
                 [baEnum.PropertyIdentifier.FIRMWARE_REVISION]:  [{value: "Node-Red " + that.nodeRedVersion, type: 7}], 
                 [baEnum.PropertyIdentifier.PROTOCOL_REVISION]:  [{value: 19, type: 2}],
@@ -80,21 +81,20 @@ class BacnetServer {
         }
 
         that.bacnetClient.client.on('whoIs', (device) => {
-            that.bacnetClient.client.iAmResponse(that.bacnetClient.broadCastAddr, that.deviceId, baEnum.Segmentation.SEGMENTED_BOTH, 1401);
+            that.bacnetClient.client.iAmResponse(that.deviceId, baEnum.Segmentation.SEGMENTED_BOTH, that.vendorId);
             that.lastWhoIsRecived = Date.now();
         });
 
         that.bacnetClient.client.on('readPropertyMultiple', (data) => {
 
-            let senderAddress = data.header.sender.address;
-            let requestProps = data.payload.properties;
+            let senderAddress = data.address;
+            let requestProps = data.request.properties;
             let responseObject = [];
 
             try {
                 if(requestProps) {
 
                     for(let i = 0; i < requestProps.length; i++) {
-
                         let prop = requestProps[i].properties[0].id;
                         let type = requestProps[i].objectId.type;
                         let instance = requestProps[i].objectId.instance;
@@ -131,20 +131,25 @@ class BacnetServer {
                     baEnum.ErrorCode.UNKNOWN_PROPERTY
                 );
             }
+
         });
 
         that.bacnetClient.client.on('readProperty', (data) => {
+
             try {
-                let objectId = data.payload.objectId.type;
-                let objectInstance = data.payload.objectId.instance;
-                let propId = data.payload.property.id.toString();
+
+                let objectId = data.request.objectId.type;
+                let objectInstance = data.request.objectId.instance;
+                let propId = data.request.property.id.toString();
+
                 let responseObj = that.getObject(objectId, propId, objectInstance);
 
                 if(propId == baEnum.PropertyIdentifier.OBJECT_LIST &&  ((Date.now() - that.lastWhoIsRecived) / 1000) < 0.7) {
                     responseObj = [{value:that.objectList.length, type: 2}];
                 }
                 if(responseObj !== null && responseObj !== undefined && typeof responseObj !== "undefined") {
-                    that.bacnetClient.client.readPropertyResponse(data.header.sender.address, data.invokeId, data.payload.objectId, data.payload.property, responseObj);
+                    
+                    that.bacnetClient.client.readPropertyResponse(data.address, data.invokeId, objectId, data.request.property, responseObj);
                 } else {
                     that.bacnetClient.client.errorResponse(
                         data.address, 
@@ -161,7 +166,7 @@ class BacnetServer {
         });
 
         //do initial iAm broadcast when BACnet server starts
-        that.bacnetClient.client.iAmResponse(that.bacnetClient.broadCastAddr, that.deviceId, baEnum.Segmentation.SEGMENTED_BOTH, 27823);
+        that.bacnetClient.client.iAmResponse(that.deviceId, baEnum.Segmentation.SEGMENTED_BOTH, that.vendorId);
     }
 
     setDeviceName(nodeName) {
@@ -374,7 +379,6 @@ class BacnetServer {
 
         return objectId;
     }
-
 
 }
 

@@ -6,7 +6,7 @@ const { createLogger, format, transports } = require('winston');
 const { randomUUID } = require('crypto');
 const os = require('os');
 const { exec } = require("child_process");
-const baEnum = require('./resources/node-bacnet/index.js').enum;
+const baEnum = require('./resources/node-bacstack-ts/dist/index.js').enum;
 const fs = require('fs');
 
 const logger = createLogger({
@@ -80,7 +80,8 @@ class BacnetClientConfig {
     manual_instance_range_enabled,
     manual_instance_range_start,
     manual_instance_range_end,
-    bacnetServerEnabled
+    device_read_schedule,
+    retries
   ) {
     this.apduTimeout = apduTimeout;
     this.localIpAdrress = localIpAdrress;
@@ -97,7 +98,8 @@ class BacnetClientConfig {
     this.manual_instance_range_enabled = manual_instance_range_enabled;
     this.manual_instance_range_start = manual_instance_range_start;
     this.manual_instance_range_end = manual_instance_range_end;
-    this.bacnetServerEnabled = bacnetServerEnabled;
+    this.device_read_schedule = device_read_schedule;
+    this.retries = retries;
   }
 };
 
@@ -210,11 +212,15 @@ const doNodeRedRestart = function() {
 //
 // ================================================================================
 async function Store_Config(data) {
-  await fs.writeFile("edge-bacnet-datastore.cfg", data, (err) => {
-    if (err) {
-      console.log("Store_Config writeFile error: ", err);
-    }
-  });
+  try {
+    await fs.writeFile("edge-bacnet-datastore.cfg", data, (err) => {
+      if (err) {
+        console.log("Store_Config writeFile error: ", err);
+      }
+    });
+  } catch(e){
+    //do nothing
+  }
 };
 
 // READ CONFIG SYNC FUNCTION ======================================================
@@ -223,9 +229,9 @@ async function Store_Config(data) {
 function Read_Config_Sync() {
   var data = "{}";
   try {
-    data = fs.readFileSync("edge-bacnet-datastore.cfg", {encoding:'utf8', flag:'r'});
+    data = fs.readFileSync("edge-bacnet-datastore.cfg", { encoding: 'utf8', flag: 'r' });
   }
-  catch(err) {
+  catch (err) {
     console.log("Read_Config_Sync error:", err);
     data = '{}';
     Store_Config(data);
@@ -237,11 +243,15 @@ function Read_Config_Sync() {
 //
 // ================================================================================
 async function Store_Config_Server(data) {
-  await fs.writeFile("edge-bacnet-server-datastore.cfg", data, (err) => {
-    if (err) {
-      console.log("Store_Config_Server writeFile error: ", err);
-    }
-  });
+  try {
+    await fs.writeFile("edge-bacnet-server-datastore.cfg", data, (err) => {
+      if (err) {
+        console.log("Store_Config_Server writeFile error: ", err);
+      }
+    });
+  }
+  catch (err) {
+  }
 };
 
 // READ CONFIG SYNC FUNCTION - BACNET SERVER ======================================
@@ -262,13 +272,10 @@ function Read_Config_Sync_Server() {
 };
 
 module.exports = {
-  DeviceObjectId, 
-  DeviceObject, 
   BacnetConfig, 
   BacnetClientConfig, 
   ReadCommandConfig, 
-  WriteCommandConfig, 
-  logger, 
+  WriteCommandConfig,
   getUnit, 
   generateId, 
   getIpAddress, 
