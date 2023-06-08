@@ -16,6 +16,9 @@ class BacnetDevice {
             that.manualDiscoveryMode = config.manualDiscoveryMode;
             that.mDiscoverInstanceRange = config.mDiscoverInstanceRange;
             that.pointListRetryCount = config.pointListRetryCount;
+            that.priorityQueueIsActive = config.priorityQueueIsActive;
+            that.priorityQueue = config.priorityQueue;
+            that.lastPriorityQueueTS = config.lastPriorityQueueTS;
 
         } else if(fromImport == false) {
             if(config.net && config.adr) {
@@ -36,7 +39,65 @@ class BacnetDevice {
             that.manualDiscoveryMode = false;
             that.mDiscoverInstanceRange = {start: 0, end: 100};
             that.pointListRetryCount = 0;
+            that.priorityQueueIsActive = false;
+            that.priorityQueue = [];
+            that.lastPriorityQueueTS = null;
         }
+    }
+
+    setLastPriorityQueueTS() {
+        this.lastPriorityQueueTS = Date.now();
+    }
+
+    getLastPriorityQueueTS() {
+        return this.lastPriorityQueueTS;
+    }
+    
+    setPriorityQueueIsActive(bool) {
+        this.priorityQueueIsActive = bool;
+    }
+
+    getPriorityQueueIsActive() {
+        return this.priorityQueueIsActive;
+    }
+
+    updatePriorityQueue(point) {
+        let foundIndex = this.priorityQueue.findIndex(ele => ele.value.type == point.value.type && ele.value.instance == point.value.instance);
+        if(foundIndex == -1 ) {
+            //not found
+            this.priorityQueue.push(point);
+        }
+
+        if(this.priorityQueue.length > 0) {
+            this.setPriorityQueueIsActive(true);
+        } else if(this.priorityQueue.length == 0) {
+            this.setPriorityQueueIsActive(false);
+        }
+    }
+
+    setPriorityQueue(points) {
+        let queue = [];
+        let keys = Object.keys(points);
+        if(keys.length > 0) {
+            keys.forEach(function(key) {
+                let point = points[key];
+                let pointRequestObject = {type: 12, value: point.meta.objectId}
+                queue.push(pointRequestObject);
+            });
+            this.priorityQueue = queue;
+            this.setPriorityQueueIsActive(true);
+        } else if(keys.length == 0) {
+            this.setPriorityQueueIsActive(false);
+        }
+    }
+
+    getPriorityQueue(){
+        return this.priorityQueue;
+    }
+
+    clearPriorityQueue() {
+        this.priorityQueue = [];
+        this.setPriorityQueueIsActive(false);
     }
 
     updateDeviceConfig(config) {

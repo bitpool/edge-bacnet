@@ -5,6 +5,8 @@
 
 
 module.exports = function (RED) {
+    const fetch = require('node-fetch');
+    const http = require("http");
     const { ReadCommandConfig } = require('./common');
     const baEnum = require('./resources/node-bacstack-ts/dist/index.js').enum;
 
@@ -49,7 +51,23 @@ module.exports = function (RED) {
         return propArr;
       };
 
-      var nodeContext = this.context().flow;
+      //send point list status for device priority queue 
+      let headers = {
+        'Content-Type' : "application/json"
+      };
+
+      const agent = new http.Agent({
+        rejectUnauthorized: false
+      });
+
+      fetch('http://localhost:1880/bitpool-bacnet-data/priorityQueue', {method: 'POST', headers: headers, agent: agent, body: JSON.stringify(node.pointsToRead)})
+      .then(function(res) {
+        //do nothing
+      }).catch(function(error) {
+        //do nothing
+      });
+
+      
 
       node.on('input', function(msg) {
 

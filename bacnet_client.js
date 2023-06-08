@@ -80,7 +80,6 @@ class BacnetClient extends EventEmitter {
                 const queryDevices = new Task('simple task', () => {
                     if(!that.pollInProgress) that.queryDevices(); 
                     that.sanitizeDeviceList();
-                    //that.queryDevicesManually(); 
                 });
 
                 const queryJob = new SimpleIntervalJob({ seconds: parseInt(that.device_read_schedule), }, queryDevices)
@@ -199,90 +198,138 @@ class BacnetClient extends EventEmitter {
         query(index);
 
         function query(index) {
-            let device = that.deviceList[index];
+            that.queryPriorityDevices().then(function() {
 
-            if(index < that.deviceList.length) {
-                index++;
-            
-                if(typeof device == "object") {
-                    if(!device.getManualDiscoveryMode()) {
-                        try {
-                            that.getDevicePointList(device).then(function() {
-                                that.removeDeviceFromManualQueue(device);
-                                that.buildJsonObject(device).then(function() {
-                                    query(index);
+                let device = that.deviceList[index];
+
+                if(index < that.deviceList.length) {
+                    index++;
+                
+                    if(typeof device == "object") {
+                        if(!device.getManualDiscoveryMode()) {
+                            try {
+                                that.getDevicePointList(device).then(function() {
+                                    that.removeDeviceFromManualQueue(device);
+                                    that.buildJsonObject(device, null).then(function() {
+                                        query(index);
+                                    }).catch(function(e) {
+                                        that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
+                                        query(index);
+                                    });
                                 }).catch(function(e) {
                                     that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
+                                    that.addDeviceToManualQueue(device);
                                     query(index);
                                 });
-                            }).catch(function(e) {
-                                that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
-                                that.addDeviceToManualQueue(device);
+                            } catch(e) {
+                                that.logOut("Error while querying devices: ", e);
                                 query(index);
-                            });
-                        } catch(e) {
-                            that.logOut("Error while querying devices: ", e);
+                            }
+                        } else {
                             query(index);
                         }
                     } else {
+                        that.logOut("queryDevices: invalid device found: ", device);
                         query(index);
                     }
-                } else {
-                    that.logOut("queryDevices: invalid device found: ", device);
-                    query(index);
-                }
-            } else if(index == that.deviceList.length) {
+                } else if(index == that.deviceList.length) {
 
-                if(that.manualDiscoverQueue.length > 0) {
-                    that.queryDevicesManually();
-                } else {
-                    that.pollInProgress = false;
+                    if(that.manualDiscoverQueue.length > 0) {
+                        that.queryDevicesManually();
+                    } else {
+                        that.pollInProgress = false;
+                    }
+                    
                 }
-                
-            }
+            });
         }
     }
 
     queryDevicesManually() {
         let that = this;
-
         let index = 0;
-
         query(index);
 
         function query(index) {
-            let device = that.manualDiscoverQueue[index];
-
-            if(index < that.manualDiscoverQueue.length) {
-                index++;
-            
-                if(typeof device == "object") {
-                    try {
-                        if(device.shouldBeInManualMode()) {
-                            that.getDevicePointListWithoutObjectList(device).then(function() {
-                                that.buildJsonObject(device).then(function() {
-                                    query(index);
-                                }).catch(function(e) {
-                                    that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
+            that.queryPriorityDevices().then(function() {
+                let device = that.manualDiscoverQueue[index];
+                if(index < that.manualDiscoverQueue.length) {
+                    index++;
+                    if(typeof device == "object") {
+                        try {
+                            if(device.shouldBeInManualMode()) {
+                                that.getDevicePointListWithoutObjectList(device).then(function() {
+                                    that.buildJsonObject(device, null).then(function() {
+                                        query(index);
+                                    }).catch(function(e) {
+                                        that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
+                                        query(index);
+                                    });
+                                }).catch(function(e){
                                     query(index);
                                 });
-                            }).catch(function(e){
+                            } else {
+                                that.removeDeviceFromManualQueue(device);
                                 query(index);
-                            });
-                        } else {
-                            that.removeDeviceFromManualQueue(device);
+                            }
+                        } catch(e) {
                             query(index);
                         }
-                    } catch(e) {
+                    } else {
                         query(index);
                     }
-                } else {
-                    query(index);
+                } else if(index == that.manualDiscoverQueue.length) {
+                    that.pollInProgress = false;
                 }
-            } else if(index == that.manualDiscoverQueue.length) {
-                that.pollInProgress = false;
-            }
+            });
         }
+    }
+
+    queryPriorityDevices() {
+        let that = this;
+        return new Promise((resolve, reject) => {
+            let priorityDevices = that.getPriorityDevices();
+
+            if(priorityDevices.length > 0) {
+                let index = 0;
+
+                query(index);
+        
+                function query(index) {
+                    let device = priorityDevices[index];
+        
+                    if(index < priorityDevices.length) {
+                        index++;
+                    
+                        if(typeof device == "object" && ((Date.now() - device.getLastPriorityQueueTS()) / 1000) > parseInt(that.device_read_schedule) ) {
+                            
+                            try {
+                                let points = device.getPriorityQueue();
+                                that.buildJsonObject(device, points).then(function() {
+                                    device.setLastPriorityQueueTS();
+                                    query(index);
+                                }).catch(function(e) {
+                                    that.logOut(`queryPriorityDevices error: ${device.getAddress()}`, e);
+                                    query(index);
+                                });
+                                
+                            } catch(e) {
+                                that.logOut("Error while querying priority devices: ", e);
+                                query(index);
+                            }
+                            
+                        } else {
+                            that.logOut("queryPriorityDevices: invalid device found: ", device);
+                            query(index);
+                        }
+                    } else if(index == priorityDevices.length) {
+                        resolve()
+                    }
+                }
+            } else if(priorityDevices.length == 0) {
+                resolve()
+            }
+        });
     }
 
     addDeviceToManualQueue(device) {
@@ -316,7 +363,7 @@ class BacnetClient extends EventEmitter {
         let timeoutThreshold = parseInt(that.discover_polling_schedule);
 
         that.deviceList.forEach(function(device, index) {
-            if(((Date.now() - device.lastSeen) / 1000) >  timeoutThreshold) {
+            if(((Date.now() - device.getLastSeen()) / 1000) >  timeoutThreshold && device.getPriorityQueueIsActive() == false) {
                 //render device hasnt responded to whoIs for over an hour
 
                 let renderListIndex = that.renderList.findIndex(ele => ele.deviceId == device.getDeviceId());
@@ -326,9 +373,7 @@ class BacnetClient extends EventEmitter {
 
                 delete that.networkTree[deviceKey];
 
-                if(((Date.now() - device.getLastSeen()) / 1000) >  timeoutThreshold) {
-                    that.renderList.splice(renderListIndex, 1);
-                }
+                that.renderList.splice(renderListIndex, 1);
 
                 that.deviceList.splice(index, 1);
             }
@@ -943,6 +988,40 @@ class BacnetClient extends EventEmitter {
         });
     }
 
+    updatePriorityQueue(req) {
+        let that = this;
+        return new Promise(async function(resolve, reject) {
+            try {
+                let keys = Object.keys(req.body);
+                if(keys.length > 0) { 
+                    keys.forEach(function(key) {
+                        let device = that.deviceList.find(ele => `${that.getDeviceAddress(ele)}-${ele.getDeviceId()}` == key);
+                        let points = req.body[key];
+                        device.setPriorityQueue(points);
+                    });
+                } else if(keys.length == 0) {
+                    that.clearPriorityQueues();
+                }
+                resolve(true);
+            } catch(e){
+                reject(e);
+            }
+        });
+    }
+
+    clearPriorityQueues() {
+        let that = this;
+        that.deviceList.forEach(function(device) {
+            device.clearPriorityQueue();
+        });
+    }
+
+    getPriorityDevices() {
+        let that = this;
+        let priorityDevices = that.deviceList.filter(device => device.getPriorityQueueIsActive() == true);
+        return priorityDevices;
+    }
+
     sortDevices(a, b) {
         if (a.deviceId < b.deviceId) {
             return -1;
@@ -1065,21 +1144,10 @@ class BacnetClient extends EventEmitter {
         });
     }
 
-    buildObjects() {
-        let that = this;
-
-        that.deviceList.forEach(function(device) {
-            that.buildJsonObject(device).then(function() {
-            }).catch(function(e) {
-                that.logOut(device.getAddress(), e)
-            });
-        });
-    }
-
-    buildJsonObject(device) {
+    buildJsonObject(device, priorityQueue) {
         let that = this;
         let address = device.address;
-        let pointList = device.getPointsList();
+        let pointList = priorityQueue !== null ? priorityQueue : device.getPointsList();
         let requestMutex = new Mutex();
 
         return new Promise(function(resolve, reject) {
