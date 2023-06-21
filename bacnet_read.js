@@ -60,14 +60,12 @@ module.exports = function (RED) {
         rejectUnauthorized: false
       });
 
-      fetch('http://localhost:1880/bitpool-bacnet-data/priorityQueue', {method: 'POST', headers: headers, agent: agent, body: JSON.stringify(node.pointsToRead)})
-      .then(function(res) {
-        //do nothing
-      }).catch(function(error) {
-        //do nothing
-      });
+      let priorityDevicesMsg = {
+        doUpdatePriorityDevices: true,
+        priorityDevices: node.pointsToRead
+      };
 
-      
+      node.send(priorityDevicesMsg);
 
       node.on('input', function(msg) {
 

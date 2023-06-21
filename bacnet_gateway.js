@@ -177,6 +177,11 @@ module.exports = function (RED) {
       } else if (msg.payload == "BindEvents") {
         node.bacnetClient.removeAllListeners();
         bindEventListeners();
+      } else if (msg.doUpdatePriorityDevices == true && msg.priorityDevices !== null) {
+        node.bacnetClient.updatePriorityQueue(msg.priorityDevices).then(function (result) {
+        }).catch(function (error) {
+          logOut("Error updating priorityQueue: ", error);
+        });
       }
 
     });
@@ -260,21 +265,6 @@ module.exports = function (RED) {
         }).catch(function (error) {
           res.send(error);
           logOut("Error getting network data:  ", error);
-        });
-      }
-    });
-
-    //route handler for priority queue
-    RED.httpAdmin.post('/bitpool-bacnet-data/priorityQueue', function (req, res) {
-      if (!node.bacnetClient) {
-        logOut("Issue with the bacnetClient while getting device list: ", node.bacnetClient);
-        res.send(false);
-      } else {
-        node.bacnetClient.updatePriorityQueue(req).then(function (result) {
-          res.send(result);
-        }).catch(function (error) {
-          res.send(error);
-          logOut("Error updating priorityQueue: ", error);
         });
       }
     });

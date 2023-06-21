@@ -159,7 +159,7 @@
                         this.$forceUpdate()
 
                         //update node-red data structure to forward to gateway
-                        let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
+                        let device = this.deviceList.find(ele => ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId);
                         let deviceAddress = app.getDeviceAddress(device.address);
                         let key = `${deviceAddress}-${device.deviceId}`;
                         let points = this.pointList[key];
@@ -208,7 +208,7 @@
                             this.$forceUpdate();
 
                             //update node-red data structure
-                            let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
+                            let device = this.deviceList.find(ele => ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId);
                             let deviceAddress = app.getDeviceAddress(device.address);
                             let key = `${deviceAddress}-${device.deviceId}`;
                             if (this.pointsToRead[key]) {
@@ -254,7 +254,7 @@
                         this.$forceUpdate();
 
                         //update node-red data structure
-                        let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
+                        let device = this.deviceList.find(ele => ele.address == parentDevice.ipAddr && ele.deviceId == parentDevice.deviceId);
                         let deviceAddress = app.getDeviceAddress(device.address);
                         let key = `${deviceAddress}-${device.deviceId}`;
 
@@ -292,7 +292,7 @@
                         this.$forceUpdate();
 
                         //update node-red data stucture
-                        let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
+                        let device = this.deviceList.find(ele => ele.address == parentDevice.ipAddr && ele.deviceId == parentDevice.deviceId);
                         let deviceAddress = app.getDeviceAddress(device.address);
                         let key = `${deviceAddress}-${device.deviceId}`;
                         let point = this.pointList[key][slotProps.node.pointName];

@@ -319,7 +319,6 @@ class BacnetClient extends EventEmitter {
                             }
                             
                         } else {
-                            that.logOut("queryPriorityDevices: invalid device found: ", device);
                             query(index);
                         }
                     } else if(index == priorityDevices.length) {
@@ -359,12 +358,12 @@ class BacnetClient extends EventEmitter {
     sanitizeDeviceList() {
         let that = this;
         
-        //1 hour in seconds
-        let timeoutThreshold = parseInt(that.discover_polling_schedule);
+        //Discover frequencey x 2
+        let timeoutThreshold = parseInt(that.discover_polling_schedule) * 2;
 
         that.deviceList.forEach(function(device, index) {
-            if(((Date.now() - device.getLastSeen()) / 1000) >  timeoutThreshold && device.getPriorityQueueIsActive() == false) {
-                //render device hasnt responded to whoIs for over an hour
+            if(((Date.now() - device.getLastSeen()) / 1000) > timeoutThreshold && device.getPriorityQueueIsActive() == false) {
+                //render device hasnt responded to whoIs for disover frequency x 2
 
                 let renderListIndex = that.renderList.findIndex(ele => ele.deviceId == device.getDeviceId());
 
@@ -988,16 +987,18 @@ class BacnetClient extends EventEmitter {
         });
     }
 
-    updatePriorityQueue(req) {
+    updatePriorityQueue(priorityDevices) {
         let that = this;
         return new Promise(async function(resolve, reject) {
             try {
-                let keys = Object.keys(req.body);
+                let keys = Object.keys(priorityDevices);
                 if(keys.length > 0) { 
                     keys.forEach(function(key) {
                         let device = that.deviceList.find(ele => `${that.getDeviceAddress(ele)}-${ele.getDeviceId()}` == key);
-                        let points = req.body[key];
-                        device.setPriorityQueue(points);
+                        let points = priorityDevices[key];
+                        if(device) {
+                            device.setPriorityQueue(points);
+                        }
                     });
                 } else if(keys.length == 0) {
                     that.clearPriorityQueues();
@@ -1309,7 +1310,8 @@ class BacnetClient extends EventEmitter {
                     }
                 }
             }
-            reject("Unexpectedly found end of loop, line 1214");
+            that.networkTree[deviceKey] = values;
+            resolve(that.networkTree);
         });
     }
 
