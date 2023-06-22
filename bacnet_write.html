@@ -108,7 +108,13 @@
                         this.$forceUpdate()
 
                         //update node-red data structure to forward to gateway
-                        let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
+                        let device = this.deviceList.find(ele => {
+                            if(ele.address.address) {
+                                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+                            } else{
+                                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+                            }
+                        });
                         let key = `${device.address}-${device.deviceId}`;
                         let points = this.pointList[key];
 
@@ -133,7 +139,13 @@
                         this.$forceUpdate()
 
                         //update node-red data structure
-                        let device = this.deviceList.find(ele => ele.deviceName == slotProps.node.label);
+                        let device = this.deviceList.find(ele => {
+                            if(ele.address.address) {
+                                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+                            } else{
+                                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+                            }
+                        });
                         let key = `${device.address}-${device.deviceId}`;
                         if (this.pointsToWrite[key]) {
                             delete this.pointsToWrite[key];
@@ -147,10 +159,10 @@
                         //update UI
                         let parentDeviceName = slotProps.node.parentDevice;
                         let foundDeviceIndex = this.writeDevices ? this.writeDevices.findIndex(ele => ele.label == parentDeviceName) : -1;
+                        let parentDevice = this.devices.find(ele => ele.label == parentDeviceName);
 
                         if (foundDeviceIndex == -1) {
                             //no read devices present, add new
-                            let parentDevice = this.devices.find(ele => ele.label == parentDeviceName);
                             let newReadParent = {...parentDevice};
                             newReadParent.children = [];
                             newReadParent.children.push(slotProps.node);
@@ -171,7 +183,13 @@
                         this.$forceUpdate();
 
                         //update node-red data structure
-                        let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
+                        let device = this.deviceList.find(ele => {
+                            if(ele.address.address) {
+                                return ele.address.address == parentDevice.ipAddr && ele.deviceId == parentDevice.deviceId;
+                            } else {
+                                return ele.address == parentDevice.ipAddr && ele.deviceId == parentDevice.deviceId;
+                            }
+                        });
                         let key = `${device.address}-${device.deviceId}`;
                         let point = this.pointList[key][slotProps.node.pointName];
                         point.deviceId = device.deviceId;
@@ -197,6 +215,7 @@
                         //update UI
                         let parentDeviceName = slotProps.node.parentDevice;
                         let foundDeviceIndex = this.writeDevices ? this.writeDevices.findIndex(ele => ele.label == parentDeviceName) : -1;
+                        let parentDevice = this.devices.find(ele => ele.label == parentDeviceName);
 
                         if (foundDeviceIndex !== -1) {
                             let foundIndex = this.writeDevices[foundDeviceIndex].children.findIndex(ele => ele.key == slotProps.node.key && ele.label == slotProps.node.label);
@@ -211,7 +230,13 @@
                         this.$forceUpdate();
 
                         //update node-red data stucture
-                        let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
+                        let device = this.deviceList.find(ele => {
+                            if(ele.address.address) {
+                                return ele.address.address == parentDevice.ipAddr && ele.deviceId == parentDevice.deviceId;
+                            } else {
+                                return ele.address == parentDevice.ipAddr && ele.deviceId == parentDevice.deviceId;
+                            }
+                        });
                         let key = `${device.address}-${device.deviceId}`;
                         let point = this.pointList[key][slotProps.node.pointName];
                         point.deviceId = device.deviceId;

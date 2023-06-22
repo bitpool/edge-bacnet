@@ -1,6 +1,6 @@
 {
   "name": "@bitpoolos/edge-bacnet",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "A bacnet gateway for node-red",
   "dependencies": {
     "@plus4nodered/ts-node-bacnet": "^1.0.0-beta.2",
