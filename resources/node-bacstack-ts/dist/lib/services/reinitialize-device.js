@@ -1,0 +1,35 @@
+'use strict';
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.decode = exports.encode = void 0;
+const baAsn1 = require("../asn1");
+const encode = (buffer, state, password) => {
+    baAsn1.encodeContextEnumerated(buffer, 0, state);
+    if (password && password !== '') {
+        baAsn1.encodeContextCharacterString(buffer, 1, password);
+    }
+};
+exports.encode = encode;
+const decode = (buffer, offset, apduLen) => {
+    let len = 0;
+    const value = {};
+    let result;
+    if (!baAsn1.decodeIsContextTag(buffer, offset + len, 0))
+        return;
+    result = baAsn1.decodeTagNumberAndValue(buffer, offset + len);
+    len += result.len;
+    let decodedValue = baAsn1.decodeEnumerated(buffer, offset + len, result.value);
+    value.state = decodedValue.value;
+    len += decodedValue.len;
+    if (len < apduLen) {
+        if (!baAsn1.decodeIsContextTag(buffer, offset + len, 1))
+            return;
+        result = baAsn1.decodeTagNumberAndValue(buffer, offset + len);
+        len += result.len;
+        decodedValue = baAsn1.decodeCharacterString(buffer, offset + len, apduLen - (offset + len), result.value);
+        value.password = decodedValue.value;
+        len += decodedValue.len;
+    }
+    value.len = len;
+    return value;
+};
+exports.decode = decode;
