@@ -63,7 +63,8 @@ class BacnetServer {
                 ],
             }, 
             [baEnum.ObjectType.ANALOG_VALUE]: [],
-            [baEnum.ObjectType.CHARACTERSTRING_VALUE]: []
+            [baEnum.ObjectType.CHARACTERSTRING_VALUE]: [],
+            [baEnum.ObjectType.BINARY_VALUE]: []
         };
 
         try {
@@ -74,6 +75,7 @@ class BacnetServer {
                 if(cachedData.objectStore) {
                     that.objectStore[baEnum.ObjectType.ANALOG_VALUE] = cachedData.objectStore[baEnum.ObjectType.ANALOG_VALUE];
                     that.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE] = cachedData.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE];
+                    that.objectStore[baEnum.ObjectType.BINARY_VALUE] = cachedData.objectStore[baEnum.ObjectType.BINARY_VALUE];
                 } 
             }
         } catch (error) {
@@ -225,6 +227,30 @@ class BacnetServer {
                     foundObject[baEnum.PropertyIdentifier.PRESENT_VALUE][0].value = value;
                     that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
                 }
+            } else if (objectType == "boolean") {
+                let foundIndex = that.objectStore[baEnum.ObjectType.BINARY_VALUE].findIndex(ele => ele[baEnum.PropertyIdentifier.OBJECT_NAME][0].value == formattedName);
+                if(foundIndex == -1) {
+                 let objectId = that.getObjectIdentifier();
+                 that.objectStore[baEnum.ObjectType.BINARY_VALUE].push({
+                     [baEnum.PropertyIdentifier.OBJECT_NAME]: [{value: formattedName, type: 7}],
+                     [baEnum.PropertyIdentifier.OBJECT_TYPE]: [{value: baEnum.ObjectType.BINARY_VALUE, type: 9}],
+                     [baEnum.PropertyIdentifier.DESCRIPTION]: [{value: '', type: 7}],
+                     [baEnum.PropertyIdentifier.OBJECT_IDENTIFIER]: [{value: {type: baEnum.ObjectType.BINARY_VALUE, instance: objectId}, type: 12}],
+                     [baEnum.PropertyIdentifier.PRESENT_VALUE]: [{value: value, type: 1}],
+                     [baEnum.PropertyIdentifier.STATUS_FLAGS]: [{value: 0, type: 8}],
+                     [baEnum.PropertyIdentifier.EVENT_STATE]: [{value: 0, type: 9}],
+                     [baEnum.PropertyIdentifier.OUT_OF_SERVICE]: [{value: 0, type: 9}],
+                     [baEnum.PropertyIdentifier.ACTIVE_TEXT]: [{value: 'ACTIVE', type: 7}],
+                     [baEnum.PropertyIdentifier.INACTIVE_TEXT]: [{value: 'INACTIVE', type: 7}],
+                 });
+     
+                 that.objectList.push({value: {type: baEnum.ObjectType.BINARY_VALUE, instance: objectId}, type: 12})
+                 that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
+                } else if(foundIndex !== -1) {
+                    let foundObject = that.objectStore[baEnum.ObjectType.BINARY_VALUE][foundIndex];
+                    foundObject[baEnum.PropertyIdentifier.PRESENT_VALUE][0].value = value;
+                    that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
+                }
             } else if(objectType == "string") {
                 let foundIndex = that.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE].findIndex(ele => ele[baEnum.PropertyIdentifier.OBJECT_NAME][0].value == formattedName);
                 if(foundIndex == -1) {
@@ -367,6 +393,8 @@ class BacnetServer {
                 return "string"
             case "number":
                 return "number"        
+            case "boolean":
+                return "boolean"
             default:
                 return null
         }
