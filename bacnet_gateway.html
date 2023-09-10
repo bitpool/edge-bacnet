@@ -252,15 +252,28 @@
                     this.getServerObjects();
                 },
                 methods: {
-                    confirm(event) {
+                    confirm(json) {
                         this.$confirm.require({
-                            message: 'Do you want to clear all the BACnet server points? This action is not reversible',
+                            message: 'Do you want to clear this BACnet server point? This action is not reversible',
                             header: 'Delete Confirmation',
                             icon: 'pi pi-info-circle',
                             acceptClass: 'p-button-danger',
                             accept: () => {
                                 //handle accept 
-                                this.nodeService.clearBacnetServerPoints();
+                                //console.log(json);
+                                let app = this;
+
+                                $.ajax({
+                                    type: "POST",
+                                    url: '/bitpool-bacnet-data/clearBacnetServerPoint',
+                                    dataType: 'json',
+                                    contentType: 'application/json',
+                                    data: JSON.stringify(json),
+                                    success: function (result) {
+                                        app.getServerObjects();
+                                    },
+                                    timeout: 10000
+                                });
                             },
                             reject: () => {
                                 //handle reject
@@ -391,7 +404,7 @@
                 margin-top: 20px;
                 margin-left: 50px;
             }
-            .p-confirm-dialog-accept > .p-button-label, .bacnetServerRebuildSchedule_clearButton > .p-button-label, .bacnetServerRebuildSchedule_testButton > .p-button-label {
+            .p-confirm-dialog-accept > .p-button-label, .bacnetServerRebuildSchedule_clearButton > .p-button-label, .bacnetServerPoint_clearButton > .p-button-label {
                 color: white;
             }
             .red-ui-editor label {
@@ -401,7 +414,14 @@
                 box-shadow: 0 0 0 0.2rem #edacac !important;
                 width: 200px;
                 border-radius: 3px;
-                margin-left: 140px !important;
+                margin-left: 180px !important;
+            }
+            .bacnetServerPoint_clearButton {
+                box-shadow: 0 0 0 0.2rem #edacac !important;
+                width: 200px;
+                border-radius: 3px;
+                margin-left: 340px !important;
+                margin-top: -75px !important;
             }
             .clear_server_span {
                 width: 0px;
@@ -601,19 +621,24 @@
                     <input type="checkbox" id="node-input-serverEnabled" style="width: auto;" />
                 </div>
                 
-                <div class="form-row" id="testObjectsContainer">
+                <div class="form-row" id="clearServerContainer">
                     <label>Server Objects</label>
-                    <h3 v-for="object in serverObjects" :key="object.name">
-                        [{{ object.type }}{{ object.instance }}]    {{ object.name }}
-                    </h3>
+                    <div v-for="object in serverObjects" :key="object.name">
+                        <h3>[{{ object.type }}{{ object.instance }}]    {{ object.name }}</h3>
+                        <p-button class="bacnetServerPoint_clearButton p-button-danger" @click="confirm({ 
+                            type: object.type, 
+                            instance: object.instance, 
+                            name: object.name
+                        })" label="Remove Object"></p-button>
+                    </div>
                 </div>
                 
-                <div class="form-row" id="clearServerContainer">
+                <!--<div class="form-row" id="clearServerContainer">
                     <label for="node-input-bacnetServerRebuildSchedule_value" class="clear_server_span"><i class="icon-tag"></i> <span
                             data-i18n="bitpool-bacnet.label.bacnetServerRebuildSchedule"></span> </label>
                     <p-button class="bacnetServerRebuildSchedule_clearButton p-button-danger" @click="confirm($event)"
                         label="Reinitialize Server"></p-button>
-                </div>
+                </div>-->
                 
             </div>
 

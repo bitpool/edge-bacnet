@@ -391,6 +391,57 @@ class BacnetServer {
         Store_Config_Server(JSON.stringify({ objectList: that.objectList, objectStore: that.objectStore }));
     }
 
+    clearServerPoint(json) {
+        let that = this;
+        return new Promise(async function (resolve, reject) {
+            try {
+                //console.log('clearServerPoint', json.body);
+                let type;
+                switch (json.body.type) {
+                    case 'SV':
+                        type = baEnum.ObjectType.CHARACTERSTRING_VALUE;
+                        break;
+                    case 'BV':
+                        type = baEnum.ObjectType.BINARY_VALUE;
+                        break;
+                    default:
+                        type = baEnum.ObjectType.ANALOG_VALUE;
+                        break;
+                }
+
+                // remove object from objectStore
+                let objectGroup = that.objectStore[type];
+                if (Array.isArray(objectGroup)) {
+                    for (let i = 0; i < objectGroup.length; i++) {
+                        let object = objectGroup[i];
+                        if (object[baEnum.PropertyIdentifier.OBJECT_IDENTIFIER][0].value.instance == json.body.instance) {
+                            that.objectStore[type].splice(i, 1);
+                            break;
+                        }
+                    }
+                } else {
+                    delete that.objectStore[type];
+                }
+
+                // remove object from objectList
+                let objectIndex = that.objectList.findIndex(ele =>
+                    ele.value.instance == json.body.instance && ele.value.type == type);
+                if (objectIndex !== -1) {
+                    that.objectList.splice(objectIndex, 1);
+                }
+
+                // update objectList in device object
+                that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
+
+                Store_Config_Server(JSON.stringify({ objectList: that.objectList, objectStore: that.objectStore }));
+
+                resolve(true);
+            } catch (e) {
+                reject(e);
+            }
+        });
+    }
+
     getServerPoints() {
         let that = this;
         let points = [];

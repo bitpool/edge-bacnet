@@ -230,6 +230,20 @@ module.exports = function (RED) {
       }
     });
 
+    //route handler for the clear Bacnet server point function
+    RED.httpAdmin.post('/bitpool-bacnet-data/clearBacnetServerPoint', function (req, res) {
+      if (node.bacnetServerEnabled == true && node.bacnetClient) {
+        //console.log("clearing server point: ", req.body);
+        node.bacnetServer.clearServerPoint(req).then(function (result) {
+          res.send(result);
+        }).catch(function (error) {
+          res.send(error);
+        });
+      } else {
+        res.send(result);
+      }
+    });
+
     //route handler for the retrieve Bacnet server points function
     RED.httpAdmin.get('/bitpool-bacnet-data/getBacnetServerPoints', function (req, res) {
       if (node.bacnetServerEnabled == true && node.bacnetClient) {
