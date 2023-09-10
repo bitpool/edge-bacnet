@@ -188,12 +188,21 @@ class BacnetServer {
         let that = this;
         let objectType = that.getBacnetObjectType(value);
         if (name && objectType) {
+            let instanceNumber;
+            if (name.includes('|')) {
+                // split name, assign last part to instanceNumber and the rest to name
+                let nameParts = name.split('|');
+                instanceNumber = nameParts[nameParts.length - 1];
+                nameParts.pop();
+                name = nameParts.join('|');
+            }
+
             let formattedName = name.replaceAll('.', '_');
             formattedName = formattedName.replaceAll('/', '_');
             if (objectType == "number") {
                 let foundIndex = that.objectStore[baEnum.ObjectType.ANALOG_VALUE].findIndex(ele => ele[baEnum.PropertyIdentifier.OBJECT_NAME][0].value == formattedName);
                 if (foundIndex == -1) {
-                    let objectId = that.getObjectIdentifier(baEnum.ObjectType.ANALOG_VALUE);
+                    let objectId = that.getObjectIdentifier(baEnum.ObjectType.ANALOG_VALUE, instanceNumber);
                     that.objectStore[baEnum.ObjectType.ANALOG_VALUE].push({
                         [baEnum.PropertyIdentifier.OBJECT_NAME]: [{ value: formattedName, type: 7 }],
                         [baEnum.PropertyIdentifier.OBJECT_TYPE]: [{ value: baEnum.ObjectType.ANALOG_VALUE, type: 9 }],
@@ -236,7 +245,7 @@ class BacnetServer {
             } else if (objectType == "boolean") {
                 let foundIndex = that.objectStore[baEnum.ObjectType.BINARY_VALUE].findIndex(ele => ele[baEnum.PropertyIdentifier.OBJECT_NAME][0].value == formattedName);
                 if (foundIndex == -1) {
-                    let objectId = that.getObjectIdentifier(baEnum.ObjectType.BINARY_VALUE);
+                    let objectId = that.getObjectIdentifier(baEnum.ObjectType.BINARY_VALUE, instanceNumber);
                     that.objectStore[baEnum.ObjectType.BINARY_VALUE].push({
                         [baEnum.PropertyIdentifier.OBJECT_NAME]: [{ value: formattedName, type: 7 }],
                         [baEnum.PropertyIdentifier.OBJECT_TYPE]: [{ value: baEnum.ObjectType.BINARY_VALUE, type: 9 }],
@@ -260,7 +269,7 @@ class BacnetServer {
             } else if (objectType == "string") {
                 let foundIndex = that.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE].findIndex(ele => ele[baEnum.PropertyIdentifier.OBJECT_NAME][0].value == formattedName);
                 if (foundIndex == -1) {
-                    let objectId = that.getObjectIdentifier(baEnum.ObjectType.CHARACTERSTRING_VALUE);
+                    let objectId = that.getObjectIdentifier(baEnum.ObjectType.CHARACTERSTRING_VALUE, instanceNumber);
                     that.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE].push({
                         [baEnum.PropertyIdentifier.OBJECT_NAME]: [{ value: formattedName, type: 7 }],
                         [baEnum.PropertyIdentifier.OBJECT_TYPE]: [{ value: baEnum.ObjectType.CHARACTERSTRING_VALUE, type: 9 }],
@@ -510,12 +519,19 @@ class BacnetServer {
         }
     }
 
-    getObjectIdentifier(type) {
-        console.log(type);
+    getObjectIdentifier(type, instanceNumber) {
+        //console.log(type);
         let that = this;
+
+        // manual instance numbering
+        if (instanceNumber) {
+            that.objectIdNumber[type] = instanceNumber + 1;
+            return instanceNumber;
+        }
+
+        // auto instance numbering
         let objectId = that.objectIdNumber[type];
         that.objectIdNumber[type]++;
-
         return objectId;
     }
 
