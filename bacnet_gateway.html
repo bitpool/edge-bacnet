@@ -18,7 +18,7 @@
             }
             var scripts = [];
             var _scripts = [
-                'resources/@bitpoolos/edge-bacnet/vue.global.prod.js', 
+                'resources/@bitpoolos/edge-bacnet/vue.global.prod.js',
                 'resources/@bitpoolos/edge-bacnet/core.min.js',
                 'resources/@bitpoolos/edge-bacnet/confirmdialog.min.js',
                 'resources/@bitpoolos/edge-bacnet/confirmationservice.min.js'
@@ -84,36 +84,39 @@
         clearBacnetServerPoints() {
             return fetch('/bitpool-bacnet-data/clearBacnetServerPoints').then(res => res.json());
         };
+        getBacnetServerPoints() {
+            return fetch('/bitpool-bacnet-data/getBacnetServerPoints').then(res => res.json());
+        };
     };
     RED.nodes.registerType('Bacnet-Gateway', {
         category: 'Bitpool BACnet',
         color: '#00aeef',
         defaults: {
-            name: {value: ""},
-            local_device_address: {value: "", required: true},
-            apduTimeout: {value: 6000},
-            roundDecimal: {value: 2},
-            local_device_port: {value: 47808, required: true},
-            apduSize: {value: "5", required: true},
-            maxSegments: {value: "0x50", required: true},
-            retries: {value: "5", required: true},
-            broadCastAddr: {value: "255.255.255.255", required: true},
-            toLogIam: {value: true},
-            discover_polling_schedule: {value: ""},
-            discover_polling_schedule_value: {value: "1", required: true},
-            discover_polling_schedule_options: {value: "Minutes", required: true},
-            device_id_range_enabled: {value: false},
-            device_id_range_start: {value: 0},
-            device_id_range_end: {value: 4194303},
-            deviceId: {value: 817001, required: true},
-            manual_instance_range_enabled: {value: false},
-            manual_instance_range_start: {value: 0},
-            manual_instance_range_end: {value: 10000},
-            logErrorToConsole: {value: false},
-            serverEnabled: {value: false},
-            device_read_schedule: {value: ""},
-            device_read_schedule_value: {value: "1", required: true},
-            device_read_schedule_options: {value: "Minutes", required: true}
+            name: { value: "" },
+            local_device_address: { value: "", required: true },
+            apduTimeout: { value: 6000 },
+            roundDecimal: { value: 2 },
+            local_device_port: { value: 47808, required: true },
+            apduSize: { value: "5", required: true },
+            maxSegments: { value: "0x50", required: true },
+            retries: { value: "5", required: true },
+            broadCastAddr: { value: "255.255.255.255", required: true },
+            toLogIam: { value: true },
+            discover_polling_schedule: { value: "" },
+            discover_polling_schedule_value: { value: "1", required: true },
+            discover_polling_schedule_options: { value: "Minutes", required: true },
+            device_id_range_enabled: { value: false },
+            device_id_range_start: { value: 0 },
+            device_id_range_end: { value: 4194303 },
+            deviceId: { value: 817001, required: true },
+            manual_instance_range_enabled: { value: false },
+            manual_instance_range_start: { value: 0 },
+            manual_instance_range_end: { value: 10000 },
+            logErrorToConsole: { value: false },
+            serverEnabled: { value: false },
+            device_read_schedule: { value: "" },
+            device_read_schedule_value: { value: "1", required: true },
+            device_read_schedule_options: { value: "Minutes", required: true }
         },
         networkInterfaces: [],
         inputs: 1,
@@ -193,10 +196,10 @@
             function setDeviceIdRangeState(state) {
                 let deviceIdRangeStart = $("#node-input-device_id_range_start");
                 let deviceIdRangeEnd = $("#node-input-device_id_range_end");
-                if(state == true) {
+                if (state == true) {
                     deviceIdRangeStart.removeAttr("readonly");
                     deviceIdRangeEnd.removeAttr("readonly");
-                } else if(state == false) {
+                } else if (state == false) {
                     deviceIdRangeStart.attr("readonly", true);
                     deviceIdRangeEnd.attr("readonly", true);
                 }
@@ -204,17 +207,17 @@
 
             setDeviceIdRangeState(node.device_id_range_enabled);
 
-            $("#node-input-device_id_range_enabled").change(function(e) {
+            $("#node-input-device_id_range_enabled").change(function (e) {
                 setDeviceIdRangeState(this.checked);
-            }); 
+            });
 
             function setManualInstanceRangeState(state) {
                 let deviceIdRangeStart = $("#node-input-manual_instance_range_start");
                 let deviceIdRangeEnd = $("#node-input-manual_instance_range_end");
-                if(state == true) {
+                if (state == true) {
                     deviceIdRangeStart.removeAttr("readonly");
                     deviceIdRangeEnd.removeAttr("readonly");
-                } else if(state == false) {
+                } else if (state == false) {
                     deviceIdRangeStart.attr("readonly", true);
                     deviceIdRangeEnd.attr("readonly", true);
                 }
@@ -222,47 +225,75 @@
 
             setManualInstanceRangeState(node.manual_instance_range_enabled);
 
-            $("#node-input-manual_instance_range_enabled").change(function(e) {
+            $("#node-input-manual_instance_range_enabled").change(function (e) {
                 setManualInstanceRangeState(this.checked);
             });
 
-            if(node.vm == undefined) {
+            if (node.vm == undefined) {
                 const confirmDialog = document.createElement('p-confirm-dialog');
                 document.getElementById("clearServerContainer").appendChild(confirmDialog);
             }
 
-            const {createApp, ref, onMounted} = Vue;
+            const { createApp, ref, onMounted } = Vue;
             const ConfirmDialog = primevue.confirmdialog;
             const ConfirmationService = primevue.confirmationservice;
+            const ListBox = primevue.listbox;
 
             //prime vue app
             const App = {
                 data() {
                     return {
-                        nodeService: ref(new NodeService())
+                        nodeService: ref(new NodeService()),
+                        serverObjects: ref([]),
+                        selectedServerObject: ref()
                     }
                 },
+                mounted() {
+                    this.getServerObjects();
+                },
                 methods: {
-                    confirm(event) {
+                    confirm(json) {
                         this.$confirm.require({
-                            message: 'Do you want to clear all the BACnet server points? This action is not reversible',
+                            message: 'Do you want to clear this BACnet server point? This action is not reversible',
                             header: 'Delete Confirmation',
                             icon: 'pi pi-info-circle',
                             acceptClass: 'p-button-danger',
                             accept: () => {
                                 //handle accept 
-                                this.nodeService.clearBacnetServerPoints();
+                                //console.log(json);
+                                let app = this;
+
+                                $.ajax({
+                                    type: "POST",
+                                    url: '/bitpool-bacnet-data/clearBacnetServerPoint',
+                                    dataType: 'json',
+                                    contentType: 'application/json',
+                                    data: JSON.stringify(json),
+                                    success: function (result) {
+                                        app.getServerObjects();
+                                    },
+                                    timeout: 10000
+                                });
                             },
                             reject: () => {
                                 //handle reject
                             }
                         });
+                    },
+                    getServerObjects() {
+                        let app = this;
+                        this.nodeService.getBacnetServerPoints().then(function (result) {
+                            app.serverObjects = result;
+                            console.log(result);
+                        })
                     }
                 },
                 components: {
                     "p-button": primevue.button,
                     "p-confirm-dialog": primevue.confirmdialog,
-                    "p-confirm-popup": primevue.confirmpopup 
+                    "p-confirm-popup": primevue.confirmpopup,
+                    "p-tree": primevue.tree,
+                    "p-listbox": primevue.listbox
                 }
             };
 
@@ -270,11 +301,12 @@
             vueapp.use(primevue.config.default);
             vueapp.use(primevue.confirmpopup);
             vueapp.use(primevue.confirmationservice);
+            node.vm2 = vueapp.mount("#testObjectsContainer");
             node.vm1 = vueapp.mount("#clearServerContainer");
 
-            $("#file-upload").on("change", function(event) {
+            $("#file-upload").on("change", function (event) {
                 const input = event.target.files[0];
-                const reader = new FileReader(); 
+                const reader = new FileReader();
 
                 reader.onload = function (e) {
                     const text = e.target.result;
@@ -291,13 +323,13 @@
                         },
                         timeout: 10000
                     });
-                    
+
                 };
 
                 reader.readAsText(input);
             });
 
-            $("#file-export").click(function(params) {
+            $("#file-export").click(function (params) {
                 $.ajax({
                     url: '/bitpool-bacnet-data/getDeviceList',
                     success: function (deviceList) {
@@ -372,7 +404,7 @@
                 margin-top: 20px;
                 margin-left: 50px;
             }
-            .p-confirm-dialog-accept > .p-button-label, .bacnetServerRebuildSchedule_clearButton > .p-button-label {
+            .p-confirm-dialog-accept > .p-button-label, .bacnetServerRebuildSchedule_clearButton > .p-button-label, .bacnetServerPoint_clearButton > .p-button-label {
                 color: white;
             }
             .red-ui-editor label {
@@ -382,7 +414,14 @@
                 box-shadow: 0 0 0 0.2rem #edacac !important;
                 width: 200px;
                 border-radius: 3px;
-                margin-left: 140px !important;
+                margin-left: 180px !important;
+            }
+            .bacnetServerPoint_clearButton {
+                box-shadow: 0 0 0 0.2rem #edacac !important;
+                width: 200px;
+                border-radius: 3px;
+                margin-left: 340px !important;
+                margin-top: -75px !important;
             }
             .clear_server_span {
                 width: 0px;
@@ -575,23 +614,36 @@
             </div>
 
             <div id='read-server-tab' style='display:none'>
-                <div class="read_server_parent_div">
-                    <div class="form-row">
-                        <label for="node-input-serverEnabled">
-                            Enabled:
-                        </label>
-                        <input type="checkbox" id="node-input-serverEnabled" style="width: auto;"/>
-                    </div>
-                    
-                    <div class="form-row" id="clearServerContainer" style="align-items: center; display: flex;">
-                        <label for="node-input-bacnetServerRebuildSchedule_value" class="clear_server_span"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.bacnetServerRebuildSchedule"></span>  </label>
-                        <p-button class="bacnetServerRebuildSchedule_clearButton p-button-danger" @click="confirm($event)" label="Reinitialize Server" ></p-button>
+                <div class="form-row">
+                    <label for="node-input-serverEnabled">
+                        Enabled:
+                    </label>
+                    <input type="checkbox" id="node-input-serverEnabled" style="width: auto;" />
+                </div>
+                
+                <div class="form-row" id="clearServerContainer">
+                    <label>Server Objects</label>
+                    <div v-for="object in serverObjects" :key="object.name">
+                        <h3>[{{ object.type }}{{ object.instance }}]    {{ object.name }}</h3>
+                        <p-button class="bacnetServerPoint_clearButton p-button-danger" @click="confirm({ 
+                            type: object.type, 
+                            instance: object.instance, 
+                            name: object.name
+                        })" label="Remove Object"></p-button>
                     </div>
                 </div>
+                
+                <!--<div class="form-row" id="clearServerContainer">
+                    <label for="node-input-bacnetServerRebuildSchedule_value" class="clear_server_span"><i class="icon-tag"></i> <span
+                            data-i18n="bitpool-bacnet.label.bacnetServerRebuildSchedule"></span> </label>
+                    <p-button class="bacnetServerRebuildSchedule_clearButton p-button-danger" @click="confirm($event)"
+                        label="Reinitialize Server"></p-button>
+                </div>-->
+                
             </div>
 
     </script>
-    <script type="text/html" data-help-name="Bacnet-Gateway">
+<script type="text/html" data-help-name="Bacnet-Gateway">
         <p> This node is the brain of the Bitpool BACnet node collection. It acts are the gateway for all BACnet communications and functionality for the collection. </p>
     
             <h3><strong>Gateway Tab</strong></h3>

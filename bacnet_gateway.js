@@ -27,9 +27,9 @@ module.exports = function (RED) {
     this.device_id_range_start = config.device_id_range_start;
     this.device_id_range_end = config.device_id_range_end;
     this.manual_instance_range_enabled = config.manual_instance_range_enabled,
-    this.manual_instance_range_start = config.manual_instance_range_start,
-    this.manual_instance_range_end = config.manual_instance_range_end,
-    this.nodeName = config.name;
+      this.manual_instance_range_start = config.manual_instance_range_start,
+      this.manual_instance_range_end = config.manual_instance_range_end,
+      this.nodeName = config.name;
     this.toRestartNodeRed = config.toRestartNodeRed;
     this.deviceId = config.deviceId;
     this.logErrorToConsole = config.logErrorToConsole;
@@ -227,6 +227,34 @@ module.exports = function (RED) {
         res.send(true);
       } else {
         res.send(false);
+      }
+    });
+
+    //route handler for the clear Bacnet server point function
+    RED.httpAdmin.post('/bitpool-bacnet-data/clearBacnetServerPoint', function (req, res) {
+      if (node.bacnetServerEnabled == true && node.bacnetClient) {
+        //console.log("clearing server point: ", req.body);
+        node.bacnetServer.clearServerPoint(req).then(function (result) {
+          res.send(result);
+        }).catch(function (error) {
+          res.send(error);
+        });
+      } else {
+        res.send(result);
+      }
+    });
+
+    //route handler for the retrieve Bacnet server points function
+    RED.httpAdmin.get('/bitpool-bacnet-data/getBacnetServerPoints', function (req, res) {
+      if (node.bacnetServerEnabled == true && node.bacnetClient) {
+        node.bacnetServer.getServerPoints().then(function (result) {
+          res.send(result);
+        }).catch(function (error) {
+          res.send(error);
+          logOut("Error getting server points:  ", error);
+        });
+      } else {
+        res.send([]);
       }
     });
 
