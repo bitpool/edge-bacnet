@@ -8,7 +8,6 @@
     "cronosjs": "^1.7.1",
     "debug": "^4.1.1",
     "iconv-lite": "^0.5.1",
-    "node-fetch": "^2.6.1",
     "toad-scheduler": "^1.6.0",
     "underscore": "^1.10.2",
     "winston": "^3.2.1"

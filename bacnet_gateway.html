@@ -8,686 +8,861 @@
 <link href="resources/@bitpoolos/edge-bacnet/primeicons.css" rel="stylesheet" />
 
 <script>
-    //custom script loader to ensure dependencies load every time
-    (function () {
-        LoadScripts();
+  //custom script loader to ensure dependencies load every time
+  (function () {
+    LoadScripts();
 
-        function LoadScripts(async) {
-            if (async === undefined) {
-                async = false;
-            }
-            var scripts = [];
-            var _scripts = [
-                'resources/@bitpoolos/edge-bacnet/vue.global.prod.js',
-                'resources/@bitpoolos/edge-bacnet/core.min.js',
-                'resources/@bitpoolos/edge-bacnet/confirmdialog.min.js',
-                'resources/@bitpoolos/edge-bacnet/confirmationservice.min.js'
-            ];
+    function LoadScripts(async) {
+      if (async === undefined) {
+        async = false;
+      }
+      var scripts = [];
+      var _scripts = [
+        "resources/@bitpoolos/edge-bacnet/vue.global.prod.js",
+        "resources/@bitpoolos/edge-bacnet/core.min.js",
+        "resources/@bitpoolos/edge-bacnet/confirmdialog.min.js",
+        "resources/@bitpoolos/edge-bacnet/confirmationservice.min.js",
+      ];
 
-            if (async) {
-                LoadScriptsAsync(_scripts, scripts)
-            } else {
-                LoadScriptsSync(_scripts, scripts)
-            }
-        }
+      if (async) {
+        LoadScriptsAsync(_scripts, scripts);
+      } else {
+        LoadScriptsSync(_scripts, scripts);
+      }
+    }
 
-        // what you are looking for :
-        function LoadScriptsSync(_scripts, scripts) {
-
-            var x = 0;
-            var loopArray = function (_scripts, scripts) {
-                // call itself
-                loadScript(_scripts[x], scripts[x], function () {
-                    // set x to next item
-                    x++;
-                    // any more items in array?
-                    if (x < _scripts.length) {
-                        loopArray(_scripts, scripts);
-                    }
-                });
-            }
+    // what you are looking for :
+    function LoadScriptsSync(_scripts, scripts) {
+      var x = 0;
+      var loopArray = function (_scripts, scripts) {
+        // call itself
+        loadScript(_scripts[x], scripts[x], function () {
+          // set x to next item
+          x++;
+          // any more items in array?
+          if (x < _scripts.length) {
             loopArray(_scripts, scripts);
-        }
+          }
+        });
+      };
+      loopArray(_scripts, scripts);
+    }
 
-        // async load as in your code
-        function LoadScriptsAsync(_scripts, scripts) {
-            for (var i = 0; i < _scripts.length; i++) {
-                loadScript(_scripts[i], scripts[i], function () { });
-            }
-        }
+    // async load as in your code
+    function LoadScriptsAsync(_scripts, scripts) {
+      for (var i = 0; i < _scripts.length; i++) {
+        loadScript(_scripts[i], scripts[i], function () {});
+      }
+    }
 
-        // load script function with callback to handle synchronicity 
-        function loadScript(src, script, callback) {
-
-            script = document.createElement('script');
-            script.onerror = function () {
-                // handling error when loading script
-                console.log('Error - could not load BACnet node HTML dependencies')
-            }
-            script.onload = function () {
-                callback();
-            }
-            script.src = src;
-            document.getElementsByTagName('head')[0].appendChild(script);
-        }
-    })();
+    // load script function with callback to handle synchronicity
+    function loadScript(src, script, callback) {
+      script = document.createElement("script");
+      script.onerror = function () {
+        // handling error when loading script
+        console.log("Error - could not load BACnet node HTML dependencies");
+      };
+      script.onload = function () {
+        callback();
+      };
+      script.src = src;
+      document.getElementsByTagName("head")[0].appendChild(script);
+    }
+  })();
 </script>
 
 <script type="text/javascript">
-    class NodeService {
-        getNetworkData() {
-            return fetch('/bitpool-bacnet-data/getNetworkTree').then(res => res.json());
-        };
-        rebuildDataModel() {
-            return fetch('/bitpool-bacnet-data/rebuildDataModel').then(res => res.json());
-        };
-        clearBacnetServerPoints() {
-            return fetch('/bitpool-bacnet-data/clearBacnetServerPoints').then(res => res.json());
-        };
-        getBacnetServerPoints() {
-            return fetch('/bitpool-bacnet-data/getBacnetServerPoints').then(res => res.json());
-        };
-    };
-    RED.nodes.registerType('Bacnet-Gateway', {
-        category: 'Bitpool BACnet',
-        color: '#00aeef',
-        defaults: {
-            name: { value: "" },
-            local_device_address: { value: "", required: true },
-            apduTimeout: { value: 6000 },
-            roundDecimal: { value: 2 },
-            local_device_port: { value: 47808, required: true },
-            apduSize: { value: "5", required: true },
-            maxSegments: { value: "0x50", required: true },
-            retries: { value: "5", required: true },
-            broadCastAddr: { value: "255.255.255.255", required: true },
-            toLogIam: { value: true },
-            discover_polling_schedule: { value: "" },
-            discover_polling_schedule_value: { value: "1", required: true },
-            discover_polling_schedule_options: { value: "Minutes", required: true },
-            device_id_range_enabled: { value: false },
-            device_id_range_start: { value: 0 },
-            device_id_range_end: { value: 4194303 },
-            deviceId: { value: 817001, required: true },
-            manual_instance_range_enabled: { value: false },
-            manual_instance_range_start: { value: 0 },
-            manual_instance_range_end: { value: 10000 },
-            logErrorToConsole: { value: false },
-            serverEnabled: { value: false },
-            device_read_schedule: { value: "" },
-            device_read_schedule_value: { value: "1", required: true },
-            device_read_schedule_options: { value: "Minutes", required: true }
+  class NodeService {
+    getNetworkData() {
+      return fetch("/bitpool-bacnet-data/getNetworkTree").then((res) => res.json());
+    }
+    rebuildDataModel() {
+      return fetch("/bitpool-bacnet-data/rebuildDataModel").then((res) => res.json());
+    }
+    clearBacnetServerPoints() {
+      return fetch("/bitpool-bacnet-data/clearBacnetServerPoints").then((res) => res.json());
+    }
+    getBacnetServerPoints() {
+        return fetch('/bitpool-bacnet-data/getBacnetServerPoints').then(res => res.json());
+    }
+  }
+  RED.nodes.registerType("Bacnet-Gateway", {
+    category: "Bitpool BACnet",
+    color: "#00aeef",
+    defaults: {
+      name: { value: "" },
+      local_device_address: { value: "", required: true },
+      apduTimeout: { value: 6000 },
+      roundDecimal: { value: 2 },
+      local_device_port: { value: 47808, required: true },
+      apduSize: { value: "5", required: true },
+      maxSegments: { value: "0x50", required: true },
+      retries: { value: "5", required: true },
+      broadCastAddr: { value: "255.255.255.255", required: true },
+      toLogIam: { value: false },
+      discover_polling_schedule: { value: "60" },
+      discover_polling_schedule_value: { value: "1", required: true },
+      discover_polling_schedule_options: { value: "Minutes", required: true },
+      deviceId: { value: 817001, required: true },
+      manual_instance_range_enabled: { value: false },
+      manual_instance_range_start: { value: 0 },
+      manual_instance_range_end: { value: 10000 },
+      logErrorToConsole: { value: false },
+      serverEnabled: { value: false },
+      device_read_schedule: { value: "60" },
+      device_read_schedule_value: { value: "1", required: true },
+      device_read_schedule_options: { value: "Minutes", required: true },
+      deviceRangeRegisters: { value: [] },
+    },
+    networkInterfaces: [],
+    inputs: 1,
+    outputs: 1,
+    icon: "bitpool.svg",
+    label: function () {
+      return this.name || "gateway";
+    },
+    paletteLabel: function () {
+      return "gateway";
+    },
+    oneditprepare: function () {
+      let node = this;
+
+      let tabs = RED.tabs.create({
+        id: "node-input-read-tabs",
+        onchange: function (tab) {
+          $("#node-input-tabs-content").children().hide();
+          $("#" + tab.id).show();
         },
-        networkInterfaces: [],
-        inputs: 1,
-        outputs: 1,
-        icon: "bitpool.svg",
-        label: function () {
-            return this.name || "gateway";
+      });
+
+      tabs.addTab({
+        id: "read-properties-tab",
+        label: "Gateway",
+      });
+
+      tabs.addTab({
+        id: "read-discover-tab",
+        label: "Discovery",
+      });
+
+      tabs.addTab({
+        id: "read-server-tab",
+        label: "Server",
+      });
+
+      if (node.networkInterfaces && node.networkInterfaces.length > 0) {
+        let nicSelector = document.getElementById("node-input-local_device_address");
+        node.networkInterfaces.forEach(function (option) {
+          nicSelector.options[nicSelector.options.length] = option;
+        });
+        nicSelector.value = node.local_device_address;
+      }
+
+      function queryAdapters() {
+        let nicSelector = document.getElementById("node-input-local_device_address");
+        $.ajax({
+          url: "/bitpool-bacnet-data/getNetworkInterfaces",
+          success: function (data) {
+            let keys = Object.keys(data);
+
+            for (const key in keys) {
+              let nicName = keys[key];
+              let ipAddr = data[keys[key]][0];
+              let text = nicName + " : " + ipAddr;
+              if (!node.networkInterfaces) node.networkInterfaces = [];
+              let found = node.networkInterfaces.findIndex((ele) => ele.text == text && ele.value == ipAddr);
+              if (found == -1) {
+                let newOption = new Option(text, ipAddr);
+                nicSelector.options[nicSelector.options.length] = newOption;
+                node.networkInterfaces.push(newOption);
+              }
+            }
+            nicSelector.value = node.local_device_address;
+          },
+          timeout: 10000,
+        });
+      }
+
+      queryAdapters();
+
+      function setManualInstanceRangeState(state) {
+        let deviceIdRangeStart = $("#node-input-manual_instance_range_start");
+        let deviceIdRangeEnd = $("#node-input-manual_instance_range_end");
+        if (state == true) {
+          deviceIdRangeStart.removeAttr("readonly");
+          deviceIdRangeEnd.removeAttr("readonly");
+        } else if (state == false) {
+          deviceIdRangeStart.attr("readonly", true);
+          deviceIdRangeEnd.attr("readonly", true);
+        }
+      }
+
+      setManualInstanceRangeState(node.manual_instance_range_enabled);
+
+      $("#node-input-manual_instance_range_enabled").change(function (e) {
+        setManualInstanceRangeState(this.checked);
+      });
+
+      if (node.vm1 == undefined) {
+        const confirmDialog = document.createElement("p-confirm-dialog");
+        document.getElementById("serverParent").appendChild(confirmDialog);
+        //document.getElementById("clearServerContainer").appendChild(confirmDialog);
+        
+      }
+
+      const { createApp, ref, onMounted } = Vue;
+      const ConfirmDialog = primevue.confirmdialog;
+      const ConfirmationService = primevue.confirmationservice;
+      const ListBox = primevue.listbox;
+
+      //prime vue app
+      const App = {
+        data() {
+          return {
+            nodeService: ref(new NodeService()),
+            serverObjects: ref([]),
+            selectedServerObject: ref()
+          };
         },
-        paletteLabel: function () {
-            return "gateway";
+        mounted() {
+            this.getServerObjects();
         },
-        oneditprepare: function () {
-            let node = this;
-
-            let tabs = RED.tabs.create(
-                {
-                    id: "node-input-read-tabs",
-                    onchange: function (tab) {
-                        $("#node-input-tabs-content").children().hide()
-                        $("#" + tab.id).show()
-                    }
+        methods: {
+          confirmAll(event) {
+            let app = this;
+            this.$confirm.require({
+              message: "Do you want to clear all the BACnet server points? This action is not reversible",
+              header: "Delete Confirmation",
+              icon: "pi pi-info-circle",
+              acceptClass: "p-button-danger",
+              accept: () => {
+                //handle accept
+                this.nodeService.clearBacnetServerPoints().then(function() {
+                  app.getServerObjects();
                 });
-
-            tabs.addTab(
-                {
-                    id: "read-properties-tab",
-                    label: "Gateway"
-                });
-
-            tabs.addTab(
-                {
-                    id: "read-discover-tab",
-                    label: "Discovery"
-                });
-
-            tabs.addTab(
-                {
-                    id: "read-server-tab",
-                    label: "Server"
-                });
-
-            if (node.networkInterfaces && node.networkInterfaces.length > 0) {
-                let nicSelector = document.getElementById("node-input-local_device_address");
-                node.networkInterfaces.forEach(function (option) {
-                    nicSelector.options[nicSelector.options.length] = option;
-                });
-                nicSelector.value = node.local_device_address
-            }
-
-            function queryAdapters() {
-                let nicSelector = document.getElementById("node-input-local_device_address");
-                $.ajax({
-                    url: '/bitpool-bacnet-data/getNetworkInterfaces',
-                    success: function (data) {
-                        let keys = Object.keys(data);
-
-                        for (const key in keys) {
-                            let nicName = keys[key];
-                            let ipAddr = data[keys[key]][0];
-                            let text = nicName + ' : ' + ipAddr;
-                            if (!node.networkInterfaces) node.networkInterfaces = [];
-                            let found = node.networkInterfaces.findIndex(ele => ele.text == text && ele.value == ipAddr);
-                            if (found == -1) {
-                                let newOption = new Option(text, ipAddr);
-                                nicSelector.options[nicSelector.options.length] = newOption;
-                                node.networkInterfaces.push(newOption);
-                            }
-                        }
-                        nicSelector.value = node.local_device_address;
-                    },
-                    timeout: 10000
-                });
-            }
-
-            queryAdapters();
-
-            function setDeviceIdRangeState(state) {
-                let deviceIdRangeStart = $("#node-input-device_id_range_start");
-                let deviceIdRangeEnd = $("#node-input-device_id_range_end");
-                if (state == true) {
-                    deviceIdRangeStart.removeAttr("readonly");
-                    deviceIdRangeEnd.removeAttr("readonly");
-                } else if (state == false) {
-                    deviceIdRangeStart.attr("readonly", true);
-                    deviceIdRangeEnd.attr("readonly", true);
-                }
-            }
-
-            setDeviceIdRangeState(node.device_id_range_enabled);
-
-            $("#node-input-device_id_range_enabled").change(function (e) {
-                setDeviceIdRangeState(this.checked);
+              },
+              reject: () => {
+                //handle reject
+              },
             });
-
-            function setManualInstanceRangeState(state) {
-                let deviceIdRangeStart = $("#node-input-manual_instance_range_start");
-                let deviceIdRangeEnd = $("#node-input-manual_instance_range_end");
-                if (state == true) {
-                    deviceIdRangeStart.removeAttr("readonly");
-                    deviceIdRangeEnd.removeAttr("readonly");
-                } else if (state == false) {
-                    deviceIdRangeStart.attr("readonly", true);
-                    deviceIdRangeEnd.attr("readonly", true);
-                }
-            }
-
-            setManualInstanceRangeState(node.manual_instance_range_enabled);
-
-            $("#node-input-manual_instance_range_enabled").change(function (e) {
-                setManualInstanceRangeState(this.checked);
-            });
-
-            if (node.vm == undefined) {
-                const confirmDialog = document.createElement('p-confirm-dialog');
-                document.getElementById("clearServerContainer").appendChild(confirmDialog);
-            }
-
-            const { createApp, ref, onMounted } = Vue;
-            const ConfirmDialog = primevue.confirmdialog;
-            const ConfirmationService = primevue.confirmationservice;
-            const ListBox = primevue.listbox;
-
-            //prime vue app
-            const App = {
-                data() {
-                    return {
-                        nodeService: ref(new NodeService()),
-                        serverObjects: ref([]),
-                        selectedServerObject: ref()
-                    }
-                },
-                mounted() {
-                    this.getServerObjects();
-                },
-                methods: {
-                    confirm(json) {
-                        this.$confirm.require({
-                            message: 'Do you want to clear this BACnet server point? This action is not reversible',
-                            header: 'Delete Confirmation',
-                            icon: 'pi pi-info-circle',
-                            acceptClass: 'p-button-danger',
-                            accept: () => {
-                                //handle accept 
-                                //console.log(json);
-                                let app = this;
-
-                                $.ajax({
-                                    type: "POST",
-                                    url: '/bitpool-bacnet-data/clearBacnetServerPoint',
-                                    dataType: 'json',
-                                    contentType: 'application/json',
-                                    data: JSON.stringify(json),
-                                    success: function (result) {
-                                        app.getServerObjects();
-                                    },
-                                    timeout: 10000
-                                });
-                            },
-                            reject: () => {
-                                //handle reject
-                            }
-                        });
-                    },
-                    getServerObjects() {
-                        let app = this;
-                        this.nodeService.getBacnetServerPoints().then(function (result) {
-                            app.serverObjects = result;
-                            console.log(result);
-                        })
-                    }
-                },
-                components: {
-                    "p-button": primevue.button,
-                    "p-confirm-dialog": primevue.confirmdialog,
-                    "p-confirm-popup": primevue.confirmpopup,
-                    "p-tree": primevue.tree,
-                    "p-listbox": primevue.listbox
-                }
-            };
-
-            let vueapp = createApp(App);
-            vueapp.use(primevue.config.default);
-            vueapp.use(primevue.confirmpopup);
-            vueapp.use(primevue.confirmationservice);
-            node.vm2 = vueapp.mount("#testObjectsContainer");
-            node.vm1 = vueapp.mount("#clearServerContainer");
-
-            $("#file-upload").on("change", function (event) {
-                const input = event.target.files[0];
-                const reader = new FileReader();
-
-                reader.onload = function (e) {
-                    const text = e.target.result;
-
-                    let jsonPayload = JSON.parse(text);
-
+          },
+          confirm(json) {
+            this.$confirm.require({
+                message: 'Do you want to clear this BACnet server point? This action is not reversible',
+                header: 'Delete Confirmation',
+                icon: 'pi pi-info-circle',
+                acceptClass: 'p-button-danger',
+                accept: () => {
+                    //handle accept 
+                    let app = this;
                     $.ajax({
                         type: "POST",
-                        url: '/bitpool-bacnet-data/updateDeviceList',
+                        url: '/bitpool-bacnet-data/clearBacnetServerPoint',
                         dataType: 'json',
                         contentType: 'application/json',
-                        data: JSON.stringify(jsonPayload),
+                        data: JSON.stringify(json),
                         success: function (result) {
+                            app.getServerObjects();
                         },
                         timeout: 10000
                     });
-
-                };
-
-                reader.readAsText(input);
+                },
+                reject: () => {
+                    //handle reject
+                }
             });
-
-            $("#file-export").click(function (params) {
-                $.ajax({
-                    url: '/bitpool-bacnet-data/getDeviceList',
-                    success: function (deviceList) {
-                        let data = "text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(deviceList));
-                        let aEle = document.getElementById("exportJSON");
-                        aEle.setAttribute("href", "data:" + data);
-                        aEle.setAttribute("download", "bitpool-bacnet-devices.json");
-                        aEle.click();
-                    },
-                    timeout: 10000
-                });
-            });
+          },
+          getServerObjects() {
+            let app = this;
+            this.nodeService.getBacnetServerPoints().then(function (result) {
+                app.serverObjects = result;
+            })
+          },
+          formatObjectName(name) {
+            //return shortened point name if longer than 50 characters
+            if(name.length > 45) {
+              return name.slice(0, 45).concat("...");
+            } 
+            return name;
+          }
         },
-        oneditsave: function (test) {
-            let node = this;
+        components: {
+          "p-button": primevue.button,
+          "p-confirm-dialog": primevue.confirmdialog,
+          "p-confirm-popup": primevue.confirmpopup,
+        },
+      };
 
-            document.getElementById("node-input-discover_polling_schedule").value = getTimePeriodInSeconds(
-                document.getElementById("node-input-discover_polling_schedule_value").value,
-                document.getElementById("node-input-discover_polling_schedule_options").value
-            );
+      let vueapp = createApp(App);
+      vueapp.use(primevue.config.default);
+      vueapp.use(primevue.confirmpopup);
+      vueapp.use(primevue.confirmationservice);
+      node.vm1 = vueapp.mount("#serverParent");
 
-            document.getElementById("node-input-device_read_schedule").value = getTimePeriodInSeconds(
-                document.getElementById("node-input-device_read_schedule_value").value,
-                document.getElementById("node-input-device_read_schedule_options").value
-            );
+      $("#file-upload").on("change", function (event) {
+        const input = event.target.files[0];
+        const reader = new FileReader();
+
+        reader.onload = function (e) {
+          const text = e.target.result;
+
+          let jsonPayload = JSON.parse(text);
+
+          $.ajax({
+            type: "POST",
+            url: "/bitpool-bacnet-data/updateDeviceList",
+            dataType: "json",
+            contentType: "application/json",
+            data: JSON.stringify(jsonPayload),
+            success: function (result) {},
+            timeout: 10000,
+          });
+        };
+
+        reader.readAsText(input);
+      });
+
+      $("#file-export").click(function (params) {
+        $.ajax({
+          url: "/bitpool-bacnet-data/getDeviceList",
+          success: function (deviceList) {
+            let data = "text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(deviceList));
+            let aEle = document.getElementById("exportJSON");
+            aEle.setAttribute("href", "data:" + data);
+            aEle.setAttribute("download", "bitpool-bacnet-devices.json");
+            aEle.click();
+          },
+          timeout: 10000,
+        });
+      });
+
+      //device scan range matrix
+      $("#node-input-deviceIdRangeMatrix-container")
+        .css("min-width", "350px")
+        .editableList({
+          addItem: function (row, index, data) {
+            row.css({ overflow: "none", whiteSpace: "nowrap" });
+            let rowData = {};
+            if (data && typeof data.enabled == "boolean" && typeof data.start == "string" && typeof data.end == "string") {
+              if (data.enabled === true) {
+                rowData.enabled = "checked";
+              } else if (data.enabled === false) {
+                rowData.enabled = "";
+              }
+              rowData.start = data.start;
+              rowData.end = data.end;
+            } else {
+              rowData.enabled = "";
+              rowData.start = "";
+              rowData.end = "";
+            }
+
+            let fragment = document.createDocumentFragment();
+            let htmlRow = `
+                <div class="form-row deviceIdRangeEntry" id="node-input-device_id_range">
+                    <label for="node-input-device_id_range_entry"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.device_id_range_entry"></span>Enabled</label>
+                    <input type="checkbox" id="node-input-device_id_range_entry_enabled" style="width: auto;" ${rowData.enabled} />
+                    <a style="padding-left: 60px;">Start: </a><input type="number" id="node-input-device_id_range_entry_start" style="width: 125px;" min="0" max="4194303" value="${rowData.start}" />
+                    <a style="padding-left: 35px;">End: </a><input type="number" id="node-input-device_id_range_entry_end" style="width: 125px;" min="1" max="4194303" value="${rowData.end}" />
+                </div>`;
+
+            $(htmlRow).appendTo(fragment);
+            row[0].appendChild(fragment);
+            document.getElementById("node-input-reg-block-count").innerHTML = $(
+              "#node-input-deviceIdRangeMatrix-container"
+            ).editableList("length");
+          },
+          removeItem: function (data) {
+            document.getElementById("node-input-reg-block-count").innerHTML = $(
+              "#node-input-deviceIdRangeMatrix-container"
+            ).editableList("length");
+          },
+          removable: true,
+          scrollOnAdd: false,
+          header: $("<div style='display:flex; padding:10px 10px 0px 5px; column-gap: 10px'>").append(
+            $.parseHTML(
+              "<div><p>Count:</p></div><div style='color: gray'><label id='node-input-reg-block-count'>0</label> <span style='padding-left: 85px;'>Device ID Range(s)</span> </div>"
+            )
+          ),
+          buttons: [
+            {
+              label: "json",
+              icon: "fa fa-share",
+              title: "Export tags as JSON to browser",
+              click: function (evt) {
+                var deviceRangeRegisters = $("#node-input-deviceIdRangeMatrix-container").editableList("items");
+                var mapItems = [];
+                deviceRangeRegisters.each(function (i) {
+                  var registerMap = $(this);
+                  var mapItem = {
+                    enabled: registerMap.find("#node-input-device_id_range_entry_enabled").val(),
+                    start: registerMap.find("#node-input-device_id_range_entry_start").val(),
+                    end: registerMap.find("#node-input-device_id_range_entry_end").val(),
+                  };
+                  mapItems.push(mapItem);
+                });
+                var oMyBlob = new Blob(
+                  [
+                    JSON.stringify(mapItems, null, 0)
+                      .replaceAll(/\[{/gi, "[\n{")
+                      .replaceAll(/}\]/gi, "}\n]")
+                      .replaceAll(/},/gi, "},\n")
+                      .replaceAll(/{/gi, "  {"),
+                  ],
+                  { type: "text/json" }
+                );
+                window.open(URL.createObjectURL(oMyBlob));
+              },
+            },
+            {
+              label: "delete",
+              icon: "fa-regular fa-trash-can",
+              title: "Delete all registers",
+              click: function (evt) {
+                $("#node-input-deviceIdRangeMatrix-container").editableList("empty");
+                document.getElementById("node-input-reg-block-count").innerHTML = 0;
+              },
+            },
+          ],
+        });
+
+      if (node.deviceRangeRegisters.length > 0) {
+        for (var i = 0; i < node.deviceRangeRegisters.length; i++) {
+          $("#node-input-deviceIdRangeMatrix-container").editableList("addItem", node.deviceRangeRegisters[i]);
         }
-    });
+      } else {
+        $("#node-input-deviceIdRangeMatrix-container").editableList("addItem", {
+          enabled: true,
+          start: "0",
+          end: "4194303",
+        });
+      }
 
-    function getTimePeriodInSeconds(value, interval) {
-        switch (interval) {
-            case "Seconds":
-                return value;
-                break;
-            case "Minutes":
-                return value * 60;
-                break;
-            case "Hours":
-                return value * 3600;
-                break;
-            case "Days":
-                return value * 86400;
-                break;
-            default:
-            // code block
-        }
+      document.getElementById("node-input-reg-block-count").innerHTML = node.deviceRangeRegisters.length;
+    },
+    oneditsave: function () {
+      let node = this;
+
+      document.getElementById("node-input-discover_polling_schedule").value = getTimePeriodInSeconds(
+        document.getElementById("node-input-discover_polling_schedule_value").value,
+        document.getElementById("node-input-discover_polling_schedule_options").value
+      );
+
+      document.getElementById("node-input-device_read_schedule").value = getTimePeriodInSeconds(
+        document.getElementById("node-input-device_read_schedule_value").value,
+        document.getElementById("node-input-device_read_schedule_options").value
+      );
+
+      node.deviceRangeRegisters = [];
+      let deviceRanges = $("#node-input-deviceIdRangeMatrix-container").editableList("items");
+      deviceRanges.each(function (i) {
+        let map = $(this);
+        let mapItem = {
+          enabled: map.find("#node-input-device_id_range_entry_enabled").is(":checked"),
+          start: map.find("#node-input-device_id_range_entry_start").val(),
+          end: map.find("#node-input-device_id_range_entry_end").val(),
+        };
+        node.deviceRangeRegisters.push(mapItem);
+      });
+    },
+  });
+
+  function getTimePeriodInSeconds(value, interval) {
+    switch (interval) {
+      case "Seconds":
+        return value;
+        break;
+      case "Minutes":
+        return value * 60;
+        break;
+      case "Hours":
+        return value * 3600;
+        break;
+      case "Days":
+        return value * 86400;
+        break;
+      default:
+      // code block
     }
-
+  }
 </script>
 
 <script type="text/html" data-template-name="Bacnet-Gateway">
-        <style>
-            .deviceButton {
-                width: -webkit-fill-available;
-                background: space;
-                background-color: transparent !important;
-                color: inherit; 
-                border: none;
-                display: flex;
-                align-items: center;
-                padding-top: 20px;
-            }
-            .point {
-                padding-left: 50px
-            }
-            .pointButton {
-                color: inherit; 
-                border: none;
-                display: flex;
-                align-items: center;
-            }
-            .networkTreeContent {
-                margin-top: 20px;
-                margin-left: 50px;
-            }
-            .p-confirm-dialog-accept > .p-button-label, .bacnetServerRebuildSchedule_clearButton > .p-button-label, .bacnetServerPoint_clearButton > .p-button-label {
-                color: white;
-            }
-            .red-ui-editor label {
-                font-size: 12px;
-            }
-            .bacnetServerRebuildSchedule_clearButton {
-                box-shadow: 0 0 0 0.2rem #edacac !important;
-                width: 200px;
-                border-radius: 3px;
-                margin-left: 180px !important;
-            }
-            .bacnetServerPoint_clearButton {
-                box-shadow: 0 0 0 0.2rem #edacac !important;
-                width: 200px;
-                border-radius: 3px;
-                margin-left: 340px !important;
-                margin-top: -75px !important;
-            }
-            .clear_server_span {
-                width: 0px;
-            }
-            .read_server_parent_div {
-                display: flex;
-                align-items: center;
-                justify-content: space-around;
-            }
-            button {
-                height: 34px;
-                border-radius: 5px !important;
-            }
-            .inputStyle {
-                color: var(--red-ui-workspace-button-color-hover) !important;
-                background: var(--red-ui-workspace-button-background-hover);
-                border: 1px solid var(--red-ui-secondary-border-color);
-                border-radius: 5px !important;
-            }
-            input[type="file"] {
-                display: none !important;
-            }
-            .custom-file-upload {
-                border: 1px solid var(--red-ui-secondary-border-color);
-                border-radius: 5px !important;
-                padding: 6px 12px;
-                cursor: pointer;
-            }
-            .uploadButton {
-                margin-bottom: 5px !important;
-                margin-left: 30px !important;
-            }
+  <style>
+    .deviceButton {
+      width: -webkit-fill-available;
+      background: space;
+      background-color: transparent !important;
+      color: inherit;
+      border: none;
+      display: flex;
+      align-items: center;
+      padding-top: 20px;
+    }
+    .point {
+      padding-left: 50px;
+    }
+    .pointButton {
+      color: inherit;
+      border: none;
+      display: flex;
+      align-items: center;
+    }
+    .networkTreeContent {
+      margin-top: 20px;
+      margin-left: 50px;
+    }
+    .p-confirm-dialog-accept > .p-button-label,
+    .bacnetServerRebuildSchedule_clearButton > .p-button-label {
+      color: white;
+    }
+    .red-ui-editor label {
+      font-size: 12px;
+    }
+    .bacnetServerRebuildSchedule_clearButton {
+      box-shadow: 0 0 0 0.2rem #edacac !important;
+      width: 200px;
+      border-radius: 3px;
+      margin-left: 140px !important;
+    }
+    .clearServerContainer {
+      position: absolute;
+      top: 55px;
+      margin-left: 280px;
+    }
+    .bacnetServerPoint_clearButton {
+        box-shadow: 0 0 0 0.2rem #edacac !important;
+        width: 200px;
+        border-radius: 3px;
+        margin-left: 420px  !important;
+        margin-top: -75px !important;
+    }
+    .bacnetServerPoint_clearButton > .p-button-label {
+      color: white;
+    }
+    .clear_server_span {
+      width: 0px;
+    }
+    .read_server_parent_div {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-around;
+      flex-direction: column;
+    }
+    button {
+      height: 34px;
+      border-radius: 5px !important;
+    }
+    .inputStyle {
+      color: var(--red-ui-workspace-button-color-hover) !important;
+      background: var(--red-ui-workspace-button-background-hover);
+      border: 1px solid var(--red-ui-secondary-border-color);
+      border-radius: 5px !important;
+    }
+    input[type="file"] {
+      display: none !important;
+    }
+    .custom-file-upload {
+      border: 1px solid var(--red-ui-secondary-border-color);
+      border-radius: 5px !important;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+    .uploadButton {
+      margin-bottom: 5px !important;
+      margin-left: 30px !important;
+    }
+    .point_name {
+      font-weight: bold;
+    }
+  </style>
 
-        </style>
+  <div class="form-row node-input-read-tabs-row">
+    <ul style="min-width:600px;margin-bottom:20px" id="node-input-read-tabs"></ul>
+  </div>
 
-        <div class='form-row node-input-read-tabs-row'>
-            <ul style='min-width:600px;margin-bottom:20px' id='node-input-read-tabs'></ul>
+  <div id="node-input-tabs-content">
+    <div id="read-properties-tab" style="display:none">
+      <div class="form-row">
+        <label for="node-input-name"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.name"></span> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name" />
+      </div>
+
+      <div class="form-row node-input-read-tabs-row">
+        <ul style="min-width:600px;margin-bottom:20px" id="node-input-read-tabs"></ul>
+      </div>
+
+      <div class="form-row" id="networkInterfaceDiv">
+        <label for="node-input-local_device_address"
+          ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.local_device_address"></span> Network
+          Interface</label
+        >
+        <select id="node-input-local_device_address" style="width: 70%;"></select>
+      </div>
+
+      <div class="form-row">
+        <label for="node-input-broadCastAddr"
+          ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.broadCastAddr"></span> Broadcast Address
+        </label>
+        <input type="text" id="node-input-broadCastAddr" placeholder="255.255.255.255" />
+      </div>
+
+      <div class="form-row">
+        <label for="node-input-local_device_port"
+          ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.local_device_port"></span> Local Device Port</label
+        >
+        <input type="text" id="node-input-local_device_port" placeholder="47808" />
+      </div>
+
+      <div class="form-row">
+        <label for="node-input-deviceId"
+          ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.deviceId"></span> Device ID
+        </label>
+        <input type="text" id="node-input-deviceId" placeholder="817001" />
+      </div>
+
+      <div class="form-row node-input-deviceIdRangeMatrix-container-row">
+        <ol id="node-input-deviceIdRangeMatrix-container" style="width: 600px;"></ol>
+      </div>
+    </div>
+
+    <div id="read-discover-tab" style="display:none">
+      <div class="form-row">
+        <label for="node-input-apduTimeout"
+          ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.apduTimeout"></span>Apdu Timeout</label
+        >
+        <input type="text" id="node-input-apduTimeout" placeholder="10000" />
+      </div>
+
+      <div class="form-row">
+        <label for="node-input-apduSize"
+          ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.apduSize"></span>Max Apdu Size</label
+        >
+        <select id="node-input-apduSize">
+          <option value="0">0</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label for="node-input-maxSegments"
+          ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.maxSegments"></span>Max Segments</label
+        >
+        <select id="node-input-maxSegments">
+          <option value="0">0</option>
+          <option value="0x10">0x10</option>
+          <option value="0x20">0x20</option>
+          <option value="0x30">0x30</option>
+          <option value="0x40">0x40</option>
+          <option value="0x50">0x50</option>
+          <option value="0x60">0x60</option>
+          <option value="0x70">0x70</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label for="node-input-retries"
+          ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.retries"></span>Number of Retries</label
+        >
+        <select id="node-input-retries">
+          <option value="0">0</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="10">10</option>
+        </select>
+      </div>
+
+      <div class="form-row" style="align-items: center; display: flex;">
+        <label for="node-input-discover_polling_schedule_value"
+          ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.bacnet_polling_schedule"></span>Device Discover
+          Frequency</label
+        >
+        <p style="margin-right: 5px; margin-bottom: 0px; padding-left: 7px;">Every</p>
+        <input type="text" id="node-input-discover_polling_schedule" style="display: none;" />
+        <input
+          type="text"
+          id="node-input-discover_polling_schedule_value"
+          placeholder="5"
+          style="width: 70px; margin-right: 5px;" />
+        <select name="timePeriod" id="node-input-discover_polling_schedule_options" style="width: 120px; margin-right: 5px;">
+          <option value="Seconds">Seconds</option>
+          <option value="Minutes">Minutes</option>
+          <option value="Hours">Hours</option>
+          <option value="Days">Days</option>
+        </select>
+      </div>
+
+      <div class="form-row deviceIdRange">
+        <label for="node-input-device_id_range"
+          ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.device_id_range"></span>Point Discovery Range
+        </label>
+        <input type="checkbox" id="node-input-manual_instance_range_enabled" style="width: auto;" />
+        <a style="padding-left: 60px;">Start: </a
+        ><input type="number" id="node-input-manual_instance_range_start" style="width: 125px;" min="0" max="100000" />
+        <a style="padding-left: 35px;">End: </a
+        ><input type="number" id="node-input-manual_instance_range_end" style="width: 125px;" min="1" max="100000" />
+      </div>
+
+      <div class="form-row" style="align-items: center; display: flex;">
+        <label for="node-input-device_read_schedule_value"
+          ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.device_read_schedule"></span>Object Discover
+          Frequency</label
+        >
+        <p style="margin-right: 5px; margin-bottom: 0px; padding-left: 7px;">Every</p>
+        <input type="text" id="node-input-device_read_schedule" style="display: none;" />
+        <input
+          type="text"
+          id="node-input-device_read_schedule_value"
+          placeholder="5"
+          style="width: 70px; margin-right: 5px;" />
+        <select name="timePeriod" id="node-input-device_read_schedule_options" style="width: 120px; margin-right: 5px;">
+          <option value="Seconds">Seconds</option>
+          <option value="Minutes">Minutes</option>
+          <option value="Hours">Hours</option>
+          <option value="Days">Days</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label for="node-input-toLog"> Log found device: </label>
+        <input type="checkbox" id="node-input-toLogIam" style="width: auto;" />
+      </div>
+
+      <div class="form-row">
+        <label for="node-input-logErrorToConsole"> Log BACnet errors to console: </label>
+        <input type="checkbox" id="node-input-logErrorToConsole" style="width: auto;" />
+      </div>
+
+      <div class="form-row" id="importDeviceList">
+        <label> Device List: </label>
+        <label for="file-upload" class="custom-file-upload">
+          <i class="fa fa-cloud-upload" id="fileLabel"></i> <a id="fileLabelText" style="padding-left: 10px;">Import</a>
+        </label>
+        <input type="file" id="file-upload" accept="application/JSON" class="inputStyle" style="width: 258px;" />
+        <label for="file-export" class="custom-file-upload" style="margin-left: 30px;">
+          <i class="fa fa-cloud-download" id="fileLabel"></i> <a id="fileLabelText" style="padding-left: 10px;">Export</a>
+        </label>
+        <input id="file-export" class="inputStyle" style="width: 258px; display: none;" />
+        <a id="exportJSON" style="display: none"></a>
+      </div>
+    </div>
+
+    <div id="read-server-tab" style="display:none">
+
+      <div class="form-row">
+        <label for="node-input-serverEnabled"> Enabled: </label>
+        <input type="checkbox" id="node-input-serverEnabled" style="width: auto;" />
+      </div>
+
+      <div class="read_server_parent_div" id="serverParent">
+
+        <div class="form-row clearServerContainer" id="clearServerContainer" style="align-items: center; display: flex;">
+          <p-button
+            class="bacnetServerRebuildSchedule_clearButton p-button-danger"
+            @click="confirmAll($event)"
+            label="Reinitialize Server">
+          </p-button>
         </div>
 
-        <div id='node-input-tabs-content'>
-            <div id='read-properties-tab' style='display:none'>
-                <div class="form-row">
-                    <label for="node-input-name"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.name"></span> Name</label>
-                    <input type="text" id="node-input-name" placeholder="Name">
-                </div>
-            
-                <div class='form-row node-input-read-tabs-row'>
-                    <ul style='min-width:600px;margin-bottom:20px' id='node-input-read-tabs'></ul>
-                </div>
-    
-                <div class="form-row" id="networkInterfaceDiv">
-                    <label for="node-input-local_device_address"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.local_device_address"></span> Network Interface</label>
-                    <select id="node-input-local_device_address" style="width: 70%;" >
-                    </select>
-                </div>
-    
-                <div class="form-row">
-                    <label for="node-input-broadCastAddr"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.broadCastAddr"></span> Broadcast Address </label>
-                    <input type="text" id="node-input-broadCastAddr" placeholder="255.255.255.255">
-                </div>
-    
-                <div class="form-row">
-                    <label for="node-input-local_device_port"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.local_device_port"></span> Local Device Port</label>
-                    <input type="text" id="node-input-local_device_port" placeholder="47808">
-                </div>
-    
-                <div class="form-row">
-                    <label for="node-input-deviceId"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.deviceId"></span> Device ID </label>
-                    <input type="text" id="node-input-deviceId" placeholder="817001">
-                </div>
-    
-                <div class="form-row deviceIdRange">
-                    <label for="node-input-device_id_range"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.device_id_range"></span> Device ID Range </label>
-                    <input type="checkbox" id="node-input-device_id_range_enabled" style="width: auto;"/>
-                    <a style="padding-left: 60px;">Start: </a><input type="number" id="node-input-device_id_range_start" style="width: 125px;" min="0" max="4194303"/>
-                    <a style="padding-left: 35px;">End: </a><input type="number" id="node-input-device_id_range_end" style="width: 125px;" min="1" max="4194303"/>
-                </div>
-            </div>
-
-            <div id='read-discover-tab' style='display:none'>
-                <div class="form-row">
-                    <label for="node-input-apduTimeout"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.apduTimeout"></span>Apdu Timeout</label>
-                    <input type="text" id="node-input-apduTimeout" placeholder="10000">
-                </div>
-    
-                <div class="form-row">
-                    <label for="node-input-apduSize"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.apduSize"></span>Max Apdu Size</label>
-                    <select id="node-input-apduSize">
-                        <option value="0">0</option>
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4</option>
-                        <option value="5">5</option>
-                    </select>
-                </div>
-    
-                <div class="form-row">
-                    <label for="node-input-maxSegments"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.maxSegments"></span>Max Segments</label>
-                    <select id="node-input-maxSegments">
-                        <option value="0">0</option>
-                        <option value="0x10">0x10</option>
-                        <option value="0x20">0x20</option>
-                        <option value="0x30">0x30</option>
-                        <option value="0x40">0x40</option>
-                        <option value="0x50">0x50</option>
-                        <option value="0x60">0x60</option>
-                        <option value="0x70">0x70</option>
-                    </select>
-                </div>
-    
-                <div class="form-row">
-                    <label for="node-input-retries"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.retries"></span>Number of Retries</label>
-                    <select id="node-input-retries">
-                        <option value="0">0</option>
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4</option>
-                        <option value="5">5</option>
-                        <option value="6">6</option>
-                        <option value="7">7</option>
-                        <option value="8">8</option>
-                        <option value="9">9</option>
-                        <option value="10">10</option>
-                    </select>
-                </div>
-
-                <div class="form-row" style="align-items: center; display: flex;">
-                    <label for="node-input-discover_polling_schedule_value"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.bacnet_polling_schedule"></span>Device Discover Frequency</label>
-                    <p style="margin-right: 5px; margin-bottom: 0px; padding-left: 7px;">Every</p>
-                    <input type="text" id="node-input-discover_polling_schedule" style="display: none;">
-                    <input type="text" id="node-input-discover_polling_schedule_value" placeholder="5" style="width: 70px; margin-right: 5px;">
-                    <select name="timePeriod" id="node-input-discover_polling_schedule_options" style="width: 120px; margin-right: 5px;">
-                        <option value="Seconds">Seconds</option>
-                        <option value="Minutes">Minutes</option>
-                        <option value="Hours">Hours</option>
-                        <option value="Days">Days</option>
-                    </select>
-                </div>
-
-                <div class="form-row deviceIdRange">
-                    <label for="node-input-device_id_range"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.device_id_range"></span>Point Discovery Range </label>
-                    <input type="checkbox" id="node-input-manual_instance_range_enabled" style="width: auto;"/>
-                    <a style="padding-left: 60px;">Start: </a><input type="number" id="node-input-manual_instance_range_start" style="width: 125px;" min="0" max="100000"/>
-                    <a style="padding-left: 35px;">End: </a><input type="number" id="node-input-manual_instance_range_end" style="width: 125px;" min="1" max="100000"/>
-                </div>
-
-                <div class="form-row" style="align-items: center; display: flex;">
-                    <label for="node-input-device_read_schedule_value"><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.device_read_schedule"></span>Object Discover Frequency</label>
-                    <p style="margin-right: 5px; margin-bottom: 0px; padding-left: 7px;">Every</p>
-                    <input type="text" id="node-input-device_read_schedule" style="display: none;">
-                    <input type="text" id="node-input-device_read_schedule_value" placeholder="5" style="width: 70px; margin-right: 5px;">
-                    <select name="timePeriod" id="node-input-device_read_schedule_options" style="width: 120px; margin-right: 5px;">
-                        <option value="Seconds">Seconds</option>
-                        <option value="Minutes">Minutes</option>
-                        <option value="Hours">Hours</option>
-                        <option value="Days">Days</option>
-                    </select>
-                </div>
-    
-                <div class="form-row">
-                    <label for="node-input-toLog">
-                        Log found device: 
-                    </label>
-                    <input type="checkbox" id="node-input-toLogIam" style="width: auto;"/>
-                </div>
-
-                <div class="form-row">
-                    <label for="node-input-logErrorToConsole">
-                        Log BACnet errors to console:
-                    </label>
-                    <input type="checkbox" id="node-input-logErrorToConsole" style="width: auto;"/>
-                </div>
-
-                <div class="form-row" id="importDeviceList">
-                    <label>
-                        Device List:
-                    </label>
-                    <label for="file-upload" class="custom-file-upload">
-                        <i class="fa fa-cloud-upload" id="fileLabel"></i> <a id="fileLabelText" style="padding-left: 10px;">Import</a>
-                    </label>
-                    <input type="file" id="file-upload" accept="application/JSON" class="inputStyle" style="width: 258px;">
-                    <label for="file-export" class="custom-file-upload" style="margin-left: 30px;">
-                        <i class="fa fa-cloud-download" id="fileLabel"></i> <a id="fileLabelText" style="padding-left: 10px;">Export</a>
-                    </label>
-                    <input id="file-export" class="inputStyle" style="width: 258px; display: none;">
-                    <a id="exportJSON" style="display: none"></a>
-                </div>
-            </div>
-
-            <div id='read-server-tab' style='display:none'>
-                <div class="form-row">
-                    <label for="node-input-serverEnabled">
-                        Enabled:
-                    </label>
-                    <input type="checkbox" id="node-input-serverEnabled" style="width: auto;" />
-                </div>
-                
-                <div class="form-row" id="clearServerContainer">
-                    <label>Server Objects</label>
-                    <div v-for="object in serverObjects" :key="object.name">
-                        <h3>[{{ object.type }}{{ object.instance }}]    {{ object.name }}</h3>
-                        <p-button class="bacnetServerPoint_clearButton p-button-danger" @click="confirm({ 
-                            type: object.type, 
-                            instance: object.instance, 
-                            name: object.name
-                        })" label="Remove Object"></p-button>
-                    </div>
-                </div>
-                
-                <!--<div class="form-row" id="clearServerContainer">
-                    <label for="node-input-bacnetServerRebuildSchedule_value" class="clear_server_span"><i class="icon-tag"></i> <span
-                            data-i18n="bitpool-bacnet.label.bacnetServerRebuildSchedule"></span> </label>
-                    <p-button class="bacnetServerRebuildSchedule_clearButton p-button-danger" @click="confirm($event)"
-                        label="Reinitialize Server"></p-button>
-                </div>-->
-                
-            </div>
-
-    </script>
+        <div class="form-row" id="clearServerPointContainer">
+          <label>Server Objects</label>
+          <div v-for="object in serverObjects" :key="object.name">
+              <div><p class="point_name">[{{ object.type }}{{ object.instance }}]    {{ formatObjectName(object.name) }}</p></div>
+              <p-button class="bacnetServerPoint_clearButton p-button-danger" @click="confirm({
+                  type: object.type, 
+                  instance: object.instance, 
+                  name: object.name
+              })" label="Remove Object"></p-button>
+          </div>
+        </div> 
+      </div>
+    </div>
+  </div>
+</script>
 <script type="text/html" data-help-name="Bacnet-Gateway">
-        <p> This node is the brain of the Bitpool BACnet node collection. It acts are the gateway for all BACnet communications and functionality for the collection. </p>
-    
-            <h3><strong>Gateway Tab</strong></h3>
-            <ul class="node-ports">
-                <li>Network Interface - the desired interface for the bacstack client to bind to. This interface must not have any other BACnet clients bound to it.</li>
-                <li>Broadcast Address - the desired subnet for global msgs to be broadcast and recieved on. This should be as strict as possible. Use 255.255.255.255 if unsure.</li>
-                <li>Local Device Port - the port to be used for BACnet comms. Default is 47808</li>
+  <p>
+    This node is the brain of the Bitpool BACnet node collection. It acts are the gateway for all BACnet communications and
+    functionality for the collection.
+  </p>
 
-            </ul>
+  <h3><strong>Gateway Tab</strong></h3>
+  <ul class="node-ports">
+    <li>
+      Network Interface - the desired interface for the bacstack client to bind to. This interface must not have any other
+      BACnet clients bound to it.
+    </li>
+    <li>
+      Broadcast Address - the desired subnet for global msgs to be broadcast and recieved on. This should be as strict as
+      possible. Use 255.255.255.255 if unsure.
+    </li>
+    <li>Local Device Port - the port to be used for BACnet comms. Default is 47808</li>
+  </ul>
 
-            <h3><strong>Discovery Tab</strong></h3>
-            <ul class="node-ports">
-                <li>APDU Timeout - BACnet msg timeout option</li>
-                <li>Max APDU Size - BACnet max apdu size</li>
-                <li>Max Segments - BACnet max segments</li>
-                <li>Global Discover Frequency - the frequency at which the gateway issues global WhoIs BACnet commands. This should be limited to the least amount possible, as over-loading a network can be a serious issue with BACnet commmunications.</li>
-                <li>Manual Point Discovery Instance Range - if a BACnet device doesnt have a Object list (BACnet objectType:propertyId - 8:76), the this bacnet client will enter into manual discovery mode, where it iterates through types and instnace ranges. This range can be used to limit this manual scanning </li>
-                <li>Log Device Found - toggles logging of found devices to the node-red debug tab.</li>
-                <li>Log BACnet Errors to Console - toggles logging of BACnet related errors to the node-red console</li>
-            </ul>
+  <h3><strong>Discovery Tab</strong></h3>
+  <ul class="node-ports">
+    <li>APDU Timeout - BACnet msg timeout option</li>
+    <li>Max APDU Size - BACnet max apdu size</li>
+    <li>Max Segments - BACnet max segments</li>
+    <li>
+      Global Discover Frequency - the frequency at which the gateway issues global WhoIs BACnet commands. This should be
+      limited to the least amount possible, as over-loading a network can be a serious issue with BACnet commmunications.
+    </li>
+    <li>
+      Manual Point Discovery Instance Range - if a BACnet device doesnt have a Object list (BACnet objectType:propertyId -
+      8:76), the this bacnet client will enter into manual discovery mode, where it iterates through types and instnace
+      ranges. This range can be used to limit this manual scanning
+    </li>
+    <li>Log Device Found - toggles logging of found devices to the node-red debug tab.</li>
+    <li>Log BACnet Errors to Console - toggles logging of BACnet related errors to the node-red console</li>
+  </ul>
 
-            <h3><strong>Server Tab</strong></h3>
-            <p>This section provides the ability to simulate a BACnet device and BACnet points using node-red. </p>
-            <p>Injecting a msg.topic and msg.payload into the gateway node will create a virtual point that can be discovered by other devices via BACnet/IP</p>
-            <p>This node only supports 2 BACnet object types, Analog Value - to show numeric data, and a Character String - to show string data.</p>
-            <ul class="node-ports">
-                <li>Enabled - toggles whether or not the local BACnet server is started or not. </li>
-                <li>Clear Server Points - a schedule for the locally generated BACnet points to get cleared from the node object store</li>
-            </ul>
+  <h3><strong>Server Tab</strong></h3>
+  <p>This section provides the ability to simulate a BACnet device and BACnet points using node-red.</p>
+  <p>
+    Injecting a msg.topic and msg.payload into the gateway node will create a virtual point that can be discovered by other
+    devices via BACnet/IP
+  </p>
+  <p>
+    This node only supports 2 BACnet object types, Analog Value - to show numeric data, and a Character String - to show
+    string data.
+  </p>
+  <ul class="node-ports">
+    <li>Enabled - toggles whether or not the local BACnet server is started or not.</li>
+    <li>
+      Clear Server Points - a schedule for the locally generated BACnet points to get cleared from the node object store
+    </li>
+  </ul>
 
-            <h3><strong>Examples</strong></h3>
-            <p>For example flows, please use the examples section for this node. These examples can be found at: Node-red hamburger menu on top right -> Import -> Examples -> @bitpoolos/edge-bacnet</p>
-            <p>To find captured examples of settings and flows, please go to our wiki <a href="https://wiki.bitpool.com/en/edge/apps/bitpool-edge/nr-bacnet">here</a></p>
+  <h3><strong>Examples</strong></h3>
+  <p>
+    For example flows, please use the examples section for this node. These examples can be found at: Node-red hamburger menu
+    on top right -> Import -> Examples -> @bitpoolos/edge-bacnet
+  </p>
+  <p>
+    To find captured examples of settings and flows, please go to our wiki
+    <a href="https://wiki.bitpool.com/en/edge/apps/bitpool-edge/nr-bacnet">here</a>
+  </p>
 
-    
-            <h3>Resources:</h3>
-            
-            <p><a href="https://youtu.be/4K7mVxfvfbc">Video Walk-through </a></p>
+  <h3>Resources:</h3>
 
-            <h4><strong>Online Docs:</strong></h4>
-            <ul type="1">
-              <li><a href="https://www.bitpool.com/">bitpool.com</a> - check us out here.</li>
-              <li><a href="https://app.bitpool.com/">app.bitpool.com</a> - set up your account.</li>
-              <li><a href="https://wiki.bitpool.com/">wiki.bitpool.com</a> - find more documentation.</li>
-              <li><a href="https://bacnet.org/">BACnet</a> - find more about the protocol.</li>
-            </ul>
-    </script>
+  <p><a href="https://youtu.be/4K7mVxfvfbc">Video Walk-through </a></p>
+
+  <h4><strong>Online Docs:</strong></h4>
+  <ul type="1">
+    <li><a href="https://www.bitpool.com/">bitpool.com</a> - check us out here.</li>
+    <li><a href="https://app.bitpool.com/">app.bitpool.com</a> - set up your account.</li>
+    <li><a href="https://wiki.bitpool.com/">wiki.bitpool.com</a> - find more documentation.</li>
+    <li><a href="https://bacnet.org/">BACnet</a> - find more about the protocol.</li>
+  </ul>
+</script>

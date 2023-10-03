@@ -96,7 +96,7 @@
                         });
                     },
                     addAllClicked(slotProps) {
-
+                        let app = this;
                         //update UI 
                         if (this.writeDevices) {
                             let foundIndex = this.writeDevices.findIndex(ele => ele.key == slotProps.node.key && ele.label == slotProps.node.label);
@@ -115,7 +115,8 @@
                                 return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
                             }
                         });
-                        let key = `${device.address}-${device.deviceId}`;
+                        let deviceAddress = app.getDeviceAddress(device.address);
+                        let key = `${deviceAddress}-${device.deviceId}`;
                         let points = this.pointList[key];
 
                         if (!this.pointsToWrite[key] || typeof this.pointsToWrite[key] == 'undefined') {
@@ -131,6 +132,7 @@
                         node.hiddenDeployToggle = !node.prevHiddenToggleState;
                     },
                     removeAllClicked(slotProps) {
+                        let app = this;
                         //update UI
                         if (this.writeDevices.length > 0) {
                             let foundIndex = this.writeDevices.findIndex(ele => ele.key == slotProps.node.key && ele.label == slotProps.node.label);
@@ -146,7 +148,8 @@
                                 return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
                             }
                         });
-                        let key = `${device.address}-${device.deviceId}`;
+                        let deviceAddress = app.getDeviceAddress(device.address);
+                        let key = `${deviceAddress}-${device.deviceId}`;
                         if (this.pointsToWrite[key]) {
                             delete this.pointsToWrite[key];
                         }
@@ -155,7 +158,7 @@
                         node.hiddenDeployToggle = !node.prevHiddenToggleState;
                     },
                     addPointClicked(slotProps) {
-
+                        let app = this;
                         //update UI
                         let parentDeviceName = slotProps.node.parentDevice;
                         let foundDeviceIndex = this.writeDevices ? this.writeDevices.findIndex(ele => ele.label == parentDeviceName) : -1;
@@ -190,7 +193,8 @@
                                 return ele.address == parentDevice.ipAddr && ele.deviceId == parentDevice.deviceId;
                             }
                         });
-                        let key = `${device.address}-${device.deviceId}`;
+                        let deviceAddress = app.getDeviceAddress(device.address);
+                        let key = `${deviceAddress}-${device.deviceId}`;
                         let point = this.pointList[key][slotProps.node.pointName];
                         point.deviceId = device.deviceId;
                         point.deviceAddress = device.address;
@@ -212,6 +216,7 @@
                         node.hiddenDeployToggle = !node.prevHiddenToggleState;
                     },
                     removePointClicked(slotProps) {
+                        let app = this;
                         //update UI
                         let parentDeviceName = slotProps.node.parentDevice;
                         let foundDeviceIndex = this.writeDevices ? this.writeDevices.findIndex(ele => ele.label == parentDeviceName) : -1;
@@ -237,7 +242,8 @@
                                 return ele.address == parentDevice.ipAddr && ele.deviceId == parentDevice.deviceId;
                             }
                         });
-                        let key = `${device.address}-${device.deviceId}`;
+                        let deviceAddress = app.getDeviceAddress(device.address);
+                        let key = `${deviceAddress}-${device.deviceId}`;
                         let point = this.pointList[key][slotProps.node.pointName];
                         point.deviceId = device.deviceId;
 
@@ -254,6 +260,16 @@
 
                         //force a deploy state
                         node.hiddenDeployToggle = !node.prevHiddenToggleState;
+                    },
+                    getDeviceAddress(addr) {
+                        switch(typeof addr) {
+                            case "object":
+                                return addr.address;
+                            case "string":
+                                return addr;
+                            default:    
+                                return addr;
+                        }
                     },
                     isDeviceActive(slotProps) {
                         let app = this;

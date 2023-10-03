@@ -3,8 +3,8 @@
 */
 
 module.exports = function (RED) {
-  const { BacnetClient } = require('./bacnet_client');
-  const { BacnetClientConfig, getIpAddress, doNodeRedRestart } = require('./common');
+  const { BacnetClient } = require("./bacnet_client");
+  const { BacnetClientConfig, getIpAddress } = require("./common");
   const { exec } = require("child_process");
   const { BacnetServer } = require("./bacnet_server.js");
 
@@ -23,19 +23,17 @@ module.exports = function (RED) {
     this.broadCastAddr = config.broadCastAddr;
     this.discover_polling_schedule = config.discover_polling_schedule;
     this.device_read_schedule = config.device_read_schedule;
-    this.device_id_range_enabled = config.device_id_range_enabled;
-    this.device_id_range_start = config.device_id_range_start;
-    this.device_id_range_end = config.device_id_range_end;
-    this.manual_instance_range_enabled = config.manual_instance_range_enabled,
-      this.manual_instance_range_start = config.manual_instance_range_start,
-      this.manual_instance_range_end = config.manual_instance_range_end,
-      this.nodeName = config.name;
+    this.manual_instance_range_enabled = config.manual_instance_range_enabled;
+    this.manual_instance_range_start = config.manual_instance_range_start;
+    this.manual_instance_range_end = config.manual_instance_range_end;
+    this.nodeName = config.name;
     this.toRestartNodeRed = config.toRestartNodeRed;
     this.deviceId = config.deviceId;
     this.logErrorToConsole = config.logErrorToConsole;
     this.bacnetServerEnabled = config.serverEnabled;
     this.retries = config.retries;
     this.bacnetServer = nodeContext.get("bacnetServer") || null;
+    this.deviceRangeRegisters = config.deviceRangeRegisters;
 
     //client and config store
     this.bacnetConfig = nodeContext.get("bacnetConfig");
@@ -56,9 +54,6 @@ module.exports = function (RED) {
       node.maxSegments,
       node.broadCastAddr,
       node.discover_polling_schedule,
-      node.device_id_range_enabled,
-      node.device_id_range_start,
-      node.device_id_range_end,
       node.toRestartNodeRed,
       node.deviceId,
       node.manual_instance_range_enabled,
@@ -70,7 +65,7 @@ module.exports = function (RED) {
 
     nodeContext.set("bacnetConfig", node.bacnetConfig);
 
-    if (typeof node.bacnetClient !== 'undefined') {
+    if (typeof node.bacnetClient !== "undefined") {
       node.bacnetClient.removeAllListeners();
       bindEventListeners();
       node.bacnetClient.reinitializeClient(node.bacnetConfig);
@@ -78,6 +73,8 @@ module.exports = function (RED) {
       node.bacnetClient = new BacnetClient(node.bacnetConfig);
       nodeContext.set("bacnetClient", node.bacnetClient);
     }
+
+    node.bacnetClient.scanMatrix = node.deviceRangeRegisters.filter((ele) => ele.enabled === true);
 
     if (node.bacnetServerEnabled == true && node.bacnetClient && node.bacnetServer) {
       node.bacnetServer.deviceId = node.deviceId;
@@ -87,7 +84,6 @@ module.exports = function (RED) {
 
     if (node.bacnetServerEnabled == true && node.bacnetClient) {
       if (node.bacnetServer == null) {
-
         node.bacnetServer = new BacnetServer(node.bacnetClient, node.deviceId, RED.version());
         nodeContext.set("bacnetServer", node.bacnetServer);
       }
@@ -99,8 +95,8 @@ module.exports = function (RED) {
     node.bacnetClient.removeAllListeners();
 
     // Value response event handler for READ commands
-    node.bacnetClient.on('values', (values, outputType, objectPropertyType) => {
-      if (typeof values !== 'undefined' && Object.keys(values).length) {
+    node.bacnetClient.on("values", (values, outputType, objectPropertyType) => {
+      if (typeof values !== "undefined" && Object.keys(values).length) {
         if (outputType.json && !outputType.mqtt) {
           if (objectPropertyType.fullObject && objectPropertyType.simplePayload) {
             sendSimpleJson(values);
@@ -124,32 +120,35 @@ module.exports = function (RED) {
     });
 
     // Who Is / Iam event handler
-    node.bacnetClient.on('deviceFound', (device) => {
+    node.bacnetClient.on("deviceFound", (device) => {
       if (node.toLogIam) {
         if (device.source) {
-          node.warn(`BACnet-MS/TP device found: ${device.deviceId} - ${device.address} - Network Id: ${device.source.net} - Mac: ${device.source.adr[0]}`);
+          node.warn(
+            `BACnet-MS/TP device found: ${device.deviceId} - ${device.address} - Network Id: ${device.source.net} - Mac: ${device.source.adr[0]}`
+          );
         } else {
           node.warn(`BACnet device found: ${device.deviceId} - ${device.address}`);
         }
       }
     });
 
-    node.bacnetClient.on('bacnetErrorLog', (param1, param2) => {
+    node.bacnetClient.on("bacnetErrorLog", (param1, param2) => {
       logOut(param1, param2);
     });
 
-    if (node.nodeName !== "gateway" &&
+    if (
+      node.nodeName !== "gateway" &&
       node.nodeName !== "" &&
       node.nodeName !== "null" &&
       node.nodeName !== "undefined" &&
-      typeof node.nodeName == "string") {
+      typeof node.nodeName == "string"
+    ) {
       if (node.bacnetServerEnabled == true && node.bacnetClient) {
         node.bacnetServer.setDeviceName(node.nodeName);
       }
     }
 
-    node.on('input', function (msg) {
-
+    node.on("input", function (msg) {
       if (msg.topic && msg.payload !== null) {
         if (node.bacnetServer) {
           node.bacnetServer.addObject(msg.topic, msg.payload);
@@ -157,71 +156,76 @@ module.exports = function (RED) {
       }
 
       if (msg.type == "Read") {
-
         node.bacnetClient.doRead(msg.options, msg.outputType, msg.objectPropertyType, msg._msgid);
-
       } else if (msg.type == "Write") {
-
-        node.bacnetClient.doWrite(msg.value, msg.options).then(function (result) {
-        });
-
+        node.bacnetClient.doWrite(msg.value, msg.options).then(function (result) {});
       } else if (msg.doDiscover == true) {
-
-        node.status({ fill: "blue", shape: "dot", text: "Sending global Who is" })
+        node.status({ fill: "blue", shape: "dot", text: "Sending global Who is" });
 
         node.bacnetClient.globalWhoIs();
 
         setTimeout(() => {
-          node.status({})
+          node.status({});
         }, 2000);
       } else if (msg.payload == "BindEvents") {
         node.bacnetClient.removeAllListeners();
         bindEventListeners();
       } else if (msg.doUpdatePriorityDevices == true && msg.priorityDevices !== null) {
-        node.bacnetClient.updatePriorityQueue(msg.priorityDevices).then(function (result) {
-        }).catch(function (error) {
-          logOut("Error updating priorityQueue: ", error);
-        });
+        node.bacnetClient
+          .updatePriorityQueue(msg.priorityDevices)
+          .then(function (result) {})
+          .catch(function (error) {
+            logOut("Error updating priorityQueue: ", error);
+          });
       }
+    });
 
+    node.on("close", function () {
+      //do nothing
     });
 
     //route handler for network data
-    RED.httpAdmin.get('/bitpool-bacnet-data/getNetworkTree', function (req, res) {
+    RED.httpAdmin.get("/bitpool-bacnet-data/getNetworkTree", function (req, res) {
       if (!node.bacnetClient) {
         logOut("Issue with the bacnetClient: ", node.bacnetClient);
         //no bacnet client present
         //node.status({fill:"red",shape:"dot",text:"Please define client"});
         res.send(false);
       } else {
-        node.bacnetClient.getNetworkTreeData().then(function (result) {
-          res.send(result);
-        }).catch(function (error) {
-          res.send(error);
-          logOut("Error getting network data:  ", error);
-        });
+        node.bacnetClient
+          .getNetworkTreeData()
+          .then(function (result) {
+            res.send(result);
+          })
+          .catch(function (error) {
+            res.send(error);
+            logOut("Error getting network data:  ", error);
+          });
       }
     });
 
     //route handler for rebuild data model command
-    RED.httpAdmin.get('/bitpool-bacnet-data/rebuildDataModel', function (req, res) {
+    RED.httpAdmin.get("/bitpool-bacnet-data/rebuildDataModel", function (req, res) {
       if (!node.bacnetClient) {
         logOut("Issue with the bacnetClient: ", node.bacnetClient);
         //no bacnet client present
         //node.status({fill:"red",shape:"dot",text:"Please define client"});
         res.send(false);
       } else {
-        node.bacnetClient.rebuildDataModel().then(function (result) {
-          res.send(result);
-        }).catch(function (error) {
-          res.send(error);
-          logOut("Error getting network data:  ", error);
-        });
+        node.bacnetClient
+          .rebuildDataModel()
+          .then(function (result) {
+            res.send(result);
+          })
+          .catch(function (error) {
+            res.send(error);
+            logOut("Error getting network data:  ", error);
+          });
       }
     });
 
     //route handler for the clear Bacnet server points function
-    RED.httpAdmin.get('/bitpool-bacnet-data/clearBacnetServerPoints', function (req, res) {
+    RED.httpAdmin.get("/bitpool-bacnet-data/clearBacnetServerPoints", function (req, res) {
       if (node.bacnetServerEnabled == true && node.bacnetClient) {
         node.bacnetServer.clearServerPoints();
         res.send(true);
@@ -233,7 +237,6 @@ module.exports = function (RED) {
     //route handler for the clear Bacnet server point function
     RED.httpAdmin.post('/bitpool-bacnet-data/clearBacnetServerPoint', function (req, res) {
       if (node.bacnetServerEnabled == true && node.bacnetClient) {
-        //console.log("clearing server point: ", req.body);
         node.bacnetServer.clearServerPoint(req).then(function (result) {
           res.send(result);
         }).catch(function (error) {
@@ -259,51 +262,55 @@ module.exports = function (RED) {
     });
 
     //route handler for network data
-    RED.httpAdmin.get('/bitpool-bacnet-data/getNetworkInterfaces', function (req, res) {
-      getIpAddress().then(function (result) {
-        res.send(result);
-      }).catch(function (error) {
-        logOut("Error getting network interfaces for client: ", error);
-      });
+    RED.httpAdmin.get("/bitpool-bacnet-data/getNetworkInterfaces", function (req, res) {
+      getIpAddress()
+        .then(function (result) {
+          res.send(result);
+        })
+        .catch(function (error) {
+          logOut("Error getting network interfaces for client: ", error);
+        });
     });
 
     //route handler for getting device list
-    RED.httpAdmin.get('/bitpool-bacnet-data/getDeviceList', function (req, res) {
+    RED.httpAdmin.get("/bitpool-bacnet-data/getDeviceList", function (req, res) {
       if (!node.bacnetClient) {
         logOut("Issue with the bacnetClient while getting device list: ", node.bacnetClient);
         res.send(false);
       } else {
-        node.bacnetClient.getDeviceList().then(function (result) {
-          res.send(result);
-        }).catch(function (error) {
-          res.send(error);
-          logOut("Error getting network data:  ", error);
-        });
+        node.bacnetClient
+          .getDeviceList()
+          .then(function (result) {
+            res.send(result);
+          })
+          .catch(function (error) {
+            res.send(error);
+            logOut("Error getting network data:  ", error);
+          });
       }
     });
 
     //route handler for updating device list
-    RED.httpAdmin.post('/bitpool-bacnet-data/updateDeviceList', function (req, res) {
+    RED.httpAdmin.post("/bitpool-bacnet-data/updateDeviceList", function (req, res) {
       if (!node.bacnetClient) {
         logOut("Issue with the bacnetClient while getting device list: ", node.bacnetClient);
         res.send(false);
       } else {
-        node.bacnetClient.updateDeviceList(req).then(function (result) {
-          res.send(result);
-        }).catch(function (error) {
-          res.send(error);
-          logOut("Error getting network data:  ", error);
-        });
+        node.bacnetClient
+          .updateDeviceList(req)
+          .then(function (result) {
+            res.send(result);
+          })
+          .catch(function (error) {
+            res.send(error);
+            logOut("Error getting network data:  ", error);
+          });
       }
-    });
-
-    node.on('close', function () {
-      //do nothing
     });
 
     function bindEventListeners() {
       // Value response event handler for READ commands
-      node.bacnetClient.on('values', (device, values, outputType, msgId, fullResult) => {
+      node.bacnetClient.on("values", (device, values, outputType, msgId, fullResult) => {
         if (outputType.json && !outputType.mqtt) {
           if (objectPropertyType.fullObject && objectPropertyType.simplePayload) {
             sendSimpleJson(values);
@@ -324,9 +331,9 @@ module.exports = function (RED) {
           }
         }
       });
-
+      
       // Who Is / Iam event handler
-      node.bacnetClient.on('deviceFound', (device) => {
+      node.bacnetClient.on("deviceFound", (device) => {
         if (node.toLogIam) node.warn(`BACnet device found: ${device.deviceId} - ${device.address}`);
       });
     }
@@ -354,11 +361,13 @@ module.exports = function (RED) {
               pointProps.forEach(function (prop) {
                 let msg = {};
                 if (prop == "presentValue") {
-                  if (node.nodeName !== "gateway" &&
+                  if (
+                    node.nodeName !== "gateway" &&
                     node.nodeName !== "" &&
                     node.nodeName !== "null" &&
                     node.nodeName !== "undefined" &&
-                    typeof node.nodeName == "string") {
+                    typeof node.nodeName == "string"
+                  ) {
                     msg.topic = `${node.nodeName}/${device}/${point}`;
                   } else {
                     msg.topic = `BITPOOL_BACNET_GATEWAY/${device}/${point}`;
@@ -367,13 +376,11 @@ module.exports = function (RED) {
                   node.send(msg);
                 }
               });
-
             }
           }
         }
       });
     };
-
 
     // Breaks down response JSON object into mqtt topic / payload
     sendAsMqtt = function (values) {
@@ -387,11 +394,13 @@ module.exports = function (RED) {
               pointProps.forEach(function (prop) {
                 let msg = {};
                 if (prop !== "objectName") {
-                  if (node.nodeName !== "gateway" &&
+                  if (
+                    node.nodeName !== "gateway" &&
                     node.nodeName !== "" &&
                     node.nodeName !== "null" &&
                     node.nodeName !== "undefined" &&
-                    typeof node.nodeName == "string") {
+                    typeof node.nodeName == "string"
+                  ) {
                     msg.topic = `${node.nodeName}/${device}/${point}/${prop}`;
                   } else {
                     msg.topic = `BITPOOL_BACNET_GATEWAY/${device}/${point}/${prop}`;
@@ -412,7 +421,7 @@ module.exports = function (RED) {
         let msgg = {};
         if (device !== "_msgid") {
           let value = {
-            [device]: {}
+            [device]: {},
           };
           let points = values[device];
 
@@ -422,18 +431,19 @@ module.exports = function (RED) {
               pointProps.forEach(function (prop) {
                 if (prop == "presentValue") {
                   value[device][point] = {
-                    "presentValue": points[point][prop]
+                    presentValue: points[point][prop],
                   };
                 }
               });
             }
-
           }
-          if (node.nodeName !== "gateway" &&
+          if (
+            node.nodeName !== "gateway" &&
             node.nodeName !== "" &&
             node.nodeName !== "null" &&
             node.nodeName !== "undefined" &&
-            typeof node.nodeName == "string") {
+            typeof node.nodeName == "string"
+          ) {
             msgg.topic = `${node.nodeName}/${device}`;
           } else {
             msgg.topic = `BITPOOL_BACNET_GATEWAY/${device}`;
@@ -451,11 +461,13 @@ module.exports = function (RED) {
           let points = values[key];
           let msgg = {};
 
-          if (node.nodeName !== "gateway" &&
+          if (
+            node.nodeName !== "gateway" &&
             node.nodeName !== "" &&
             node.nodeName !== "null" &&
             node.nodeName !== "undefined" &&
-            typeof node.nodeName == "string") {
+            typeof node.nodeName == "string"
+          ) {
             msgg.topic = `${node.nodeName}/${key}`;
           } else {
             msgg.topic = `BITPOOL_BACNET_GATEWAY/${key}`;
@@ -465,8 +477,7 @@ module.exports = function (RED) {
         });
       }
     };
+  }
 
-  };
-
-  RED.nodes.registerType('Bacnet-Gateway', BitpoolBacnetGatewayDevice);
+  RED.nodes.registerType("Bacnet-Gateway", BitpoolBacnetGatewayDevice);
 };

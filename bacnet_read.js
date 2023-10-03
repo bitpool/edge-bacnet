@@ -5,7 +5,6 @@
 
 
 module.exports = function (RED) {
-    const fetch = require('node-fetch');
     const http = require("http");
     const { ReadCommandConfig } = require('./common');
     const baEnum = require('./resources/node-bacstack-ts/dist/index.js').enum;

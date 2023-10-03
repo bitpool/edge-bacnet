@@ -231,7 +231,7 @@
                             node.hiddenDeployToggle = !node.prevHiddenToggleState;
 
                         } catch(e) {
-                            console.log("removeAllClicked error: ", e);
+                            //do nothing
                         }
 
                         app.$forceUpdate();
@@ -460,12 +460,22 @@
             if (node.vm.$data.devices) node.devices = node.vm.$data.devices;
             if (node.vm.$data.readDevices) node.readDevices = node.vm.$data.readDevices;
             if (node.vm.$data.pointsToRead) node.pointsToRead = node.vm.$data.pointsToRead;
+            //clear reload data function
+            if(node.reloadTimer) {
+                clearInterval(node.reloadTimer);
+                node.reloadTimer = null;
+            }
         },
         oneditcancel: function () {
             let node = this;
             if (node.vm.$data.devices) node.devices = node.vm.$data.devices;
             if (node.vm.$data.readDevices) node.readDevices = node.vm.$data.readDevices;
             if (node.vm.$data.pointsToRead) node.pointsToRead = node.vm.$data.pointsToRead;
+            //clear reload data function
+            if(node.reloadTimer) {
+                clearInterval(node.reloadTimer);
+                node.reloadTimer = null;
+            }
         }
     });
 

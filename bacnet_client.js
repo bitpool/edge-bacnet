@@ -27,11 +27,12 @@ class BacnetClient extends EventEmitter {
         that.mutex = new Mutex();
         that.manualMutex = new Mutex();
         that.pollInProgress = false;
+        that.scanMatrix = [];
 
         try {
-            
+
             let cachedData = JSON.parse(Read_Config_Sync());
-            if(typeof cachedData == "object") {
+            if(cachedData && typeof cachedData == "object") {
                 if(cachedData.renderList) that.renderList = cachedData.renderList;
                 if(cachedData.deviceList) {
                     cachedData.deviceList.forEach(function(device) {
@@ -41,15 +42,14 @@ class BacnetClient extends EventEmitter {
                 }
                 if(cachedData.pointList) that.networkTree = cachedData.pointList;
             }
+            
+            
 
             that.config = config;
             that.roundDecimal = config.roundDecimal;
             that.apduSize = config.apduSize;
             that.maxSegments = config.maxSegments;
             that.discover_polling_schedule = config.discover_polling_schedule;
-            that.device_id_range_enabled = config.device_id_range_enabled;
-            that.device_id_range_start = config.device_id_range_start;
-            that.device_id_range_end = config.device_id_range_end;
             that.deviceId = config.deviceId;
             that.broadCastAddr = config.broadCastAddr;
             that.manual_instance_range_enabled = config.manual_instance_range_enabled;
@@ -63,8 +63,10 @@ class BacnetClient extends EventEmitter {
                 maxApdu: that.apduSize
             };
 
-            try {
+            
 
+            try {
+                
                 that.client = new bacnet.Client({ apduTimeout: config.apduTimeout, interface: config.localIpAdrress, port: config.port, broadcastAddress: config.broadCastAddr});
                 that.setMaxListeners(1);
 
@@ -104,15 +106,15 @@ class BacnetClient extends EventEmitter {
                   }, "5000")
 
             } catch(e) {
-                console.log("Issue initializing client: ", e)
                 that.logOut("Issue initializing client: ", e)
             }
 
             //who is callback
             that.client.on('iAm', (device) => {
                 if(device.address !== that.config.localIpAdrress) {
-                    if(that.device_id_range_enabled) {
-                        if(device.deviceId >= that.device_id_range_start && device.deviceId <= that.device_id_range_end) {
+                    if(that.scanMatrix.length > 0) {
+                        let matrixMap = that.scanMatrix.filter(ele => device.deviceId >= ele.start && device.deviceId <= ele.end);
+                        if(matrixMap.length > 0) {
                             //only add unique device to array
                             let foundIndex = that.deviceList.findIndex(ele => ele.getDeviceId() == device.deviceId);
                             if(foundIndex == -1) {
@@ -165,6 +167,7 @@ class BacnetClient extends EventEmitter {
                 that.reinitializeClient(that.config);
             }
         });
+        
     }
 
     logOut(param1, param2) {
@@ -398,9 +401,6 @@ class BacnetClient extends EventEmitter {
         that.apduSize = config.apduSize;
         that.maxSegments = config.maxSegments;
         that.discover_polling_schedule = config.discover_polling_schedule;
-        that.device_id_range_enabled = config.device_id_range_enabled;
-        that.device_id_range_start = config.device_id_range_start;
-        that.device_id_range_end = config.device_id_range_end;
         that.deviceId = config.deviceId;
         that.broadCastAddr = config.broadCastAddr;
         that.manual_instance_range_enabled = config.manual_instance_range_enabled;
@@ -920,17 +920,6 @@ class BacnetClient extends EventEmitter {
 
     globalWhoIs() {
         let that = this;
-        let options = {
-            lowLimit: 0,
-            highLimit: bacnetIdMax,
-            'net': 65535
-        };
-
-        if(that.device_id_range_enabled == true) {
-            options.lowLimit = that.device_id_range_start;
-            options.highLimit = that.device_id_range_end;
-        }
-
         if(that.client) {
             that.client.whoIs({'net': 65535});
         } else {
@@ -944,7 +933,11 @@ class BacnetClient extends EventEmitter {
         let that = this;
         return new Promise(async function(resolve, reject) {
             try {
-                resolve({renderList: that.renderList, deviceList: that.deviceList, pointList: that.networkTree, pollFrequency: that.discover_polling_schedule});
+                const reducedDeviceList = JSON.parse(JSON.stringify(that.deviceList));
+                reducedDeviceList.forEach((device) => {
+                    delete device["pointsList"];
+                });
+                resolve({renderList: that.renderList, deviceList: reducedDeviceList, pointList: that.networkTree, pollFrequency: that.discover_polling_schedule});
             } catch(e){
                 reject(e);
             }
