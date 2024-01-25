@@ -1,12 +1,12 @@
 /*
-  MIT License Copyright 2021, 2022 - Bitpool Pty Ltd
+  MIT License Copyright 2021, 2024 - Bitpool Pty Ltd
 */
 
 const bacnet = require('./resources/node-bacstack-ts/dist/index.js');
 const baEnum = bacnet.enum;
 const bacnetIdMax = baEnum.ASN1_MAX_PROPERTY_ID;
 const { EventEmitter } = require('events');
-const { getUnit, roundDecimalPlaces, Store_Config, Read_Config_Sync } = require('./common');
+const { getUnit, roundDecimalPlaces, Store_Config, Read_Config_Sync, isNumber } = require('./common');
 const { ToadScheduler, SimpleIntervalJob, Task } = require('toad-scheduler');
 const { BacnetDevice } = require('./bacnet_device');
 const {Mutex} = require("async-mutex");
@@ -28,22 +28,24 @@ class BacnetClient extends EventEmitter {
         that.manualMutex = new Mutex();
         that.pollInProgress = false;
         that.scanMatrix = [];
+        that.renderListCount = 0;
 
         try {
 
-            let cachedData = JSON.parse(Read_Config_Sync());
-            if(cachedData && typeof cachedData == "object") {
-                if(cachedData.renderList) that.renderList = cachedData.renderList;
-                if(cachedData.deviceList) {
-                    cachedData.deviceList.forEach(function(device) {
-                        let newBacnetDevice = new BacnetDevice(true, device);
-                        that.deviceList.push(newBacnetDevice);
-                    });
+            if(config.cacheFileEnabled) {
+                let cachedData = JSON.parse(Read_Config_Sync());
+                if(cachedData && typeof cachedData == "object") {
+                    if(cachedData.renderList) that.renderList = cachedData.renderList;
+                    if(cachedData.deviceList) {
+                        cachedData.deviceList.forEach(function(device) {
+                            let newBacnetDevice = new BacnetDevice(true, device);
+                            that.deviceList.push(newBacnetDevice);
+                        });
+                    }
+                    if(cachedData.pointList) that.networkTree = cachedData.pointList;
+                    if(cachedData.renderListCount) that.renderListCount = cachedData.renderListCount;
                 }
-                if(cachedData.pointList) that.networkTree = cachedData.pointList;
             }
-            
-            
 
             that.config = config;
             that.roundDecimal = config.roundDecimal;
@@ -59,11 +61,9 @@ class BacnetClient extends EventEmitter {
             that.deviceRetryCount = parseInt(config.retries);
 
             that.readPropertyMultipleOptions = {
-                maxSegments: that.maxSegments,
-                maxApdu: that.apduSize
+                maxSegments: 112,
+                maxApdu: 5
             };
-
-            
 
             try {
                 
@@ -90,7 +90,9 @@ class BacnetClient extends EventEmitter {
 
                 //buildNetworkTreeData task
                 const buildNetworkTree = new Task('simple task', () => {
-                    that.buildNetworkTreeData();
+                    that.buildNetworkTreeData().then(function() {
+                        that.countDevices();
+                    });
                 });
 
                 const buildNetworkTreeJob = new SimpleIntervalJob({ seconds: 10, }, buildNetworkTree)
@@ -102,7 +104,9 @@ class BacnetClient extends EventEmitter {
                 setTimeout(() => {
                     that.queryDevices();
                     that.sanitizeDeviceList();
-                    that.buildNetworkTreeData();
+                    that.buildNetworkTreeData().then(function() {
+                        that.countDevices();
+                    });
                   }, "5000")
 
             } catch(e) {
@@ -111,6 +115,7 @@ class BacnetClient extends EventEmitter {
 
             //who is callback
             that.client.on('iAm', (device) => {
+                //console.log("found iAm device: ", device);
                 if(device.address !== that.config.localIpAdrress) {
                     if(that.scanMatrix.length > 0) {
                         let matrixMap = that.scanMatrix.filter(ele => device.deviceId >= ele.start && device.deviceId <= ele.end);
@@ -121,12 +126,19 @@ class BacnetClient extends EventEmitter {
                                 let newBacnetDevice = new BacnetDevice(false, device);
                                 newBacnetDevice.setLastSeen(Date.now());
                                 that.updateDeviceName(newBacnetDevice);
+                                if(newBacnetDevice.getIsMstpDevice()) {
+                                    that.addToParentMstpNetwork(newBacnetDevice);
+                                }
                                 that.deviceList.push(newBacnetDevice);
 
                             } else if(foundIndex !== -1) {
                                 that.deviceList[foundIndex].updateDeviceConfig(device);
                                 that.deviceList[foundIndex].setLastSeen(Date.now());
                                 that.updateDeviceName(that.deviceList[foundIndex]);
+
+                                if(that.deviceList[foundIndex].getIsMstpDevice()) {
+                                    that.addToParentMstpNetwork(that.deviceList[foundIndex]);
+                                }
                             }
                             
                             //emit event for node-red to log 
@@ -139,11 +151,19 @@ class BacnetClient extends EventEmitter {
                             let newBacnetDevice = new BacnetDevice(false, device);
                             newBacnetDevice.setLastSeen(Date.now());
                             that.updateDeviceName(newBacnetDevice);
+                            if(newBacnetDevice.getIsMstpDevice()) {
+                                that.addToParentMstpNetwork(newBacnetDevice);
+                            }
                             that.deviceList.push(newBacnetDevice);
                         } else if(foundIndex !== -1) {
                             that.deviceList[foundIndex].updateDeviceConfig(device);
                             that.deviceList[foundIndex].setLastSeen(Date.now());
                             that.updateDeviceName(that.deviceList[foundIndex]);
+
+                            if(that.deviceList[foundIndex].getIsMstpDevice()) {
+                                that.addToParentMstpNetwork(that.deviceList[foundIndex]);
+                            }
+
                         }
                         
                         //emit event for node-red to log 
@@ -167,7 +187,24 @@ class BacnetClient extends EventEmitter {
                 that.reinitializeClient(that.config);
             }
         });
-        
+    }
+
+    testFunction() {
+        console.log("test function ");
+
+
+
+    }
+
+    addToParentMstpNetwork(device) {
+        let that = this;
+        let address = device.getAddress().address;
+        let deviceId = device.getDeviceId();
+        let foundParentIndex = that.deviceList.findIndex(ele => ele.getAddress() == address);
+        if(foundParentIndex !== -1) {
+            that.deviceList[foundParentIndex].addChildDevice(deviceId);
+            device.setParentDeviceId(that.deviceList[foundParentIndex].getDeviceId());
+        }
     }
 
     logOut(param1, param2) {
@@ -183,6 +220,7 @@ class BacnetClient extends EventEmitter {
                 that.renderList = [];
                 that.networkTree = {};
                 that.pollInProgress = false;
+                that.renderListCount = 0;
                 resolve(true);
             } catch(e) {
                 that.logOut("Error clearing BACnet data model: ", e);
@@ -197,10 +235,11 @@ class BacnetClient extends EventEmitter {
         that.pollInProgress = true;
 
         let index = 0;
-
+        
         query(index);
 
         function query(index) {
+            
             that.queryPriorityDevices().then(function() {
 
                 let device = that.deviceList[index];
@@ -221,8 +260,17 @@ class BacnetClient extends EventEmitter {
                                     });
                                 }).catch(function(e) {
                                     that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
-                                    that.addDeviceToManualQueue(device);
-                                    query(index);
+                                    device.setManualDiscoveryMode(true);
+									that.getDevicePointListWithoutObjectList(device).then(function() {
+										that.buildJsonObject(device, null).then(function() {
+											query(index);
+										}).catch(function(e) {
+											that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
+											query(index);
+										});
+									}).catch(function(e){
+										query(index);
+									});
                                 });
                             } catch(e) {
                                 that.logOut("Error while querying devices: ", e);
@@ -242,10 +290,10 @@ class BacnetClient extends EventEmitter {
                     } else {
                         that.pollInProgress = false;
                     }
-                    
                 }
             });
         }
+        
     }
 
     queryDevicesManually() {
@@ -444,6 +492,7 @@ class BacnetClient extends EventEmitter {
             //buildNetworkTreeData task
             const buildNetworkTree = new Task('simple task', () => {
                 that.buildNetworkTreeData();
+                that.countDevices();
             });
 
             const buildNetworkTreeJob = new SimpleIntervalJob({ seconds: 10, }, buildNetworkTree)
@@ -474,11 +523,10 @@ class BacnetClient extends EventEmitter {
         return newProps;
     }
 
-    doRead(readConfig, outputType, objectPropertyType, msgId) {
+    doRead(readConfig, outputType, objectPropertyType, readNodeName) {
         let that = this;
         that.roundDecimal = readConfig.precision;
         let devicesToRead = Object.keys(readConfig.pointsToRead);
-
         try {
             let bacnetResults = {};
             devicesToRead.forEach(function(key, index) {
@@ -493,16 +541,52 @@ class BacnetClient extends EventEmitter {
                             let bac_obj = that.getObjectType(readConfig.pointsToRead[key][pointName].meta.objectId.type);
                             let objectId = pointName + "_" + bac_obj + '_' + readConfig.pointsToRead[key][pointName].meta.objectId.instance;
                             let point = deviceObject[objectId];
-                            bacnetResults[deviceName][pointName] = point;
+
+                            that.updatePoint(device, point).then(function(result) {
+                                if(isNumber(result.values[0].value)) {
+                                    point.presentValue = roundDecimalPlaces(result.values[0].value, that.roundDecimal);
+                                } else {
+                                    point.presentValue = result.values[0].value;
+                                }
+                                bacnetResults[deviceName][pointName] = point;
+                            }).catch(function(err) {
+                                //do nothing for now
+                            });
+
                         }
                     }
                 }
 
-                if(index == devicesToRead.length - 1 && Object.keys(readConfig.pointsToRead).length > 0) that.emit('values', bacnetResults, outputType, objectPropertyType);
+                setTimeout(() => {
+                    if(index == devicesToRead.length - 1 && Object.keys(readConfig.pointsToRead).length > 0) that.emit('values', bacnetResults, outputType, objectPropertyType, readNodeName);
+                }, 3000);
             });
         } catch(e) {
             that.logOut("Issue doing read, see error: ", e);
         }
+    }
+
+    updatePoint(device, point) {
+        let that = this;
+        return new Promise((resolve, reject) => {
+
+            that.client.readProperty(
+                device.getAddress(), 
+                {type: point.objectID.type, instance: point.objectID.instance }, 
+                baEnum.PropertyIdentifier.PRESENT_VALUE,
+                {},
+                (err, value) => {
+                    if(err) {
+                        //console.log("err ", err);
+                        reject(err);
+                    }
+                    
+                    if(value) {
+                        resolve(value);
+                    }
+                }
+            );
+        });
     }
 
     getDeviceAddress(device) {
@@ -615,91 +699,49 @@ class BacnetClient extends EventEmitter {
         let that = this;
 
         return new Promise(function(resolve, reject) {
-    
-            let objectNameProperty = [{ id: baEnum.PropertyIdentifier.OBJECT_NAME }];
+
             let address = device.getAddress();
-            let objectTypeList = [0, 1, 2, 3, 4, 5, 13, 14, 19];
-            //let objectTypeList = [0, 1, 2, 3, 4, 5, 6, 10, 13, 14, 15, 16, 17, ,19, 20, 56, 178];
-            //let instanceRange = {start: 0, end: 100};
-            let instanceRange = device.getmDiscoverInstanceRange();
-            let requestArray = [];
-            let maxRequestThreshold = 1000;
-            let requestRate = 20;
-            let requestBuffer = [];
-            let sendBuffer = [];
+            let deviceId = device.getDeviceId();
+            let discoveredPointList = [];
 
-            if(that.manual_instance_range_enabled == true) {
-                instanceRange.start = that.manual_instance_range_start;
-                maxRequestThreshold = that.manual_instance_range_end;
-                if(that.manual_instance_range_end < requestRate) {
-                    requestRate = that.manual_instance_range_end;
+            let index = 1;
+
+            send(index);
+            
+
+            function send(index) {
+
+                let readOptions = {
+                    maxSegments: that.readPropertyMultipleOptions.maxSegments,
+                    maxApdu: that.readPropertyMultipleOptions.maxApdu,
+                    arrayIndex: index
                 }
-            }
 
-            for(let typeListIndex = 0; typeListIndex < objectTypeList.length; typeListIndex++){
-                let objectType = objectTypeList[typeListIndex];
-                for(let i = instanceRange.start; i <= instanceRange.end; i++) {
-
-                    requestArray.push({
-                        objectId: { type: objectType, instance: i },
-                        properties: objectNameProperty
-                    })
-
-                    if(requestArray.length == requestRate ) {
-                        requestBuffer.push(that._readObjectWithRequestArray(address, requestArray));
-                        instanceRange.end += requestRate;
-                        requestArray = [];
-                        if(i >= maxRequestThreshold) {
-                            if(typeListIndex == objectTypeList.length-1) {
-                                device.setmDiscoverInstanceRange({start: instanceRange.end, end: instanceRange.end + 100})
-                                send();
-                            }
-                            
-                            break;
+                that.client.readProperty(
+                    address, 
+                    {type: baEnum.ObjectType.DEVICE, instance: deviceId }, 
+                    baEnum.PropertyIdentifier.OBJECT_LIST,
+                    readOptions,
+                    (err, value) => {
+                        if(err) {
+                            resolve(discoveredPointList);
+                        }
+                        
+                        if(value) {
+                            discoveredPointList.push(value.values[0]);
+                            index++;
+                            send(index);
                         }
                     }
-                }
-
-            };
-
-            function send() {
-
-                for(let index = 0; index < requestBuffer.length; index++) {
-                    let promise = requestBuffer[index];
-                    try {
-                        Promise.resolve(promise).then(function(result) {
-                            for (const [key, value] of Object.entries(result)) {
-                                if(key == "value" && typeof value == "object") {
-                                    for(let x = 0; x < value.values.length; x++) {
-                                        let ele = value.values[x];
-                                        let valueRoot = ele.values[0].value[0];
-                                        if(!valueRoot.value.errorClass && !valueRoot.value.errorCode) {
-                                            sendBuffer.push({"value": ele.objectId, "type": 12});
-                                        }
-                                    }
-                                }
-                            }
-
-                            if(index == requestBuffer.length - 1) {
-                                resolve(sendBuffer);
-                            }
-
-                        }).catch(function(error) {
-                            reject(error);
-                        });
-                    } catch(e) {
-                        reject(e)
-                    }
-                }
+                );
             }
-            
         });
     }
 
-    _readObjectWithRequestArray(deviceAddress, requestArray) {
+    _readObjectWithRequestArray(deviceAddress, requestArray, readOptions) {
         let that = this;
         return new Promise((resolve, reject) => {
-            this.client.readPropertyMultiple(deviceAddress, requestArray, that.readPropertyMultipleOptions, (error, value) => {
+            this.client.readPropertyMultiple(deviceAddress, requestArray, readOptions, (error, value) => {
                 resolve({
                     error: error,
                     value: value
@@ -708,7 +750,7 @@ class BacnetClient extends EventEmitter {
         });
     }
 
-    _readDeviceName(deviceAddress, deviceId, callback){
+    _readDeviceName(deviceAddress, deviceId, callback) {
         let that = this;
         that.client.readProperty(
             deviceAddress, 
@@ -719,7 +761,7 @@ class BacnetClient extends EventEmitter {
         );        
     }
 
-    _readObjectList(deviceAddress, deviceId, callback) {
+    _readObjectList(deviceAddress, deviceId, readOptions, callback) {
         let that = this;
 
         try {
@@ -727,7 +769,7 @@ class BacnetClient extends EventEmitter {
                 deviceAddress, 
                 {type: baEnum.ObjectType.DEVICE, instance: deviceId }, 
                 baEnum.PropertyIdentifier.OBJECT_LIST,
-                that.readPropertyMultipleOptions, 
+                readOptions, 
                 callback
             );
 
@@ -736,14 +778,14 @@ class BacnetClient extends EventEmitter {
         }
     }
 
-    _readObject(deviceAddress, type, instance, properties) {
+    _readObject(deviceAddress, type, instance, properties, readOptions) {
         let that = this;
         return new Promise((resolve, reject) => {
             const requestArray = [{
                 objectId: { type: type, instance: instance },
                 properties: properties
             }];
-            this.client.readPropertyMultiple(deviceAddress, requestArray, that.readPropertyMultipleOptions, (error, value) => {
+            this.client.readPropertyMultiple(deviceAddress, requestArray, readOptions, (error, value) => {
                 resolve({
                     error: error,
                     value: value
@@ -752,8 +794,12 @@ class BacnetClient extends EventEmitter {
         });
     }
 
-    _readObjectFull(deviceAddress, type, instance) {
+    _readObjectFull(device, deviceAddress, type, instance) {
         let that = this;
+        const readOptions = {
+            maxSegments: that.readPropertyMultipleOptions.maxSegments,
+            maxApdu: that.readPropertyMultipleOptions.maxApdu
+        };
 
         const allProperties = [
             { id: baEnum.PropertyIdentifier.PRESENT_VALUE },
@@ -769,33 +815,71 @@ class BacnetClient extends EventEmitter {
         ];
 
         return new Promise((resolve, reject) => {
-            that._readObject(deviceAddress, type, instance, [{ id: baEnum.PropertyIdentifier.ALL }]).then(function(result) {
+            that._readObject(deviceAddress, type, instance, [{ id: baEnum.PropertyIdentifier.ALL }], readOptions).then(function(result) {
                 
                 if(result.value) {
                     resolve(result);
                 }
 
                 if(result.error) {
-                    const requestArray = [{
-                        objectId: { type: type, instance: instance },
-                        properties: allProperties
-                    }];
-
-                    that._readObjectWithRequestArray(deviceAddress, requestArray).then(function(manualRequest) {
-                        if(manualRequest.value) {
-                            resolve(manualRequest);
-                        }
-                        if(manualRequest.error) {
-                            reject(manualRequest.error);
-                        }
-                    })
+                    let i = 0;
+					readIndividualProperties(i);
                 }
                 
             }).catch(function(error) {
-                reject(error);
+                let i = 0;
+				readIndividualProperties(i);
             });
-        });
 
+            let resultArray = [];
+            let errorArray = [];
+			
+			function readIndividualProperties(index) {
+			
+				const property = allProperties[index];				
+				
+				that.client.readProperty(
+					deviceAddress,
+					{type: type, instance: instance }, 
+					property.id,
+					readOptions,
+					(err, value) => {
+						if(err) {
+							errorArray.push(err);
+						}
+						
+						if(value) {
+							let formattedResult = {
+								len: value.len,
+								objectId: value.objectId,
+								values: [
+									{
+										id: value.property.id,
+										index: value.property.index,
+										value: value.values
+									}
+								]
+							};
+							
+							resultArray.push({error: null, value: formattedResult});
+						}
+						
+						if(index == allProperties.length - 1) {
+                            resolve(resultArray);
+
+							// if(resultArray.length > 0) {
+							// 	resolve(resultArray);
+							// } else if(errorArray.length > 0){
+							// 	reject(errorArray);
+							// }
+						} else if( index < allProperties.length - 1) {
+							index++;
+							readIndividualProperties(index);
+						}
+					}
+				);
+            };
+        });
     };
 
     _readObjectPropList(deviceAddress, type, instance) {
@@ -823,21 +907,15 @@ class BacnetClient extends EventEmitter {
     doWrite(value, options){
         let that = this;
         let valuesArray = [];
-
         options.pointsToWrite.forEach(function(point){
-
             let deviceAddress = point.deviceAddress;
-            
-            if(valuesArray[deviceAddress] == null || valuesArray[deviceAddress] == undefined){
-                valuesArray[deviceAddress] = [];
-            }
-
             let writeObject = {
+                address: deviceAddress,
                 objectId: {
                     type: point.meta.objectId.type,
                     instance: point.meta.objectId.instance
                 },
-                values: [{
+                values: {
                     property: {
                         id: 85,
                         index: point.meta.arrayIndex
@@ -846,11 +924,17 @@ class BacnetClient extends EventEmitter {
                         type: options.appTag,
                         value: value
                     }],
+                    
+                },
+                options: {
+                    maxSegments: that.readPropertyMultipleOptions.maxSegments,
+                    maxApdu: that.readPropertyMultipleOptions.maxApdu,
+                    arrayIndex: point.meta.arrayIndex,
                     priority: options.priority
-                }]
+                }
             };
 
-            valuesArray[deviceAddress].push(writeObject);
+            valuesArray.push(writeObject);
         });
 
         return that._writePropertyMultiple(valuesArray);
@@ -858,24 +942,23 @@ class BacnetClient extends EventEmitter {
 
     _writePropertyMultiple(values) {
         let that = this;
-        let writePromises = [];
         try {
-            return new Promise((resolve, reject) => {
-                for(const device in values) {
-                    writePromises.push(that.client.writePropertyMultiple(device, values[device], that.readPropertyMultipleOptions, (err, value) => {
-                        resolve({
-                            error: err,
-                            value: value
-                        })}
-                    ));
-                }
-    
-                Promise.all(writePromises).then(function(result) {
-                    resolve(result);
-                }).catch(function(e) {
-                    that.logOut("Error writing:  ", e);
-                });
+            values.forEach(function(point) {
+
+                that.client.writeProperty(
+                    point.address, 
+                    point.objectId, 
+                    baEnum.PropertyIdentifier.PRESENT_VALUE,
+                    point.values.value,
+                    point.options,
+                    (err, value) => {
+                        if(err) {
+                            that.logOut(err);
+                        }
+                    }
+                );
             });
+
         } catch (error) {
             that.logOut(error);
         }
@@ -895,7 +978,11 @@ class BacnetClient extends EventEmitter {
     scanDevice(device) {
         let that = this;
         return new Promise((resolve, reject) => {
-            this._readObjectList(device.getAddress(), device.getDeviceId(), (err, result) => {
+            const readOptions = {
+                maxSegments: that.readPropertyMultipleOptions.maxSegments,
+                maxApdu: that.readPropertyMultipleOptions.maxApdu
+            };
+            this._readObjectList(device.getAddress(), device.getDeviceId(), readOptions, (err, result) => {
                 if (!err) {
                     try {
                         resolve(result.values);
@@ -937,7 +1024,7 @@ class BacnetClient extends EventEmitter {
                 reducedDeviceList.forEach((device) => {
                     delete device["pointsList"];
                 });
-                resolve({renderList: that.renderList, deviceList: reducedDeviceList, pointList: that.networkTree, pollFrequency: that.discover_polling_schedule});
+                resolve({renderList: that.renderList, deviceList: reducedDeviceList, pointList: that.networkTree, pollFrequency: that.discover_polling_schedule, renderListCount: that.renderListCount});
             } catch(e){
                 reject(e);
             }
@@ -963,7 +1050,7 @@ class BacnetClient extends EventEmitter {
                 deviceL.forEach(function(device) {
                     let foundIndex = that.deviceList.findIndex(ele => ele.getDeviceId() == device.deviceId);
                     if(foundIndex == -1) {
-                        let newBacnetDevice = new BacnetDevice(false, device);
+                        let newBacnetDevice = new BacnetDevice(true, device);
                         newBacnetDevice.setLastSeen(Date.now());
                         that.deviceList.push(newBacnetDevice);
     
@@ -1042,7 +1129,7 @@ class BacnetClient extends EventEmitter {
         that.buildTreeMutex = new Mutex();
         let displayNameCharThreshold = 40;
 
-        Store_Config(JSON.stringify({renderList: that.renderList, deviceList: that.deviceList, pointList: that.networkTree}));
+        Store_Config(JSON.stringify({renderList: that.renderList, deviceList: that.deviceList, pointList: that.networkTree, renderListCount: that.renderListCount}));
 
         return new Promise(async function(resolve, reject) {
             if(!that.renderList) that.renderList = [];
@@ -1067,6 +1154,7 @@ class BacnetClient extends EventEmitter {
                             for(const pointName in deviceObject) {
                                 let pointProperties = [];
                                 let values = deviceObject[pointName];
+
                                 let displayName = pointName;
                                 if(pointName.length > displayNameCharThreshold) {
                                     displayName = "";
@@ -1080,45 +1168,150 @@ class BacnetClient extends EventEmitter {
                                 }
 
                                 if(values.objectName){
-                                    pointProperties.push({"key": `${index}-${pointIndex}-0`, "label": `Name: ${values.objectName}`, "data": values.objectName, "icon": "pi pi-bolt", "children": null});
+                                    pointProperties.push({"key": `${index}-0-${pointIndex}-0`, "label": `Name: ${values.objectName}`, "data": values.objectName, "icon": "pi pi-cog", "children": null});
                                 }
-                                if(values.objectType){
-                                    pointProperties.push({"key": `${index}-${pointIndex}-1`, "label": `Object Type: ${values.objectType}`, "data": values.objectType, "icon": "pi pi-bolt", "children": null});
+                                if(values.objectType && values.objectID.type !== 8){
+                                    pointProperties.push({"key": `${index}-0-${pointIndex}-1`, "label": `Object Type: ${values.objectType}`, "data": values.objectType, "icon": "pi pi-cog", "children": null});
                                 } 
                                 if(values.objectID && values.objectID.instance) {
-                                    pointProperties.push({"key": `${index}-${pointIndex}-2`, "label": `Object Instance: ${values.objectID.instance}`, "data": values.objectID.instance, "icon": "pi pi-bolt", "children": null});
+                                    pointProperties.push({"key": `${index}-0-${pointIndex}-2`, "label": `Object Instance: ${values.objectID.instance}`, "data": values.objectID.instance, "icon": "pi pi-cog", "children": null});
                                 }
                                 if(values.description){
-                                    pointProperties.push({"key": `${index}-${pointIndex}-3`, "label": `Description: ${values.description}`, "data": `${values.description}`, "icon": "pi pi-bolt", "children": null});
+                                    pointProperties.push({"key": `${index}-0-${pointIndex}-3`, "label": `Description: ${values.description}`, "data": `${values.description}`, "icon": "pi pi-cog", "children": null});
                                 }
                                 if(values.units){
-                                    pointProperties.push({"key": `${index}-${pointIndex}-4`, "label": `Units: ${values.units}`, "data": `${values.units}`, "icon": "pi pi-bolt", "children": null});
+                                    pointProperties.push({"key": `${index}-0-${pointIndex}-4`, "label": `Units: ${values.units}`, "data": `${values.units}`, "icon": "pi pi-cog", "children": null});
                                 }
                                 if(values.presentValue !== "undefined" && values.presentValue !== null && typeof values.presentValue !== "undefined") {
-                                    pointProperties.push({"key": `${index}-${pointIndex}-5`, "label": `Present Value: ${values.presentValue}`, "data": `${values.presentValue}`, "icon": "pi pi-bolt", "children": null});
+                                    pointProperties.push({"key": `${index}-0-${pointIndex}-5`, "label": `Present Value: ${values.presentValue}`, "data": `${values.presentValue}`, "icon": "pi pi-cog", "children": null});
                                 }
                                 if(values.systemStatus !== null && typeof values.systemStatus !== "undefined" && values.systemStatus !== ""){
-                                    pointProperties.push({"key": `${index}-${pointIndex}-6`, "label": `System Status: ${values.systemStatus}`, "data": `${values.systemStatus}`, "icon": "pi pi-bolt", "children": null});
+                                    pointProperties.push({"key": `${index}-0-${pointIndex}-6`, "label": `System Status: ${values.systemStatus}`, "data": `${values.systemStatus}`, "icon": "pi pi-cog", "children": null});
                                 }
                                 if(values.modificationDate && !values.modificationDate.errorClass) {
-                                    pointProperties.push({"key": `${index}-${pointIndex}-7`, "label": `Modification Date: ${values.modificationDate}`, "data": `${values.modificationDate}`, "icon": "pi pi-bolt", "children": null});
+                                    pointProperties.push({"key": `${index}-0-${pointIndex}-7`, "label": `Modification Date: ${values.modificationDate}`, "data": `${values.modificationDate}`, "icon": "pi pi-cog", "children": null});
                                 }
                                 if(values.programState){
-                                    pointProperties.push({"key": `${index}-${pointIndex}-8`, "label": `Program State: ${values.programState}`, "data": `${values.programState}`, "icon": "pi pi-bolt", "children": null});
+                                    pointProperties.push({"key": `${index}-0-${pointIndex}-8`, "label": `Program State: ${values.programState}`, "data": `${values.programState}`, "icon": "pi pi-cog", "children": null});
                                 }
                                 if(values.recordCount && !values.recordCount.errorClass){
-                                    pointProperties.push({"key": `${index}-${pointIndex}-9`, "label": `Record Count: ${values.recordCount}`, "data": `${values.recordCount}`, "icon": "pi pi-bolt", "children": null});
+                                    pointProperties.push({"key": `${index}-0-${pointIndex}-9`, "label": `Record Count: ${values.recordCount}`, "data": `${values.recordCount}`, "icon": "pi pi-cog", "children": null});
+                                }
+                                if(values.objectID && values.objectID.type == 8) {
+                                    //device point, add segmentation supported, and apdu size
+                                    pointProperties.push({"key": `${index}-0-${pointIndex}-10`, "label": `Segmentation Supported: ${deviceInfo.getSegmentation()}`, "data": `${deviceInfo.getSegmentation()}`, "icon": "pi pi-cog", "children": null});
+                                    pointProperties.push({"key": `${index}-0-${pointIndex}-11`, "label": `APDU Size: ${deviceInfo.getMaxApdu()}`, "data": `${deviceInfo.getMaxApdu()}`, "icon": "pi pi-cog", "children": null});
                                 }
 
-                                children.push({"key": `${index}-${pointIndex}`, "label": displayName, "data": displayName, "pointName": pointName, "icon": that.getPointIcon(values.meta.objectId.type), "children": pointProperties, "type": "point", "parentDevice": deviceName, "showAdded": false, "bacnetType": values.meta.objectId.type})
+                                children.push({"key": `${index}-0-${pointIndex}`, "label": displayName, "data": displayName, "pointName": pointName, "icon": that.getPointIcon(values.meta.objectId.type), "children": pointProperties, "type": "point", "parentDevice": deviceName, "showAdded": false, "bacnetType": values.meta.objectId.type})
                                 pointIndex++;
                             }
                             let foundIndex = that.renderList.findIndex(ele => ele.deviceId == deviceId && ele.ipAddr == ipAddr);
                             if(foundIndex !== -1) {
-                                that.renderList[foundIndex] = {"key": index, "label": deviceName, "data": deviceName, "icon": that.getDeviceIcon(isMstpDevice, manualDiscoveryMode), "children": children.sort(that.sortPoints), "type": "device", "lastSeen": deviceInfo.getLastSeen(), "showAdded": false, "ipAddr": ipAddr, "deviceId": deviceId, "isMstpDevice": isMstpDevice};
+                                let folderJson = [];
+                                if(deviceInfo.hasChildDevices()) {
+                                    folderJson = [
+                                        {
+                                            key: `${index}-0`,
+                                            label: "Points",
+                                            data: "Points Folder",
+                                            icon: "pi pi-circle-fill",
+                                            type: "pointFolder",
+                                            children: children.sort(that.sortPoints)
+                                        },
+                                        {
+                                            key: `${index}-1`,
+                                            label: "MSTP Network",
+                                            data: "Devices Folder",
+                                            icon: "pi pi-database",
+                                            type: "deviceFolder",
+                                            children: []
+                                        }
+                                    ];
+                                } else {
+                                    folderJson = [
+                                        {
+                                            key: `${index}-0`,
+                                            label: "Points",
+                                            data: "Points Folder",
+                                            icon: "pi pi-circle-fill",
+                                            type: "pointFolder",
+                                            children: children.sort(that.sortPoints)
+                                        }
+                                    ];
+                                }
+
+                                if(!isMstpDevice) {
+                                    that.renderList[foundIndex] = {"key": index, "label": deviceName, "data": deviceName, "icon": that.getDeviceIcon(isMstpDevice, manualDiscoveryMode), "children": that.renderList[foundIndex].children, "type": "device", "lastSeen": deviceInfo.getLastSeen(), "showAdded": false, "ipAddr": ipAddr, "deviceId": deviceId, "isMstpDevice": isMstpDevice};
+                                } else if(isMstpDevice) {
+                                    let parentDeviceId = deviceInfo.getParentDeviceId();
+                                    let parentDeviceIndex = that.renderList.findIndex(ele => ele.deviceId == parentDeviceId && ele.ipAddr == ipAddr);
+
+                                    if(parentDeviceIndex !== -1 && that.renderList[parentDeviceIndex].children[1].children) {
+                                        let mstpDeviceIndex = that.renderList[parentDeviceIndex].children[1].children.findIndex(ele => ele.deviceId == deviceId && ele.ipAddr == ipAddr);
+                                        if(mstpDeviceIndex == -1) {
+                                            //that.renderListCount++;                                            
+                                            that.renderList[parentDeviceIndex].children[1].children.push({"key": index, "label": deviceName, "data": deviceName, "icon": that.getDeviceIcon(isMstpDevice, manualDiscoveryMode), "children": folderJson, "type": "device", "lastSeen": deviceInfo.getLastSeen(), "showAdded": false, "ipAddr": ipAddr, "deviceId": deviceId, "isMstpDevice": isMstpDevice});
+                                        } else {
+                                            that.renderList[parentDeviceIndex].children[1].children[mstpDeviceIndex] = {"key": index, "label": deviceName, "data": deviceName, "icon": that.getDeviceIcon(isMstpDevice, manualDiscoveryMode), "children": folderJson, "type": "device", "lastSeen": deviceInfo.getLastSeen(), "showAdded": false, "ipAddr": ipAddr, "deviceId": deviceId, "isMstpDevice": isMstpDevice};
+                                        }
+                                    }
+                                }
+
                             } else if(foundIndex == -1) {
-                                that.renderList.push({"key": index, "label": deviceName, "data": deviceName, "icon": that.getDeviceIcon(isMstpDevice, manualDiscoveryMode), "children": children.sort(that.sortPoints), "type": "device", "lastSeen": deviceInfo.getLastSeen(), "showAdded": false, "ipAddr": ipAddr, "deviceId": deviceId, "isMstpDevice": isMstpDevice});
+                                let folderJson = [];
+                                if(deviceInfo.hasChildDevices()) {
+                                    folderJson = [
+                                        {
+                                            key: `${index}-0`,
+                                            label: "Points",
+                                            data: "Points Folder",
+                                            icon: "pi pi-circle-fill",
+                                            type: "pointFolder",
+                                            children: children.sort(that.sortPoints)
+                                        },
+                                        {
+                                            key: `${index}-1`,
+                                            label: "MSTP Network",
+                                            data: "Devices Folder",
+                                            icon: "pi pi-database",
+                                            type: "deviceFolder",
+                                            children: []
+                                        }
+                                    ];
+                                } else {
+                                    folderJson = [
+                                        {
+                                            key: `${index}-0`,
+                                            label: "Points",
+                                            data: "Points Folder",
+                                            icon: "pi pi-circle-fill",
+                                            type: "pointFolder",
+                                            children: children.sort(that.sortPoints)
+                                        }
+                                    ];
+                                }
+                            
+                                if(!isMstpDevice) {
+                                    //that.renderListCount++;
+                                    that.renderList.push({"key": index, "label": deviceName, "data": deviceName, "icon": that.getDeviceIcon(isMstpDevice, manualDiscoveryMode), "children": folderJson, "type": "device", "lastSeen": deviceInfo.getLastSeen(), "showAdded": false, "ipAddr": ipAddr, "deviceId": deviceId, "isMstpDevice": isMstpDevice});
+                                } else if(isMstpDevice) {
+                                    let parentDeviceId = deviceInfo.getParentDeviceId();
+                                    let parentDeviceIndex = that.renderList.findIndex(ele => ele.deviceId == parentDeviceId && ele.ipAddr == ipAddr);
+
+                                    if(parentDeviceIndex !== -1 && that.renderList[parentDeviceIndex].children && that.renderList[parentDeviceIndex].children[1].children) {
+                                        let mstpDeviceIndex = that.renderList[parentDeviceIndex].children[1].children.findIndex(ele => ele.deviceId == deviceId && ele.ipAddr == ipAddr);
+
+                                        if(mstpDeviceIndex == -1) {
+                                           // that.renderListCount++;
+                                            that.renderList[parentDeviceIndex].children[1].children.push({"key": index, "label": deviceName, "data": deviceName, "icon": that.getDeviceIcon(isMstpDevice, manualDiscoveryMode), "children": folderJson, "type": "device", "lastSeen": deviceInfo.getLastSeen(), "showAdded": false, "ipAddr": ipAddr, "deviceId": deviceId, "isMstpDevice": isMstpDevice});
+                                        } else {
+                                            that.renderList[parentDeviceIndex].children[1].children[mstpDeviceIndex] = {"key": index, "label": deviceName, "data": deviceName, "icon": that.getDeviceIcon(isMstpDevice, manualDiscoveryMode), "children": folderJson, "type": "device", "lastSeen": deviceInfo.getLastSeen(), "showAdded": false, "ipAddr": ipAddr, "deviceId": deviceId, "isMstpDevice": isMstpDevice};
+                                        }
+                                    }
+                                }
                             }
+
                             if(index == that.deviceList.length - 1) {
                                 that.renderList.sort(that.sortDevices);
                                 resolve({renderList: that.renderList, deviceList: that.deviceList, pointList: that.networkTree, pollFrequency: that.discover_polling_schedule});
@@ -1132,8 +1325,29 @@ class BacnetClient extends EventEmitter {
 
                         release();
                     });
-                    
                 });
+            }
+        });
+    }
+
+    countDevices() {
+        let that = this;
+
+        let deviceCount = 0;
+
+        that.renderList.forEach(function(device, index) {
+            if(device) {
+                if(device.children[1] && device.children[1].label == 'MSTP Network' && device.children[1].children && device.children[1].children.length > 0) {
+                    //increment for parent device / mstp router
+                    deviceCount++; 
+                    //increment for mstp device list
+                    deviceCount += device.children[1].children.length;
+                } else {
+                    deviceCount++; 
+                }
+            }
+            if(index == that.renderList.length -1) {
+                that.renderListCount = deviceCount;
             }
         });
     }
@@ -1151,10 +1365,14 @@ class BacnetClient extends EventEmitter {
                     requestMutex
                     .acquire()
                     .then(function(release) {
-                        that._readObjectFull(address, point.value.type, point.value.instance).then(function(result) {
+                        that._readObjectFull(device, address, point.value.type, point.value.instance).then(function(result) {
 
                             if(!result.error) {
-                                promiseArray.push(result);
+								if(result.length > 0 && Array.isArray(result)) {
+									promiseArray = result;
+								} else {
+									promiseArray.push(result);
+								} 
                             }
 
                             release();
@@ -1203,6 +1421,11 @@ class BacnetClient extends EventEmitter {
                 let successfulResult = !obj.error ? obj.value : null;
                 if(successfulResult) {
                     successfulResult.values.forEach(function(pointProperty, pointPropertyIndex) {
+
+                        if(!pointProperty.objectId && successfulResult.objectId && !pointProperty.values && successfulResult.values) {
+							pointProperty = successfulResult;
+						}
+
                         let currobjectId = pointProperty.objectId.type
                         let bac_obj = that.getObjectType(currobjectId);
                         let objectName = that._findValueById(pointProperty.values, baEnum.PropertyIdentifier.OBJECT_NAME);
@@ -1358,34 +1581,34 @@ class BacnetClient extends EventEmitter {
         switch(objectId) {
             case 0:
                 //AI
-                return "pi pi-tags";
+                return "pi pi-circle";
             case 1:
                 //AO
-                return "pi pi-tags";
+                return "pi pi-circle";
             case 2:
                 //AV
-                return "pi pi-tags";
+                return "pi pi-circle";
             case 3: 
                 //BI
-                return "pi pi-tags";
+                return "pi pi-circle";
             case 4:
                 //BO
-                return "pi pi-tags";
+                return "pi pi-circle";
             case 5:
                 //BV
-                return "pi pi-tags";
+                return "pi pi-circle";
             case 8:
                 //Device
                 return "pi pi-box";
             case 13: 
                 //MI
-                return "pi pi-tags";
+                return "pi pi-circle";
             case 14:
                 //MO
-                return "pi pi-tags";
+                return "pi pi-circle";
             case 19:
                 //MV
-                return "pi pi-tags";
+                return "pi pi-circle";
             case 10:
                 //File
                 return "pi pi-file";
@@ -1408,7 +1631,7 @@ class BacnetClient extends EventEmitter {
                 return "pi pi-calendar";
             default:
                 //Return circle for all other types
-                return "pi pi-tags";
+                return "pi pi-circle";
         }
     }
 
@@ -1482,16 +1705,14 @@ class BacnetClient extends EventEmitter {
 
     getDeviceIcon(isMstp, manualDiscoveryMode) {
         if(manualDiscoveryMode == true) {
-            //return "pi pi-server"
-            return "pi pi-exclamation-triangle"
+            return "pi pi-question-circle"
         } else if(manualDiscoveryMode == false) {
             if(isMstp == true) {
-                return "pi pi-share-alt"
+                return "pi pi-box"
             } else if(isMstp == false) {
                return "pi pi-server"
             }
         }
-
         return "pi pi-server";
     };
 }

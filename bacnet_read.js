@@ -19,6 +19,7 @@ module.exports = function (RED) {
       this.pointsToRead = config.pointsToRead;
       this.readDevices = config.readDevices;
       this.id = config.id;
+      this.nodeName = config.name;
 
       this.object_property_simplePayload = config.object_property_simplePayload;
       this.object_property_fullObject = config.object_property_fullObject;
@@ -67,12 +68,13 @@ module.exports = function (RED) {
       node.send(priorityDevicesMsg);
 
       node.on('input', function(msg) {
+        node.status({ fill: "blue", shape: "dot", text: "Reading values" });
 
         let readConfig = new ReadCommandConfig(node.pointsToRead, node.object_props, node.roundDecimal);
-
         let output = {
           type: "Read",
           id: node.id,
+          readNodeName: node.nodeName,
           options: readConfig,
           objectPropertyType: {
             simplePayload: node.object_property_simplePayload,
@@ -83,8 +85,12 @@ module.exports = function (RED) {
             mqtt: node.mqtt
           }
         };
-
+        
         node.send(output);
+
+        setTimeout(() => {
+          node.status({});
+        }, 3000);
 
       });
 

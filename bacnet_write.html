@@ -162,11 +162,27 @@
                         //update UI
                         let parentDeviceName = slotProps.node.parentDevice;
                         let foundDeviceIndex = this.writeDevices ? this.writeDevices.findIndex(ele => ele.label == parentDeviceName) : -1;
-                        let parentDevice = this.devices.find(ele => ele.label == parentDeviceName);
+                        let device = this.deviceList.find(ele => ele.deviceName == parentDeviceName);
+                        let deviceAddress = app.getDeviceAddress(device.address);
+                        let key = `${deviceAddress}-${device.deviceId}`;
+                        let parentDevice = this.devices.find(ele => ele.ipAddr == deviceAddress);
+                        let childDevice;
+                        if(device.isMstp) {
+                            let foundChildIndex = parentDevice.children[1].children.findIndex(ele => ele.label == parentDeviceName);
+                            if(foundChildIndex !== -1) {
+                                childDevice = parentDevice.children[1].children[foundChildIndex];
+                            }
+                        } 
 
                         if (foundDeviceIndex == -1) {
                             //no read devices present, add new
-                            let newReadParent = {...parentDevice};
+                            let newReadParent;
+                            if(childDevice) {
+                                newReadParent = {...childDevice};
+                            } else {
+                                newReadParent = {...parentDevice};
+                            } 
+
                             newReadParent.children = [];
                             newReadParent.children.push(slotProps.node);
 
@@ -183,18 +199,12 @@
 
                         slotProps.node.showAdded = true;
 
+                        console.log("write point added, slotProps.node: ", slotProps.node);
+
                         this.$forceUpdate();
 
                         //update node-red data structure
-                        let device = this.deviceList.find(ele => {
-                            if(ele.address.address) {
-                                return ele.address.address == parentDevice.ipAddr && ele.deviceId == parentDevice.deviceId;
-                            } else {
-                                return ele.address == parentDevice.ipAddr && ele.deviceId == parentDevice.deviceId;
-                            }
-                        });
-                        let deviceAddress = app.getDeviceAddress(device.address);
-                        let key = `${deviceAddress}-${device.deviceId}`;
+
                         let point = this.pointList[key][slotProps.node.pointName];
                         point.deviceId = device.deviceId;
                         point.deviceAddress = device.address;
@@ -211,6 +221,8 @@
                             ele.meta.objectId.type == point.meta.objectId.type);
 
                         if (!found) this.pointsToWrite.push(point);
+
+                        console.log("this.pointsToWrite: ", this.pointsToWrite);
 
                         //force a deploy state
                         node.hiddenDeployToggle = !node.prevHiddenToggleState;
@@ -365,13 +377,13 @@
 <script type="text/html" data-template-name="Bacnet-Write">
     <style>
         .p-treenode-label {
-            /* color: white; */
             color: black;
             width: 100%;
         }
         .p-tree {
             background: inherit !important;
             border: inherit !important;
+            padding-right: 0px !important;
         }
         .p-button {
             margin-right: .5rem;
@@ -383,15 +395,11 @@
             float: right;
         }
         .addPointButton:hover, .minusPointButton:hover {
-            /* background: #282A36 !important; */
             background: #d5d5d5 !important;
         }
         .pointLabel {
             font-weight: 400;
         }
-        /* .p-treenode-children {
-            background-color: #f0f0f0;
-        } */
         .deviceLabel {
             font-weight: 100;
         }
@@ -404,12 +412,10 @@
         .bacnetbutton {
             background: none;
             border: none;
-            /* color: white; */
             color: black;
             font-weight: 400;
         }
         .bacnetbutton:hover {
-            /* background: #21232e; */
             background: #f0f0f0;
             border-radius: 10px;
         }
@@ -419,17 +425,13 @@
         }
         .p-treenode-children > li > .p-treenode-children > li {
             font-size: 14px;
-            height: 25px;
+            /* height: 35px; */
             color: #b5b5b5 !important;
         }
         .p-treenode-children > li > .p-treenode-children > .p-treenode-label {
             color: #b5b5b5 !important;
         }
-        .p-treenode-children > li > .p-treenode-children > li:last-child {
-            padding-bottom: 30px;
-        }
         .p-tree-toggler:enabled:hover {
-            /* background: #21232e !important; */
             background: #d5d5d5 !important;
         }
         .p-tree-toggler:focus {
@@ -441,14 +443,15 @@
         }
         .statusOnline {
             color: #11c511;
-
         }
         .statusOffline {
             color: red;
         }
+        /*
         .deviceLabel {
-            position: relative;
+            position: absolute;
         }
+        */
         .objectPropertiesLabel {
             display: flex !important;
             flex-direction: row;
@@ -457,23 +460,60 @@
         .p-tree .p-tree-container .p-treenode .p-treenode-content:focus {
             outline: 0 none !important;
             outline-offset: 0 !important;
-            box-shadow: inset 0 0 0 0.15rem #44475a !important;
+            box-shadow: inset 0 0 0 1px #bdbdbd !important;
+        }
+        .checkbox-round {
+            width: 13px !important;
+            height: 13px !important;
+            background-color: white;
+            border-radius: 50%;
+            vertical-align: middle;
+            border: 1px solid #ddd;
+            appearance: none;
+            -webkit-appearance: none;
+            outline: none;
+            cursor: pointer;
+        }
+        .checkbox-round:checked {
+            background-color: #00AEEF;
+        }
+        .checkbox-round:focus {
+            outline: none !important;
         }
         .p-tree-filter:focus, .p-tree-filter:focus-visible, .p-inputtext:enabled:hover {
-            box-shadow: inset 0 0 0 0.15rem #44475a !important;
+            box-shadow: inset 0 0 0 0.15rem #dfdcdc !important;
             border-color: transparent !important;
         }
         .bacnetbutton > .pi {
             display: flex;
         }
+        .p-tree-container {
+            margin: 0 !important;
+        }
         .reloadButtonIcon {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol" !important;
+        }
+        .removeAllDevicesButton {
+            border: none;
+            background: none;
+            font-size: 14px !important;
+            float: right;
+            display: flex;
+            align-items: center;
+        }
+        .removeAllDevicesButton:hover {
+            background-color: #d5d5d5;
+            border-radius: 10px;
         }
         .reloadButton {
             border: none;
             background: none;
-            margin-right: 20px !important;
-            margin-bottom: 10px !important;
+            font-size: 14px !important;
+            float: right;
+        }
+        .rebuildDataButton {
+            border: none;
+            background: none;
             font-size: 14px !important;
             float: right;
         }
@@ -481,10 +521,46 @@
             background-color: #d5d5d5;
             border-radius: 10px;
         }
+        .rebuildDataButton:hover {
+            background-color: #d5d5d5;
+            border-radius: 10px;
+        }
+        .headerDiv {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: nowrap;
+            justify-content: space-around;
+            height: 20px;
+        }
+        .msgTypeDiv {
+            display: flex;
+            align-items: flex-start;
+            flex-direction: column;
+        }
+        .p-progressbar .p-progressbar-value {
+            background: #00AEEF !important;
+        }
         .p-treenode-label {
             overflow: hidden;
             white-space: nowrap;
             text-overflow: ellipsis;
+        }
+        .buttonGroup {
+            padding-left: 7px;
+        }
+        #read-readList-tab {
+            display: flex; 
+            flex-direction: column;
+        }
+        .removeAllDevicesDiv {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            padding-right: 20px;
+        }
+        .p-tree .p-treenode-children {
+            padding: 0 !important;
+        }
+        .p-tree-toggler .p-link {
+            width: 25px !important;
         }
 
     </style>

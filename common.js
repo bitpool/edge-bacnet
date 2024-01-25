@@ -91,7 +91,8 @@ class BacnetClientConfig {
     manual_instance_range_start,
     manual_instance_range_end,
     device_read_schedule,
-    retries
+    retries,
+    cacheFileEnabled
   ) {
     this.apduTimeout = apduTimeout;
     this.localIpAdrress = localIpAdrress;
@@ -107,6 +108,7 @@ class BacnetClientConfig {
     this.manual_instance_range_end = manual_instance_range_end;
     this.device_read_schedule = device_read_schedule;
     this.retries = retries;
+    this.cacheFileEnabled = cacheFileEnabled;
   }
 }
 
@@ -220,17 +222,25 @@ const doNodeRedRestart = function () {
 // STORE CONFIG FUNCTION ==========================================================
 //
 // ================================================================================
-async function Store_Config(data) {
+function Store_Config(data) {
   try {
-    await fs.writeFile("edge-bacnet-datastore.cfg", data, (err) => {
-      if (err) {
-        console.log("Store_Config writeFile error: ", err);
+    fs.access("edge-bacnet-datastore.cfg", fs.constants.W_OK, async function(err) {
+      if(err){
+        console.log("Store_Config writeAccess error found: ", err);
+      } else {
+        await fs.writeFile("edge-bacnet-datastore.cfg", data, {encoding: "utf8", flag: "w"}, (err) => {
+          if (err) {
+            console.log("Store_Config writeFile error: ", err);
+          }
+        });
       }
     });
-  } catch (e) {
+  } catch(e){
     //do nothing
   }
-}
+};
+
+
 
 // READ CONFIG SYNC FUNCTION ======================================================
 //
@@ -238,14 +248,15 @@ async function Store_Config(data) {
 function Read_Config_Sync() {
   var data = "{}";
   try {
-    data = fs.readFileSync("edge-bacnet-datastore.cfg", { encoding: "utf8", flag: "r" });
-  } catch (err) {
-    //console.log("Read_Config_Sync error:", err);
-    data = "{}";
+    data = fs.readFileSync("edge-bacnet-datastore.cfg", { encoding: 'utf8', flag: 'r' });
+  }
+  catch (err) {
+    console.log("Read_Config_Sync error:", err);
+    data = '{}';
     Store_Config(data);
   }
   return data;
-}
+};
 
 // STORE CONFIG FUNCTION - BACNET SERVER ==========================================
 //
@@ -276,6 +287,10 @@ function Read_Config_Sync_Server() {
   return data;
 }
 
+function isNumber(value) {
+  return value != null && typeof value === 'number' && !isNaN(value);
+}
+
 module.exports = {
   BacnetConfig,
   BacnetClientConfig,
@@ -290,4 +305,5 @@ module.exports = {
   Read_Config_Sync,
   Store_Config_Server,
   Read_Config_Sync_Server,
+  isNumber,
 };

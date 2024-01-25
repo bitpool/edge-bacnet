@@ -1,11 +1,12 @@
 <!-- 
-  MIT License Copyright 2021, 2022 - Bitpool Pty Ltd
+  MIT License Copyright 2021, 2024 - Bitpool Pty Ltd
 -->
 <!-- PrimeVue -->
 <link href="resources/@bitpoolos/edge-bacnet/primevue-saga-blue-theme.css" rel="stylesheet" />
 <link href="resources/@bitpoolos/edge-bacnet/primevue.min.css" rel="stylesheet" />
 <link href="resources/@bitpoolos/edge-bacnet/primeflex.min.css" rel="stylesheet" />
 <link href="resources/@bitpoolos/edge-bacnet/primeicons.css" rel="stylesheet" />
+<link href="resources/@bitpoolos/edge-bacnet/style.css" rel="stylesheet" />
 
 <script>
   //custom script loader to ensure dependencies load every time
@@ -113,6 +114,7 @@
       device_read_schedule_value: { value: "1", required: true },
       device_read_schedule_options: { value: "Minutes", required: true },
       deviceRangeRegisters: { value: [] },
+      cacheFileEnabled: {value: false, required: true},
     },
     networkInterfaces: [],
     inputs: 1,
@@ -634,7 +636,7 @@
         <input type="text" id="node-input-apduTimeout" placeholder="10000" />
       </div>
 
-      <div class="form-row">
+      <div class="form-row" style="display: none;">
         <label for="node-input-apduSize"
           ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.apduSize"></span>Max Apdu Size</label
         >
@@ -648,7 +650,7 @@
         </select>
       </div>
 
-      <div class="form-row">
+      <div class="form-row" style="display: none;">
         <label for="node-input-maxSegments"
           ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.maxSegments"></span>Max Segments</label
         >
@@ -732,6 +734,11 @@
           <option value="Hours">Hours</option>
           <option value="Days">Days</option>
         </select>
+      </div>
+
+      <div class="form-row">
+        <label for="node-input-cacheFileEnabled"> Cache file enabled: </label>
+        <input type="checkbox" id="node-input-cacheFileEnabled" style="width: auto;" />
       </div>
 
       <div class="form-row">

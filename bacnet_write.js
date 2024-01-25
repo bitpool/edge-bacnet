@@ -15,7 +15,7 @@ module.exports = function (RED) {
 
       node.on('input', function(msg) {
 
-        let value = msg.payload == "null" ? null : parseInt(msg.payload);
+        let value = msg.payload == "null" ? null : msg.payload;
         let priority = node.priority == "null" ? null : parseInt(node.priority);
 
         let output = {
