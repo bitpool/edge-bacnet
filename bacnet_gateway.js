@@ -35,6 +35,7 @@ module.exports = function (RED) {
     this.bacnetServer = nodeContext.get("bacnetServer") || null;
     this.deviceRangeRegisters = config.deviceRangeRegisters;
     this.cacheFileEnabled = config.cacheFileEnabled;
+    this.sanitise_device_schedule = config.sanitise_device_schedule;
 
     //client and config store
     this.bacnetConfig = nodeContext.get("bacnetConfig");
@@ -62,7 +63,8 @@ module.exports = function (RED) {
       node.manual_instance_range_end,
       node.device_read_schedule,
       node.retries,
-      node.cacheFileEnabled
+      node.cacheFileEnabled,
+      node.sanitise_device_schedule
     );
 
     nodeContext.set("bacnetConfig", node.bacnetConfig);
@@ -178,7 +180,7 @@ module.exports = function (RED) {
             logOut("Error updating priorityQueue: ", error);
           });
       } else if (msg.testFunc == true) {
-        node.bacnetClient.testFunction();
+        node.bacnetClient.testFunction(msg.address, msg.type, msg.instance, msg.property);
       }
     });
 

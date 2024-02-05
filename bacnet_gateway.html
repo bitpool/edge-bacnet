@@ -115,6 +115,9 @@
       device_read_schedule_options: { value: "Minutes", required: true },
       deviceRangeRegisters: { value: [] },
       cacheFileEnabled: {value: false, required: true},
+      sanitise_device_schedule: { value: "60" },
+      sanitise_device_schedule_value: { value: "1", required: true },
+      sanitise_device_schedule_options: { value: "Hours", required: true },
     },
     networkInterfaces: [],
     inputs: 1,
@@ -455,6 +458,11 @@
         document.getElementById("node-input-device_read_schedule_options").value
       );
 
+      document.getElementById("node-input-sanitise_device_schedule").value = getTimePeriodInSeconds(
+        document.getElementById("node-input-sanitise_device_schedule_value").value,
+        document.getElementById("node-input-sanitise_device_schedule_options").value
+      );
+
       node.deviceRangeRegisters = [];
       let deviceRanges = $("#node-input-deviceIdRangeMatrix-container").editableList("items");
       deviceRanges.each(function (i) {
@@ -729,6 +737,26 @@
           placeholder="5"
           style="width: 70px; margin-right: 5px;" />
         <select name="timePeriod" id="node-input-device_read_schedule_options" style="width: 120px; margin-right: 5px;">
+          <option value="Seconds">Seconds</option>
+          <option value="Minutes">Minutes</option>
+          <option value="Hours">Hours</option>
+          <option value="Days">Days</option>
+        </select>
+      </div>
+
+      <div class="form-row" style="align-items: center; display: flex;">
+        <label for="node-input-sanitise_device_schedule_value"
+          ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.sanitise_device_schedule"></span>Device Sanitisation 
+          Frequency</label
+        >
+        <p style="margin-right: 5px; margin-bottom: 0px; padding-left: 7px;">Every</p>
+        <input type="text" id="node-input-sanitise_device_schedule" style="display: none;" />
+        <input
+          type="text"
+          id="node-input-sanitise_device_schedule_value"
+          placeholder="5"
+          style="width: 70px; margin-right: 5px;" />
+        <select name="timePeriod" id="node-input-sanitise_device_schedule_options" style="width: 120px; margin-right: 5px;">
           <option value="Seconds">Seconds</option>
           <option value="Minutes">Minutes</option>
           <option value="Hours">Hours</option>
