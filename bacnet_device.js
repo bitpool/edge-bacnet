@@ -20,6 +20,18 @@ class BacnetDevice {
             that.priorityQueue = config.priorityQueue;
             that.lastPriorityQueueTS = config.lastPriorityQueueTS;
 
+            if(config.childDevices) {
+                that.childDevices = config.childDevices;
+            } else {
+                that.childDevices = [];
+            }
+
+            if(config.parentDeviceId) {
+                that.parentDeviceId = config.parentDeviceId;
+            } else {
+                that.parentDeviceId = null;
+            }
+
         } else if(fromImport == false) {
             if(config.net && config.adr) {
                 that.address = {address: config.address, net: config.net, adr: config.adr};
@@ -42,7 +54,47 @@ class BacnetDevice {
             that.priorityQueueIsActive = false;
             that.priorityQueue = [];
             that.lastPriorityQueueTS = null;
+            that.childDevices = [];
+            that.parentDeviceId = null;
         }
+    }
+
+    setParentDeviceId(deviceId) {
+        this.parentDeviceId = deviceId;
+    }
+
+    getParentDeviceId() {
+        return this.parentDeviceId;
+    }
+
+    hasChildDevices() {
+        if(this.childDevices.length > 0) {
+            return true;
+        } else if(this.childDevices.length == 0) {
+            return false;
+        }
+    }
+
+    addChildDevice(deviceId) {
+        let foundIndex = this.childDevices.findIndex(ele => ele == deviceId);
+
+        if(foundIndex == -1) {
+            this.childDevices.push(deviceId);
+        } else {
+            this.childDevices[foundIndex] = deviceId
+        }
+    }
+
+    getChildDevice(deviceId) {
+        let foundIndex = this.childDevices.findIndex(ele => ele == deviceId);
+
+        if(foundIndex !== -1) return this.childDevices[foundIndex];
+
+        return null;
+    }
+
+    getChildDevices() {
+        return this.childDevices;
     }
 
     setLastPriorityQueueTS() {

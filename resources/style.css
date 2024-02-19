@@ -1,0 +1,11 @@
+.writePointIcon {
+    background: url("icons/icon-write.svg") no-repeat !important;
+    width: 20px;
+    height: 20px;
+}
+
+.readPointIcon {
+    background: url("icons/icon-read.svg") no-repeat !important;
+    width: 20px;
+    height: 20px;
+}
