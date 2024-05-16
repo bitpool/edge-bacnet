@@ -1,0 +1,533 @@
+const { Store_Config } = require("./common");
+
+/**
+ * The `treeBuilder` class is responsible for building and processing the network tree structure.
+ * It takes in a list of devices, a network tree object, a render list, a render list count, and an initial tree build flag.
+ * The class provides methods for caching data, processing a device and its points, adding the root device folder to the render list,
+ * processing points for a device, processing an individual point, extracting point properties, formatting display name for a point,
+ * updating the render list, creating the folder JSON structure for a device, finalizing the network tree data, checking the interrupt flag,
+ * getting the device IP address, computing the device name, sorting points, sorting devices, getting the point icon, and getting the device icon.
+ *
+ * @class
+ * @name treeBuilder
+ * @param {Array} deviceList - The list of devices.
+ * @param {Object} networkTree - The network tree object.
+ * @param {Array} renderList - The render list.
+ * @param {number} renderListCount - The render list count.
+ * @param {boolean} initialTreeBuild - The initial tree build flag.
+ */
+class treeBuilder {
+    constructor(deviceList, networkTree, renderList, renderListCount, initialTreeBuild) {
+        this.deviceList = deviceList;
+        this.networkTree = networkTree;
+        this.renderList = renderList;
+        this.renderListCount = renderListCount;
+        this.initialTreeBuild = initialTreeBuild;
+    }
+
+    /**
+    * Cache the current state of the network tree and other data.
+    * 
+    * @returns {void}
+    */
+    cacheData() {
+        // Cache the current state of the network tree and other data
+        Store_Config(JSON.stringify({
+            renderList: this.renderList,
+            deviceList: this.deviceList,
+            pointList: this.networkTree,
+            renderListCount: this.renderListCount,
+        }));
+    }
+
+    /**
+    * Process a device and its points.
+    * 
+    * @param {Device} device - The device to process.
+    * @param {number} index - The index of the device.
+    * @returns {Promise<void>} - A promise that resolves when the device and its points have been processed.
+    */
+    async processDevice(device, index) {
+        const ipAddress = this.getDeviceIpAddress(device);
+        const deviceId = device.getDeviceId();
+        const deviceName = this.computeDeviceName(device);
+        const deviceKey = `${ipAddress}-${deviceId}`;
+        const deviceObject = this.networkTree[deviceKey];
+
+        // Add the root device folder to the render list
+        if (this.initialTreeBuild) {
+            this.addRootDeviceFolder(device, deviceName, index, ipAddress, deviceId);
+        }
+
+        // Check if the device object exists and the device name is valid
+        if (deviceObject && typeof deviceName !== 'object') {
+            await this.processDevicePoints(device, deviceObject, deviceName, ipAddress, deviceId, index);
+        }
+    }
+
+    /**
+     * Add the root device folder to the render list.
+     *
+     * @param {Object} device - The device object.
+     * @param {string} deviceName - The name of the device.
+     * @param {number} index - The index of the device.
+     * @param {string} ipAddress - The IP address of the device.
+     * @param {string} deviceId - The ID of the device.
+     * @returns {void}
+     */
+    addRootDeviceFolder(device, deviceName, index, ipAddress, deviceId) {
+        if (!this.renderList) {
+            this.renderList = [];
+        }
+
+        if (!device.getIsMstpDevice()) {
+            let displayName = deviceName ? deviceName : `${ipAddress} - ${deviceId}`;
+
+            // Check if the device already exists in the renderList
+            const existingDeviceIndex = this.renderList.findIndex(item => item.deviceId === deviceId && item.ipAddr === ipAddress);
+
+            if (existingDeviceIndex === -1) { // Device not found, add new entry
+                const rootFolder = {
+                    key: index,
+                    label: displayName,
+                    data: displayName,
+                    icon: this.getDeviceIcon(device),
+                    children: [{ key: `${deviceId}-0`, label: 'Points', data: 'Points Folder', icon: 'pi pi-circle-fill', type: 'pointFolder', children: [] }],
+                    type: 'device',
+                    lastSeen: device.getLastSeen(),
+                    showAdded: false,
+                    ipAddr: ipAddress,
+                    deviceId,
+                    isMstpDevice: device.getIsMstpDevice(),
+                    initialName: device.getDeviceName(),
+                };
+
+                // Add the root folder to the render list
+                this.renderList.push(rootFolder);
+            }
+        }
+    }
+
+    /**
+     * Process the points of a device and add them to the render list.
+     * 
+     * @param {Device} device - The device object.
+     * @param {Object} deviceObject - The object containing the points of the device.
+     * @param {string} deviceName - The name of the device.
+     * @param {string} ipAddress - The IP address of the device.
+     * @param {string} deviceId - The ID of the device.
+     * @param {number} index - The index of the device.
+     * @returns {Promise<void>} - A promise that resolves when the points have been processed and added to the render list.
+     */
+    async processDevicePoints(device, deviceObject, deviceName, ipAddress, deviceId, index) {
+        // Initialize the list of children points
+        const children = [];
+
+        // Process each point in the device object
+        for (const pointName in deviceObject) {
+            // Ensure processing should continue
+            this.checkInterruptFlag();
+
+            // Process the point and add it to the list of children
+            const point = deviceObject[pointName];
+            const childPoint = await this.processPoint(point, pointName, index, deviceName, device);
+            children.push(childPoint);
+        }
+
+        // Add the device and its children to the render list
+        this.updateRenderList(children, device, deviceName, index, ipAddress, deviceId);
+    }
+
+    /**
+     * Process a point and create a child point object.
+     *
+     * @param {Object} point - The point to process.
+     * @param {string} pointName - The name of the point.
+     * @param {number} index - The index of the point.
+     * @param {string} deviceName - The name of the parent device.
+     * @param {Object} device - The parent device object.
+     * @returns {Object} - The child point object.
+     */
+    async processPoint(point, pointName, index, deviceName, device) {
+        // Get the properties and data of the point
+        const pointProperties = this.extractPointProperties(point);
+
+        // Determine the point's display name and apply formatting if necessary
+        const displayName = this.formatDisplayName(point, pointName);
+
+        // Create the child point object
+        return {
+            key: `${index}-0-${pointName}`,
+            label: displayName,
+            data: displayName,
+            pointName,
+            icon: this.getPointIcon(point),
+            children: pointProperties,
+            type: 'point',
+            parentDevice: deviceName,
+            showAdded: false,
+            bacnetType: point.meta.objectId.type,
+        };
+    }
+
+    /**
+     * Extracts the properties of a point object.
+     *
+     * @param {Object} point - The point object to extract properties from.
+     * @returns {Array} - An array of point properties.
+     */
+    extractPointProperties(point) {
+        const pointProperties = [];
+
+        // Add properties such as name, type, instance, and others
+        this.addPointProperty(pointProperties, 'Name', point.objectName);
+        this.addPointProperty(pointProperties, 'Object Type', point.meta.objectId.type);
+        this.addPointProperty(pointProperties, 'Object Instance', point.meta.objectId.instance);
+        this.addPointProperty(pointProperties, 'Description', point.description);
+        this.addPointProperty(pointProperties, 'Units', point.units);
+        this.addPointProperty(pointProperties, 'Present Value', point.presentValue);
+        this.addPointProperty(pointProperties, 'System Status', point.systemStatus);
+        this.addPointProperty(pointProperties, 'Modification Date', point.modificationDate);
+        this.addPointProperty(pointProperties, 'Program State', point.programState);
+        this.addPointProperty(pointProperties, 'Record Count', point.recordCount);
+        this.addPointProperty(pointProperties, 'Vendor Name', point.vendorName);
+
+        // Return the array of point properties
+        return pointProperties;
+    }
+
+    /**
+     * Adds a property to the list of point properties.
+     * 
+     * @param {Array} properties - The list of point properties.
+     * @param {string} label - The label of the property.
+     * @param {any} value - The value of the property.
+     * @returns {void}
+     */
+    addPointProperty(properties, label, value) {
+        if (value !== null && value !== undefined && value !== '') {
+            properties.push({
+                label: `${label}: ${value}`,
+                data: value,
+                icon: 'pi pi-cog',
+                children: null,
+            });
+        }
+    }
+
+    /**
+     * Formats the display name for a point.
+     * 
+     * If the point has a display name, it returns the display name.
+     * Otherwise, it removes any special characters from the point name and returns it.
+     * 
+     * @param {Object} point - The point object.
+     * @param {string} pointName - The name of the point.
+     * @returns {string} - The formatted display name.
+     */
+    formatDisplayName(point, pointName) {
+        const reg = /[$#\/\\+]/gi;
+        if (point.displayName) {
+            return point.displayName;
+        }
+        return pointName.replace(reg, '');
+    }
+
+    /**
+     * Updates the render list with the folder structure for a device.
+     * 
+     * @param {Array} children - The children of the device.
+     * @param {Object} device - The device object.
+     * @param {string} deviceName - The name of the device.
+     * @param {number} index - The index of the device.
+     * @param {string} ipAddress - The IP address of the device.
+     * @param {string} deviceId - The ID of the device.
+     * @returns {void}
+     */
+    updateRenderList(children, device, deviceName, index, ipAddress, deviceId) {
+        // Create the folder structure for the device
+        const folderJson = this.createFolderJson(children, device.hasChildDevices(), deviceId);
+
+        if (!this.renderList) {
+            this.renderList = [];
+        }
+
+        // Find the device's entry in the render list
+        let foundIndex = this.renderList.findIndex(ele => ele.deviceId == deviceId && ele.ipAddr == ipAddress);
+
+        // If the device is not in the render list, add it as a new entry
+        const newDeviceEntry = {
+            key: index,
+            label: deviceName,
+            data: deviceName,
+            icon: this.getDeviceIcon(device),
+            children: folderJson,
+            type: 'device',
+            lastSeen: device.getLastSeen(),
+            showAdded: false,
+            ipAddr: ipAddress,
+            deviceId,
+            isMstpDevice: device.getIsMstpDevice(),
+            initialName: device.getDeviceName(),
+        };
+
+        if (device.getIsMstpDevice()) {
+            // For child MSTP devices, find the parent device and the MSTP network folder
+            const parentDeviceId = device.getParentDeviceId();
+            const parentDeviceIndex = this.renderList.findIndex(ele => ele.deviceId == parentDeviceId && ele.ipAddr == ipAddress);
+            const mstpNetworkNumber = device.getMstpNetworkNumber();
+
+            if (parentDeviceIndex !== -1) {
+                let parentDeviceEntry = this.renderList[parentDeviceIndex];
+                let mstpNetworkFolder = parentDeviceEntry.children.find(child => child.label === `MSTP NET${mstpNetworkNumber}`);
+
+                // Create the MSTP network folder if it doesn't exist
+                if (!mstpNetworkFolder) {
+                    mstpNetworkFolder = {
+                        key: `${deviceId}-mstp-${mstpNetworkNumber}`,
+                        label: `MSTP NET${mstpNetworkNumber}`,
+                        data: `Devices Folder (${mstpNetworkNumber})`,
+                        icon: 'pi pi-database',
+                        type: 'deviceFolder',
+                        children: [],
+                    };
+
+                    parentDeviceEntry.children.push(mstpNetworkFolder);
+                }
+
+                // Add or update the child MSTP device in the MSTP folder
+                const mstpDeviceIndex = mstpNetworkFolder.children.findIndex(ele => ele.deviceId == deviceId && ele.ipAddr == ipAddress);
+                if (mstpDeviceIndex === -1) {
+                    mstpNetworkFolder.children.push(newDeviceEntry);
+                } else {
+                    mstpNetworkFolder.children[mstpDeviceIndex] = newDeviceEntry;
+                }
+            }
+        } else {
+            // Add the new device entry to the root of the render list
+            if (foundIndex === -1) {
+                this.renderList.push(newDeviceEntry);
+            } else {
+                // If the device is already in the render list, update its entry
+                this.renderList[foundIndex] = newDeviceEntry;
+            }
+        }
+    }
+
+    /**
+     * Creates a folder JSON object for the network tree.
+     *
+     * @param {Array} children - The children nodes of the folder.
+     * @param {boolean} hasChildDevices - Indicates if the device has child devices.
+     * @param {string} deviceId - The ID of the device.
+     * @returns {Array} - The folder JSON object.
+     */
+    createFolderJson(children, hasChildDevices, deviceId) {
+        const folders = [
+            {
+                key: `${deviceId}-0`,
+                label: 'Points',
+                data: 'Points Folder',
+                icon: 'pi pi-circle-fill',
+                type: 'pointFolder',
+                children: children.sort(this.sortPoints),
+            }
+        ];
+
+        return folders;
+    }
+
+    /**
+     * Finalize the network tree data
+     * 
+     * @returns {Object} The finalized network tree data
+     * - renderList: The list of devices and their points
+     * - deviceList: The list of devices
+     * - pointList: The list of points in the network tree
+     * - pollFrequency: The polling schedule for discovery
+     */
+    finalizeNetworkTreeData() {
+        this.renderList.sort(this.sortDevices);
+
+        return {
+            renderList: this.renderList,
+            deviceList: this.deviceList,
+            pointList: this.networkTree,
+            pollFrequency: this.discover_polling_schedule,
+        };
+    }
+
+    /**
+     * Checks if the buildTreeException flag is set and throws an error if it is.
+     * 
+     * @throws {Error} - Throws an error with the message 'Build tree interrupted' if the buildTreeException flag is set.
+     */
+    checkInterruptFlag() {
+        if (this.buildTreeException) {
+            throw new Error('Build tree interrupted');
+        }
+    }
+
+    /**
+     * Returns the IP address of the given device.
+     * 
+     * @param {object} device - The device object.
+     * @returns {string} The IP address of the device.
+     */
+    getDeviceIpAddress(device) {
+        switch (typeof device.getAddress()) {
+            case "object":
+                return device.getAddress().address;
+            case "string":
+                return device.getAddress();
+            default:
+                return device.getAddress();
+        }
+    }
+
+    /**
+     * Computes the device name based on the provided device object.
+     * If the device has a display name, it will be returned.
+     * Otherwise, the device name will be returned.
+     * 
+     * @param {Object} device - The device object.
+     * @returns {string} - The computed device name.
+     */
+    computeDeviceName(device) {
+        if (device.getDisplayName() !== null && device.getDisplayName() !== "" && device.getDisplayName() !== undefined) {
+            return device.getDisplayName();
+        }
+        return device.getDeviceName();
+    }
+
+    /**
+     * Sorts the points based on their BACnet type and label.
+     *
+     * @param {Object} a - The first point object to compare.
+     * @param {Object} b - The second point object to compare.
+     * @returns {number} - A negative number if a should be sorted before b, a positive number if b should be sorted before a, or 0 if they are equal.
+    */
+    sortPoints(a, b) {
+        if (a.bacnetType > b.bacnetType) {
+            return 1;
+        } else if (a.bacnetType < b.bacnetType) {
+            return -1;
+        } else if (a.bacnetType == b.bacnetType) {
+            return 0;
+        }
+
+        return a.label.localeCompare(b.label);
+    }
+
+    /**
+     * Sorts devices based on their deviceId.
+     *
+     * @param {Object} a - The first device object to compare.
+     * @param {Object} b - The second device object to compare.
+     * @returns {number} - Returns -1 if a.deviceId is less than b.deviceId, 1 if a.deviceId is greater than b.deviceId, or 0 if they are equal.
+     */
+    sortDevices(a, b) {
+        if (a.deviceId < b.deviceId) {
+            return -1;
+        } else if (a.deviceId > b.deviceId) {
+            return 1;
+        }
+        return 0; // deviceIds are equal
+    }
+
+    /**
+     * Returns the icon class name for a given point based on its object type.
+     * 
+     * @param {Object} values - The values object containing the point's metadata.
+     * @returns {string} - The icon class name for the point.
+    */
+    getPointIcon(values) {
+        const objectId = values.meta.objectId.type;
+        const hasPriorityArray =
+            values.hasPriorityArray && values.hasOwnProperty("hasPriorityArray") ? values.hasPriorityArray : false;
+
+        if (hasPriorityArray) {
+            return "pi writePointIcon";
+        } else {
+            switch (objectId) {
+                case 0:
+                    //AI
+                    return "pi readPointIcon";
+                case 1:
+                    //AO
+                    return "pi readPointIcon";
+                case 2:
+                    //AV
+                    return "pi readPointIcon";
+                case 3:
+                    //BI
+                    return "pi readPointIcon";
+                case 4:
+                    //BO
+                    return "pi readPointIcon";
+                case 5:
+                    //BV
+                    return "pi readPointIcon";
+                case 8:
+                    //Device
+                    return "pi pi-box";
+                case 13:
+                    //MI
+                    return "pi readPointIcon";
+                case 14:
+                    //MO
+                    return "pi readPointIcon";
+                case 19:
+                    //MV
+                    return "pi readPointIcon";
+                case 10:
+                    //File
+                    return "pi pi-file";
+                case 16:
+                    //Program
+                    return "pi pi-database";
+                case 20:
+                    //Trendlog
+                    return "pi pi-chart-line";
+                case 15:
+                    //Notification Class
+                    return "pi pi-bell";
+                case 56:
+                    return "pi pi-sitemap";
+                case 178:
+                    return "pi pi-lock";
+                case 17:
+                    return "pi pi-calendar";
+                case 6:
+                    return "pi pi-calendar";
+                default:
+                    //Return circle for all other types
+                    return "pi readPointIcon";
+            }
+        }
+    }
+
+    /**
+     * Returns the icon for a given device based on its properties.
+     * 
+     * @param {Object} device - The device object.
+     * @returns {string} - The icon class name.
+    */
+    getDeviceIcon(device) {
+        const isMstp = device.getIsMstpDevice();
+        const manualDiscoveryMode = device.getManualDiscoveryMode();
+
+        if (manualDiscoveryMode == true) {
+            return "pi pi-question-circle";
+        } else if (manualDiscoveryMode == false) {
+            if (isMstp == true) {
+                return "pi pi-box";
+            } else if (isMstp == false) {
+                return "pi pi-server";
+            }
+        }
+        return "pi pi-server";
+    }
+}
+
+module.exports = { treeBuilder };

@@ -291,6 +291,171 @@
               return false;
             }
           },
+          calculateMstpCount(slotProps) {
+            let count = 0;
+            slotProps.node.children.forEach(function (child) {
+              if (child.label.includes("MSTP")) {
+                count += child.children.length;
+              }
+            });
+
+            return count;
+          },
+          settingDeviceName(slotProps) {
+            let app = this;
+            if (slotProps.node.settingDisplayName) {
+              return true;
+            }
+            return false;
+          },
+          cancelDisplayNameDialog() {
+            let app = this;
+            app.deviceDisplayNameValue = "";
+            app.showDeviceNameDialog = false;
+          },
+          cancelPointNameDialog() {
+            let app = this;
+            app.pointDisplayNameValue = "";
+            app.showPointNameDialog = false;
+          },
+          onDeviceRightClick(slotProps, event) {
+            let app = this;
+            app.rightClickedDevice = slotProps;
+            event.preventDefault();
+            menu.style.setProperty("--mouse-x", event.clientX + "px");
+            menu.style.setProperty("--mouse-y", event.clientY + "px");
+            menu.style.display = "block";
+          },
+          onPointRightClick(slotProps, event) {
+            let app = this;
+            app.rightClickedPoint = slotProps;
+            event.preventDefault();
+            pointMenu.style.setProperty("--mouse-x", event.clientX + "px");
+            pointMenu.style.setProperty("--mouse-y", event.clientY + "px");
+            pointMenu.style.display = "block";
+          },
+          handleContextMenuClick(type) {
+            let app = this;
+            switch (type) {
+              case "purgeDevice":
+                app.purgeDevice(app.rightClickedDevice);
+                break;
+              case "updatePoints":
+                app.updatePointsForDevice(app.rightClickedDevice);
+                break;
+              case "addAllPoints":
+                app.addAllClicked(app.rightClickedDevice);
+                break;
+              case "removeAllPoints":
+                app.removeAllClicked(app.rightClickedDevice);
+                break;
+              case "setDeviceName":
+                app.showDeviceNameDialog = true;
+                app.deviceDisplayNameValue = app.rightClickedDevice.node.label;
+                break;
+              default:
+                break;
+            }
+          },
+          handlePointContextMenuClick(type) {
+            let app = this;
+            switch (type) {
+              case "setPointName":
+                app.showPointNameDialog = true;
+                app.pointDisplayNameValue = app.rightClickedPoint.node.label;
+                break;
+              case "updatePoint":
+                app.updatePoint(app.rightClickedDevice);
+                break;
+              default:
+                break;
+            }
+          },
+          purgeDevice(slotProps) {
+            let app = this;
+            let device = app.deviceList.find((ele) => {
+              if (ele.address.address) {
+                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              } else {
+                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              }
+            });
+            if (device) {
+              app.nodeService.purgeDevice(device).then(function (result) { });
+            }
+          },
+          updatePointsForDevice(slotProps) {
+            let app = this;
+            let device = app.deviceList.find((ele) => {
+              if (ele.address.address) {
+                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              } else {
+                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              }
+            });
+            if (device) {
+              app.nodeService.updatePointsForDevice(device).then(function (result) { });
+            }
+          },
+          updatePoint(slotProps) {
+            let app = this;
+            let device = app.deviceList.find((ele) => {
+              if (ele.address.address) {
+                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              } else {
+                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              }
+            });
+            if (device) {
+              app.nodeService.updatePoint(device).then(function (result) { });
+            }
+          },
+          setDeviceName() {
+            let app = this;
+            const slotProps = app.rightClickedDevice;
+            const displayName = app.deviceDisplayNameValue;
+            let device = app.deviceList.find((ele) => {
+              if (ele.address.address) {
+                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              } else {
+                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              }
+            });
+
+            if (device) {
+              app.nodeService.setDeviceDisplayName(device, displayName).then(function (result) {
+                if (result) {
+                  slotProps.node.label = displayName;
+                }
+              });
+            }
+
+            app.showDeviceNameDialog = false;
+          },
+          setPointName() {
+            let app = this;
+
+            const slotProps = app.rightClickedPoint;
+            const pointDisplayName = app.pointDisplayNameValue;
+            const pointName = slotProps.node.pointName;
+
+            let device = app.deviceList.find((ele) => {
+              return ele.deviceName == slotProps.node.parentDevice;
+            });
+
+            if (device) {
+              let deviceAddress = app.getDeviceAddress(device.address);
+              let deviceKey = `${deviceAddress}-${device.deviceId}`;
+
+              app.nodeService.setPointDisplayName(deviceKey, pointName, pointDisplayName).then(function (result) {
+                if (result) {
+                  slotProps.node.label = pointDisplayName;
+                }
+              });
+            }
+
+            app.showPointNameDialog = false;
+          },
         },
         components: {
           "p-tree": primevue.tree,
@@ -336,6 +501,16 @@
 
       document.getElementById("node-input-applicationTag").value = node.applicationTag;
       document.getElementById("node-input-priority").value = node.priority;
+
+      var menu = document.querySelector(".context-menu");
+      window.addEventListener("click", (event) => {
+        menu.style.display = "none";
+      });
+
+      var pointMenu = document.querySelector(".point-context-menu");
+      window.addEventListener("click", (event) => {
+        pointMenu.style.display = "none";
+      });
 
       //remove loading animation
       let loadingGif = document.getElementById("loadingGif");
@@ -431,11 +606,7 @@
     .statusOffline {
       color: red;
     }
-    /*
-        .deviceLabel {
-            position: absolute;
-        }
-        */
+
     .objectPropertiesLabel {
       display: flex !important;
       flex-direction: row;
@@ -562,6 +733,65 @@
   </div>
 
   <div id="node-input-tabs-content">
+
+        <!-- Start Device Context Menu -->
+        <ul
+        class="red-ui-menu red-ui-menu-dropdown red-ui-menu-dropdown-direction-right red-ui-menu-dropdown-noicons red-ui-menu-dropdown-submenus context-menu">
+        <li class="context-menu-item" @click="handleContextMenuClick('purgeDevice')">
+          <a class="red-ui-menu-label">
+            <i class="pi pi-wrench context-menu-icon"></i>
+            <span class="context-menu-item-text">Purge Device</span>
+          </a>
+        </li>
+        <li class="context-menu-item" @click="handleContextMenuClick('updatePoints')">
+          <a class="red-ui-menu-label">
+            <i class="pi pi-refresh context-menu-icon"></i>
+            <span class="context-menu-item-text">Update Points</span>
+          </a>
+        </li>
+        <li class="red-ui-menu-divider"></li>
+        <li class="context-menu-item" @click="handleContextMenuClick('addAllPoints')">
+          <a class="red-ui-menu-label">
+            <i class="pi pi-plus-circle context-menu-icon"></i>
+            <span class="context-menu-item-text">Add All Points </span>
+          </a>
+        </li>
+        <li class="context-menu-item" @click="handleContextMenuClick('removeAllPoints')">
+          <a class="red-ui-menu-label">
+            <i class="pi pi-minus-circle context-menu-icon"></i>
+            <span class="context-menu-item-text">Remove All Points</span>
+          </a>
+        </li>
+        <li class="red-ui-menu-divider"></li>
+        <li class="context-menu-item" @click="handleContextMenuClick('setDeviceName')">
+          <a class="red-ui-menu-label">
+            <i class="pi pi-pencil context-menu-icon"></i>
+            <span class="context-menu-item-text">Set Device Name</span>
+          </a>
+        </li>
+      </ul>
+      <!-- End Device Context Menu -->
+  
+      <!-- Start Point Context Menu -->
+      <ul
+        class="red-ui-menu red-ui-menu-dropdown red-ui-menu-dropdown-direction-right red-ui-menu-dropdown-noicons red-ui-menu-dropdown-submenus point-context-menu">
+        <li class="context-menu-item" @click="handlePointContextMenuClick('setPointName')">
+          <a class="red-ui-menu-label">
+            <i class="pi pi-pencil context-menu-icon"></i>
+            <span class="context-menu-item-text">Set Point Name</span>
+          </a>
+        </li>
+        <li class="red-ui-menu-divider"></li>
+        <li class="context-menu-item" @click="handlePointContextMenuClick('updatePoint')">
+          <a class="red-ui-menu-label">
+            <i class="pi pi-refresh context-menu-icon"></i>
+            <span class="context-menu-item-text">Update Point</span>
+          </a>
+        </li>
+      </ul>
+      <!-- End Point Context Menu -->
+
+
     <div id="read-networkTree-tab" style="display:none">
       <div id="read-networkTree-tab-content" class="networkTreeContent" style="display:none">
         <div>
@@ -574,30 +804,44 @@
         <div id="deviceListApp">
           <p-tree :value="devices" selectable="false" :filter="true" filterMode="lenient" v-if="hasData()">
             <template #device="slotProps">
-              <div v-if="isDeviceActive(slotProps)" class="deviceLabelParent">
-                <b class="deviceLabel">{{slotProps.node.label}} <b class="statusOnline deviceStatus">Online</b></b>
-              </div>
-              <div v-else>
-                <b class="deviceLabel">{{slotProps.node.label}} <b class="statusOffline deviceStatus">Offline</b></b>
+              <div @contextmenu="onDeviceRightClick(slotProps, $event)" class="p-treenode-label">
+
+                <div v-if="isDeviceActive(slotProps)" class="deviceLabelParent">
+                  <b class="deviceLabel">
+                    <span class="statusOnline deviceStatus dotOnline dot"></span>
+                    {{slotProps.node.label}} 
+                  </b>
+                </div>
+                <div v-else>
+                  <b class="deviceLabel">
+                    <span class="statusOffline deviceStatus dotOffline dot"></span>
+                    {{slotProps.node.label}} 
+                  </b>
+                </div>
+
               </div>
             </template>
 
             <template #point="slotProps" v-model:class="pointContent">
-              <b class="pointLabel">{{slotProps.node.label}}</b>
-              <template v-if="isSlotAdded(slotProps)">
-                <button class="addPointButton bacnetbutton">
-                  <i class="pi pi-check-circle " style="color: #00AEEF;"></i>
-                </button>
-              </template>
-              <template v-else>
-                <button @click="addPointClicked(slotProps, this)" class="addPointButton bacnetbutton">
-                  <i class="pi pi-plus-circle "></i>
-                </button>
-              </template>
+              <div @contextmenu="onDeviceRightClick(slotProps, $event)" class="p-treenode-label">
 
-              <button @click="removePointClicked(slotProps, this)" class="minusPointButton bacnetbutton">
-                <i class="pi pi-minus-circle "></i>
-              </button>
+                <b class="pointLabel">{{slotProps.node.label}}</b>
+                <template v-if="isSlotAdded(slotProps)">
+                  <button class="addPointButton bacnetbutton">
+                    <i class="pi pi-check-circle " style="color: #00AEEF;"></i>
+                  </button>
+                </template>
+                <template v-else>
+                  <button @click="addPointClicked(slotProps, this)" class="addPointButton bacnetbutton">
+                    <i class="pi pi-plus-circle "></i>
+                  </button>
+                </template>
+
+                <button @click="removePointClicked(slotProps, this)" class="minusPointButton bacnetbutton">
+                  <i class="pi pi-minus-circle "></i>
+                </button>
+              </div>
+
             </template>
           </p-tree>
           <div v-else style="text-align: center; padding-top: 20px;">

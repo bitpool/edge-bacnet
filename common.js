@@ -8,6 +8,7 @@ const os = require("os");
 const { exec } = require("child_process");
 const baEnum = require("./resources/node-bacstack-ts/dist/index.js").enum;
 const fs = require("fs");
+const { BitArray } = require("./resources/bitArray.js");
 
 const logger = createLogger({
   format: format.combine(
@@ -181,7 +182,7 @@ const getIpAddress = function () {
       }
     }
 
-    if (os.version().includes("Ubuntu")) {
+    if (os.version().includes("Ubuntu") || os.version().includes("SMP")) {
       let allInterfaceName = "All interfaces";
       if (!results[allInterfaceName]) {
         results[allInterfaceName] = [];
@@ -244,7 +245,6 @@ function Read_Config_Sync() {
   try {
     data = fs.readFileSync("edge-bacnet-datastore.cfg", { encoding: "utf8", flag: "r" });
   } catch (err) {
-    console.log("Read_Config_Sync error:", err);
     data = "{}";
     Store_Config(data);
   }
@@ -261,7 +261,7 @@ async function Store_Config_Server(data) {
         //console.log("Store_Config_Server writeFile error: ", err);
       }
     });
-  } catch (err) {}
+  } catch (err) { }
 }
 
 // READ CONFIG SYNC FUNCTION - BACNET SERVER ======================================
@@ -273,7 +273,6 @@ function Read_Config_Sync_Server() {
     data = fs.readFileSync("edge-bacnet-server-datastore.cfg", { encoding: "utf8", flag: "r" });
   } catch (err) {
     if (err.errno == -4058) {
-      console.log("Edge-BACnet Server: No save file found, creating new file");
       data = "{}";
       Store_Config_Server(data);
     }
@@ -283,6 +282,24 @@ function Read_Config_Sync_Server() {
 
 function isNumber(value) {
   return value != null && typeof value === "number" && !isNaN(value);
+}
+
+function decodeBitArray(size, bits) {
+  let array = [];
+  for (let i = 0; i < bits.length; i++) {
+    let bit = bits[i];
+    let bitString = bit.toString(2);
+    if (bitString.length < size) {
+      const remainingLength = size - bitString.length;
+      const backFillString = "0".repeat(remainingLength);
+      array.push(backFillString + bitString);
+    } else if (bitString.length == size) {
+      array.push(bitString);
+    }
+    if (i == bits.length - 1) {
+      return array;
+    }
+  };
 }
 
 module.exports = {
@@ -300,4 +317,5 @@ module.exports = {
   Store_Config_Server,
   Read_Config_Sync_Server,
   isNumber,
+  decodeBitArray,
 };

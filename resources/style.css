@@ -9,3 +9,324 @@
     width: 20px;
     height: 20px;
 }
+
+
+
+
+/* Read node styles */
+
+.p-treenode-label {
+    color: black;
+    width: 100%;
+}
+.p-tree {
+    background: inherit !important;
+    border: inherit !important;
+    padding-right: 0px !important;
+}
+.p-button {
+    margin-right: .5rem;
+}
+.addPointButton {
+    float: right;
+}
+.minusPointButton {
+    float: right;
+}
+.addPointButton:hover, .minusPointButton:hover {
+    background: #d5d5d5 !important;
+}
+.pointLabel {
+    font-weight: 400;
+}
+.deviceLabel {
+    font-weight: 100;
+}
+.removeAllButton {
+    float: right;
+}
+.addAllButton {
+    float: right;
+}
+.bacnetbutton {
+    background: none;
+    border: none;
+    color: black;
+    font-weight: 400;
+}
+.bacnetbutton:hover {
+    background: #f0f0f0;
+    border-radius: 10px;
+}
+.allFunctionsText {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol" !important;
+    padding-left: 5px;
+}
+.p-treenode-children > li > .p-treenode-children > li {
+    font-size: 14px;
+    color: #b5b5b5 !important;
+}
+.p-treenode-children > li > .p-treenode-children > .p-treenode-label {
+    color: #b5b5b5 !important;
+}
+.p-tree-toggler:enabled:hover {
+    background: #d5d5d5 !important;
+}
+.p-tree-toggler:focus {
+    border: none !important;
+    box-shadow: none !important;
+}
+.deviceStatus {
+    font-size: 10px;
+}
+.statusOnline {
+    color: #11c511;
+}
+.statusOffline {
+    color: red;
+}
+.readDeviceList {
+    .deviceLabel {
+        position: absolute;
+    }
+}
+.objectPropertiesLabel {
+    display: flex !important;
+    flex-direction: row;
+    align-items: center;
+}
+.p-tree .p-tree-container .p-treenode .p-treenode-content:focus {
+    outline: 0 none !important;
+    outline-offset: 0 !important;
+    box-shadow: inset 0 0 0 1px #bdbdbd !important;
+}
+.checkbox-round {
+    width: 13px !important;
+    height: 13px !important;
+    background-color: white;
+    border-radius: 50%;
+    vertical-align: middle;
+    border: 1px solid #ddd;
+    appearance: none;
+    -webkit-appearance: none;
+    outline: none;
+    cursor: pointer;
+}
+.checkbox-round:checked {
+    background-color: #00AEEF;
+}
+.checkbox-round:focus {
+    outline: none !important;
+}
+.p-tree-filter:focus, .p-tree-filter:focus-visible, .p-inputtext:enabled:hover {
+    box-shadow: inset 0 0 0 0.15rem #dfdcdc !important;
+    border-color: transparent !important;
+}
+.bacnetbutton > .pi {
+    display: flex;
+}
+.p-tree-container {
+    margin: 0 !important;
+}
+.reloadButtonIcon {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol" !important;
+}
+.exportReadListButton {
+    border: none;
+    background: none;
+    font-size: 14px !important;
+    float: left;
+    display: flex;
+    align-items: center;
+}
+.exportReadListButton:hover {
+    background-color: #d5d5d5;
+    border-radius: 5px;
+}
+.removeAllDevicesButton {
+    border: none;
+    background: none;
+    font-size: 14px !important;
+    float: right;
+    display: flex;
+    align-items: center;
+}
+.removeAllDevicesButton:hover {
+    background-color: #d5d5d5;
+    border-radius: 10px;
+}
+.reloadButton {
+    border: none;
+    background: none;
+    font-size: 14px !important;
+    float: right;
+}
+.rebuildDataButton {
+    border: none;
+    background: none;
+    font-size: 14px !important;
+    float: right;
+}
+.reloadButton:hover {
+    background-color: #d5d5d5;
+    border-radius: 10px;
+}
+.rebuildDataButton:hover {
+    background-color: #d5d5d5;
+    border-radius: 10px;
+}
+.headerDiv {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    justify-content: space-around;
+    height: 20px;
+}
+.msgTypeDiv {
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+}
+.p-progressbar .p-progressbar-value {
+    background: #00AEEF !important;
+}
+.p-treenode-label {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.buttonGroup {
+    padding-left: 7px;
+}
+#read-readList-tab {
+    display: flex; 
+    flex-direction: column;
+}
+.removeAllDevicesDiv {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+    padding-right: 20px;
+}
+.p-tree .p-treenode-children {
+    padding: 0 !important;
+}
+.p-tree-toggler .p-link {
+    width: 25px !important;
+}
+.dot {
+    height: 13px;
+    width: 13px;
+    border: 0.75px solid #777777;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 5px;
+}
+.dotOnline {
+    background-color: #11c511;
+}
+.dotOffline {
+    background-color: red;
+}
+.mstpDeviceCount {
+    margin-left: 10px;
+    background-color: #00aeef;
+    color: #ffffff;
+    border-radius: 45%;
+    font-size: 12px;
+}
+
+.point-context-menu {
+    --mouse-x: 0;
+    --mouse-y: 0;
+    display: none;
+    position: fixed;
+    margin: 0;
+    left: 0;
+    top: 0;
+    /* The following line is responsible for all the magic */
+    transform: translateX(min(var(--mouse-x), calc(100vw - 100%))) translateY(min(var(--mouse-y), calc(100vh - 100%)));
+    z-index: 10;
+}
+
+
+.context-menu {
+    --mouse-x: 0;
+    --mouse-y: 0;
+    display: none;
+    position: fixed;
+    margin: 0;
+    left: 0;
+    top: 0;
+    /* The following line is responsible for all the magic */
+    transform: translateX(min(var(--mouse-x), calc(100vw - 100%))) translateY(min(var(--mouse-y), calc(100vh - 100%)));
+    z-index: 10;
+}
+.context-menu-container {
+    flex-direction: column;
+    justify-content: space-evenly;
+    align-items: flex-start;
+    width: 100%;
+}
+.context-menu-item {
+    width: 100%;
+    height: 30px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+}
+.context-menu-item:hover {
+    cursor: pointer;
+}
+.context-menu-item-text {
+    padding-left: 10px;
+}
+.context-menu-icon {
+    color: white;
+}
+.export-points-button {
+    border: 1px solid var(--red-ui-secondary-border-color);
+    border-radius: 5px !important;
+    padding: 6px 12px;
+    cursor: pointer;
+    margin-right: 10px !important;
+}
+.diplayNameDialogSave {
+    background-color: #3295BD !important;
+    border-radius: 0 !important;
+    margin-right: 0 !important;
+}
+.diplayNameDialogSave > .p-button-label {
+    color: white !important;
+}
+.diplayNameDialogCancel {
+    background-color: #ffffff !important;
+    color: #666 !important;
+    border: 1px solid var(--red-ui-secondary-border-color);
+    border-radius: 0 !important;
+    margin-right: 0 !important;
+}
+.diplayNameDialogCancel:hover {
+    background-color: #e6e6e6 !important;
+    color: #666 !important;
+    border: 1px solid var(--red-ui-secondary-border-color);
+}
+.deviceNameDialog {
+
+    .p-dialog-header {
+        background: #133547 !important;
+        padding: 0.5rem !important;
+    }
+    .p-dialog-title {
+        color: white;
+        font-size: 1rem !important;
+    }
+    .p-dialog-content {
+        padding: 0.5em 0.75rem 0.5rem 0.75rem;
+
+        & label {
+            font-size: 0.9rem !important;
+        }
+        & input {
+            font-size: 1rem !important;
+        }
+    }
+}

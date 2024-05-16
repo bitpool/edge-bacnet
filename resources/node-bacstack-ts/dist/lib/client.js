@@ -95,7 +95,7 @@ class Client extends events_1.EventEmitter {
             if (!result)
                 return debug('Couldn`t decode Error');
             this._invokeCallback(invokeId, new Error('BacnetError - Class:' + result.class + ' - Code:' + result.code));
-        } catch(e){
+        } catch (e) {
         }
     }
     _processAbort(invokeId, reason) {
@@ -619,14 +619,14 @@ class Client extends events_1.EventEmitter {
         baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, buffer);
         this._addCallback(settings.invokeId, (err, data) => {
-            try{
+            try {
                 if (err)
                     return next(err);
                 const result = baServices.readProperty.decodeAcknowledge(data.buffer, data.offset, data.length);
                 if (!result)
                     return next(new Error('INVALID_DECODING'));
                 next(null, result);
-            } catch(e){
+            } catch (e) {
                 return next(e);
             }
         });
@@ -716,7 +716,6 @@ class Client extends events_1.EventEmitter {
         baServices.readPropertyMultiple.encode(buffer, propertiesArray);
         baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, buffer);
-        //this.sendBvlc(address, buffer);
         this._addCallback(settings.invokeId, (err, data) => {
             try {
                 if (err)
@@ -725,7 +724,7 @@ class Client extends events_1.EventEmitter {
                 if (!result)
                     return next(new Error('INVALID_DECODING'));
                 next(null, result);
-            } catch(e){
+            } catch (e) {
                 return next(e);
             }
         });
@@ -1369,7 +1368,7 @@ class Client extends events_1.EventEmitter {
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE, receiver);
         baApdu.encodeComplexAck(buffer, baEnum.PduTypes.COMPLEX_ACK, baEnum.ConfirmedServiceChoice.READ_PROPERTY, invokeId);
         baServices.readProperty.encodeAcknowledge(buffer, objectId, property.id, property.index, value);
-        //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
+        baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(receiver, buffer);
     }
     readPropertyMultipleResponse(receiver, invokeId, values) {

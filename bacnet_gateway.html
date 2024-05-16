@@ -52,7 +52,7 @@
     // async load as in your code
     function LoadScriptsAsync(_scripts, scripts) {
       for (var i = 0; i < _scripts.length; i++) {
-        loadScript(_scripts[i], scripts[i], function () {});
+        loadScript(_scripts[i], scripts[i], function () { });
       }
     }
 
@@ -84,7 +84,57 @@
       return fetch("/bitpool-bacnet-data/clearBacnetServerPoints").then((res) => res.json());
     }
     getBacnetServerPoints() {
-        return fetch('/bitpool-bacnet-data/getBacnetServerPoints').then(res => res.json());
+      return fetch('/bitpool-bacnet-data/getBacnetServerPoints').then(res => res.json());
+    }
+    purgeDevice(device) {
+      return fetch('/bitpool-bacnet-data/purgeDevice', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ d: device })
+      }).then(res => res.json());
+    }
+    updatePointsForDevice(device) {
+      return fetch('/bitpool-bacnet-data/updatePointsForDevice', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ d: device })
+      }).then(res => res.json());
+    }
+    setDeviceDisplayName(device, displayName) {
+      return fetch('/bitpool-bacnet-data/setDeviceDisplayName', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ d: device, n: displayName })
+      }).then(res => res.json());
+    }
+    setPointDisplayName(deviceKey, pointName, pointDisplayName) {
+      return fetch('/bitpool-bacnet-data/setPointDisplayName', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ k: deviceKey, p: pointName, n: pointDisplayName })
+      }).then(res => res.json());
+    }
+    importReadList(payload) {
+      return fetch('/bitpool-bacnet-data/importReadList', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ p: payload })
+      }).then(res => res.json());
     }
   }
   RED.nodes.registerType("Bacnet-Gateway", {
@@ -101,23 +151,20 @@
       retries: { value: "5", required: true },
       broadCastAddr: { value: "255.255.255.255", required: true },
       toLogIam: { value: false },
-      discover_polling_schedule: { value: "60" },
-      discover_polling_schedule_value: { value: "1", required: true },
+      discover_polling_schedule: { value: "900" },
+      discover_polling_schedule_value: { value: "15", required: true },
       discover_polling_schedule_options: { value: "Minutes", required: true },
       deviceId: { value: 817001, required: true },
-      manual_instance_range_enabled: { value: false },
-      manual_instance_range_start: { value: 0 },
-      manual_instance_range_end: { value: 10000 },
       logErrorToConsole: { value: false },
       serverEnabled: { value: false },
-      device_read_schedule: { value: "60" },
-      device_read_schedule_value: { value: "1", required: true },
+      device_read_schedule: { value: "900" },
+      device_read_schedule_value: { value: "15", required: true },
       device_read_schedule_options: { value: "Minutes", required: true },
       deviceRangeRegisters: { value: [] },
-      cacheFileEnabled: {value: false, required: true},
-      sanitise_device_schedule: { value: "60" },
-      sanitise_device_schedule_value: { value: "1", required: true },
-      sanitise_device_schedule_options: { value: "Hours", required: true },
+      cacheFileEnabled: { value: false, required: true },
+      sanitise_device_schedule: { value: "60", required: false },
+      sanitise_device_schedule_value: { value: "1", required: false },
+      sanitise_device_schedule_options: { value: "Hours", required: false },
     },
     networkInterfaces: [],
     inputs: 1,
@@ -190,29 +237,9 @@
 
       queryAdapters();
 
-      function setManualInstanceRangeState(state) {
-        let deviceIdRangeStart = $("#node-input-manual_instance_range_start");
-        let deviceIdRangeEnd = $("#node-input-manual_instance_range_end");
-        if (state == true) {
-          deviceIdRangeStart.removeAttr("readonly");
-          deviceIdRangeEnd.removeAttr("readonly");
-        } else if (state == false) {
-          deviceIdRangeStart.attr("readonly", true);
-          deviceIdRangeEnd.attr("readonly", true);
-        }
-      }
-
-      setManualInstanceRangeState(node.manual_instance_range_enabled);
-
-      $("#node-input-manual_instance_range_enabled").change(function (e) {
-        setManualInstanceRangeState(this.checked);
-      });
-
       if (node.vm1 == undefined) {
         const confirmDialog = document.createElement("p-confirm-dialog");
         document.getElementById("serverParent").appendChild(confirmDialog);
-        //document.getElementById("clearServerContainer").appendChild(confirmDialog);
-        
       }
 
       const { createApp, ref, onMounted } = Vue;
@@ -230,7 +257,7 @@
           };
         },
         mounted() {
-            this.getServerObjects();
+          this.getServerObjects();
         },
         methods: {
           confirmAll(event) {
@@ -242,7 +269,7 @@
               acceptClass: "p-button-danger",
               accept: () => {
                 //handle accept
-                this.nodeService.clearBacnetServerPoints().then(function() {
+                this.nodeService.clearBacnetServerPoints().then(function () {
                   app.getServerObjects();
                 });
               },
@@ -253,41 +280,41 @@
           },
           confirm(json) {
             this.$confirm.require({
-                message: 'Do you want to clear this BACnet server point? This action is not reversible',
-                header: 'Delete Confirmation',
-                icon: 'pi pi-info-circle',
-                acceptClass: 'p-button-danger',
-                accept: () => {
-                    //handle accept 
-                    let app = this;
-                    $.ajax({
-                        type: "POST",
-                        url: '/bitpool-bacnet-data/clearBacnetServerPoint',
-                        dataType: 'json',
-                        contentType: 'application/json',
-                        data: JSON.stringify(json),
-                        success: function (result) {
-                            app.getServerObjects();
-                        },
-                        timeout: 10000
-                    });
-                },
-                reject: () => {
-                    //handle reject
-                }
+              message: 'Do you want to clear this BACnet server point? This action is not reversible',
+              header: 'Delete Confirmation',
+              icon: 'pi pi-info-circle',
+              acceptClass: 'p-button-danger',
+              accept: () => {
+                //handle accept 
+                let app = this;
+                $.ajax({
+                  type: "POST",
+                  url: '/bitpool-bacnet-data/clearBacnetServerPoint',
+                  dataType: 'json',
+                  contentType: 'application/json',
+                  data: JSON.stringify(json),
+                  success: function (result) {
+                    app.getServerObjects();
+                  },
+                  timeout: 10000
+                });
+              },
+              reject: () => {
+                //handle reject
+              }
             });
           },
           getServerObjects() {
             let app = this;
             this.nodeService.getBacnetServerPoints().then(function (result) {
-                app.serverObjects = result;
+              app.serverObjects = result;
             })
           },
           formatObjectName(name) {
             //return shortened point name if longer than 50 characters
-            if(name.length > 45) {
+            if (name.length > 45) {
               return name.slice(0, 45).concat("...");
-            } 
+            }
             return name;
           }
         },
@@ -319,7 +346,7 @@
             dataType: "json",
             contentType: "application/json",
             data: JSON.stringify(jsonPayload),
-            success: function (result) {},
+            success: function (result) { },
             timeout: 10000,
           });
         };
@@ -674,7 +701,7 @@
         </select>
       </div>
 
-      <div class="form-row">
+      <div class="form-row" style="display: none;">
         <label for="node-input-retries"
           ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.retries"></span>Number of Retries</label
         >
@@ -713,17 +740,6 @@
         </select>
       </div>
 
-      <div class="form-row deviceIdRange">
-        <label for="node-input-device_id_range"
-          ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.device_id_range"></span>Point Discovery Range
-        </label>
-        <input type="checkbox" id="node-input-manual_instance_range_enabled" style="width: auto;" />
-        <a style="padding-left: 60px;">Start: </a
-        ><input type="number" id="node-input-manual_instance_range_start" style="width: 125px;" min="0" max="100000" />
-        <a style="padding-left: 35px;">End: </a
-        ><input type="number" id="node-input-manual_instance_range_end" style="width: 125px;" min="1" max="100000" />
-      </div>
-
       <div class="form-row" style="align-items: center; display: flex;">
         <label for="node-input-device_read_schedule_value"
           ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.device_read_schedule"></span>Object Discover
@@ -744,7 +760,7 @@
         </select>
       </div>
 
-      <div class="form-row" style="align-items: center; display: flex;">
+      <div class="form-row" style="align-items: center; display: none;">
         <label for="node-input-sanitise_device_schedule_value"
           ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.sanitise_device_schedule"></span>Device Sanitisation 
           Frequency</label

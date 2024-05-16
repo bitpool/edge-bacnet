@@ -671,11 +671,15 @@ const bacappDecodeApplicationData = (buffer, offset, maxOffset, objectType, prop
             const result = bacappDecodeData(buffer, offset + len, maxOffset, tag.tagNumber, tag.value);
             if (!result)
                 return;
-            const resObj = {
+            let resObj = {
                 len: len + result.len,
                 type: result.type,
                 value: result.value
             };
+            if (result.originalBitString) {
+                //protocols supported addition
+                resObj.originalBitString = result.originalBitString;
+            }
             // HACK: Drop string specific handling ASAP
             if (result.encoding !== undefined)
                 resObj.encoding = result.encoding;
@@ -796,9 +800,9 @@ const decodeReadAccessResult = (buffer, offset, apduLen) => {
                 return;
             len++;
             newEntry.value = [{
-                    type: baEnum.ApplicationTags.ERROR,
-                    value: err
-                }];
+                type: baEnum.ApplicationTags.ERROR,
+                value: err
+            }];
         }
         values.push(newEntry);
     }
@@ -876,11 +880,13 @@ const bitstringSetBitsUsed = (bitString, bytesUsed, unusedBits) => {
 const decodeBitstring = (buffer, offset, lenValue) => {
     let len = 0;
     const bitString = { value: [], bitsUsed: 0 };
+    const originalBitString = { value: [] };
     if (lenValue > 0) {
         const bytesUsed = lenValue - 1;
         if (bytesUsed <= baEnum.ASN1_MAX_BITSTRING_BYTES) {
             len = 1;
             for (let i = 0; i < bytesUsed; i++) {
+                originalBitString.value.push(buffer[offset + len]);
                 bitString.value.push(byteReverseBits(buffer[offset + len++]));
             }
             const unusedBits = buffer[offset] & 0x07;
@@ -889,7 +895,8 @@ const decodeBitstring = (buffer, offset, lenValue) => {
     }
     return {
         len: len,
-        value: bitString
+        value: bitString,
+        originalBitString: originalBitString
     };
 };
 exports.decodeBitstring = decodeBitstring;
@@ -1033,6 +1040,10 @@ const bacappDecodeData = (buffer, offset, maxLength, tagDataType, lenValueType) 
             result = (0, exports.decodeBitstring)(buffer, offset, lenValueType);
             value.len += result.len;
             value.value = result.value;
+            if (result.originalBitString) {
+                //protocols supported addition
+                value.originalBitString = result.originalBitString;
+            }
             break;
         case baEnum.ApplicationTags.ENUMERATED:
             result = (0, exports.decodeEnumerated)(buffer, offset, lenValueType);

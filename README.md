@@ -34,6 +34,25 @@ or using NPM from the command line.
 $ npm install @bitpoolos/edge-bacnet
 ```
 
+## Updating 
+
+The module can be updated via the Node-RED pallette manager, or via the npm cli. 
+
+```javascript
+Upon updating to the latest version, we highly recommend:
+ - Check out the changelog for latest feature notes and updates 
+ - Remove all @bitpoolos/edge-bacnet nodes from all flows 
+ - Deploy all flows 
+ - Restart Node-RED 
+ - Insert and reconfigure new @bitpoolos/edge-bacnet nodes. 
+```
+Main reason being, the behaviour of the bacnet client binding to network interfaces can remain stagnent if the Node-RED service is not restarted. This also ensures that all of the nodes are correctly configured as there are often properties added and removed from nodes. 
+
+
+## Changelog 
+
+[Changelog](CHANGELOG.md)
+
 ## Notes
 
  - This project is still in development and by no means perfect. 
@@ -44,13 +63,12 @@ $ npm install @bitpoolos/edge-bacnet
 
 ## Resources
 - [bitpool.com](https://www.bitpool.com/) - who are we.
-- [app.bitpool.com](https://app.bitpool.com/) - our platform.
 - [wiki.bitpool.com](https://wiki.bitpool.com/) - helpful docs.
 - [hub.docker.com](https://hub.docker.com/r/bitpoolos/bitpool-edge) - pre-canned nodes.
 
 ## Contributions
 
-This node utilises v0.2.4 of the node-bacnet package (https://github.com/BiancoRoyal/node-bacstack). None of the functionality here would be possible without the fantastic work done by the contributors of that project.
+This node utilises v1.0.0-beta.2 of the node-bacnet package (https://github.com/HILA-TECH/ts-node-bacstack). None of the functionality here would be possible without the fantastic work done by the contributors of that project, and the original node-bacstack implementation (https://github.com/fh1ch/node-bacstack).
 
 ## License
 

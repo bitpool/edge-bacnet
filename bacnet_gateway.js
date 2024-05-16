@@ -99,8 +99,15 @@ module.exports = function (RED) {
     node.bacnetClient.removeAllListeners();
 
     // Value response event handler for READ commands
-    node.bacnetClient.on("values", (values, outputType, objectPropertyType, readNodeName) => {
+    node.bacnetClient.on("values", (values, outputType, objectPropertyType, readNodeName, deviceIndex, devicesToRead) => {
       if (typeof values !== "undefined" && Object.keys(values).length) {
+        let publishText = `Publishing ${readNodeName} ${deviceIndex} / ${devicesToRead} `;
+        node.status({ fill: "blue", shape: "dot", text: publishText });
+        if (deviceIndex == devicesToRead) {
+          setTimeout(() => {
+            node.status({});
+          }, 3000);
+        }
         if (outputType.json && !outputType.mqtt) {
           if (objectPropertyType.fullObject && objectPropertyType.simplePayload) {
             sendSimpleJson(values, readNodeName);
@@ -175,7 +182,7 @@ module.exports = function (RED) {
       } else if (msg.doUpdatePriorityDevices == true && msg.priorityDevices !== null) {
         node.bacnetClient
           .updatePriorityQueue(msg.priorityDevices)
-          .then(function (result) {})
+          .then(function (result) { })
           .catch(function (error) {
             logOut("Error updating priorityQueue: ", error);
           });
@@ -193,7 +200,6 @@ module.exports = function (RED) {
       if (!node.bacnetClient) {
         logOut("Issue with the bacnetClient: ", node.bacnetClient);
         //no bacnet client present
-        //node.status({fill:"red",shape:"dot",text:"Please define client"});
         res.send(false);
       } else {
         node.bacnetClient
@@ -213,7 +219,6 @@ module.exports = function (RED) {
       if (!node.bacnetClient) {
         logOut("Issue with the bacnetClient: ", node.bacnetClient);
         //no bacnet client present
-        //node.status({fill:"red",shape:"dot",text:"Please define client"});
         res.send(false);
       } else {
         node.bacnetClient
@@ -312,30 +317,130 @@ module.exports = function (RED) {
       }
     });
 
+    //route handler for purge device
+    RED.httpAdmin.post("/bitpool-bacnet-data/purgeDevice", function (req, res) {
+      if (!node.bacnetClient) {
+        logOut("Issue with the bacnetClient while getting device list: ", node.bacnetClient);
+        res.send(false);
+      } else {
+        node.bacnetClient
+          .purgeDevice(req.body.d)
+          .then(function (result) {
+            res.send(result);
+          })
+          .catch(function (error) {
+            res.send(error);
+            logOut("Error purging device:  ", error);
+          });
+      }
+    });
+
+    //route handler for updatePointsForDevice
+    RED.httpAdmin.post("/bitpool-bacnet-data/updatePointsForDevice", function (req, res) {
+      if (!node.bacnetClient) {
+        logOut("Issue with the bacnetClient while updating device points list: ", node.bacnetClient);
+        res.send(false);
+      } else {
+        node.bacnetClient
+          .updatePointsForDevice(req.body.d)
+          .then(function (result) {
+            res.send(result);
+          })
+          .catch(function (error) {
+            res.send(error);
+            logOut("Error updating device:  ", error);
+          });
+      }
+    });
+
+    //route handler for setDeviceDisplayName
+    RED.httpAdmin.post("/bitpool-bacnet-data/setDeviceDisplayName", function (req, res) {
+      if (!node.bacnetClient) {
+        logOut("Issue with the bacnetClient while updating device points list: ", node.bacnetClient);
+        res.send(false);
+      } else {
+        node.bacnetClient
+          .setDeviceDisplayName(req.body.d, req.body.n)
+          .then(function (result) {
+            res.send(result);
+          })
+          .catch(function (error) {
+            res.send(error);
+            logOut("Error setting device display name:  ", error);
+          });
+      }
+    });
+
+    //route handler for setPointDisplayName
+    RED.httpAdmin.post("/bitpool-bacnet-data/setPointDisplayName", function (req, res) {
+      if (!node.bacnetClient) {
+        logOut("Issue with the bacnetClient while updating point name: ", node.bacnetClient);
+        res.send(false);
+      } else {
+        node.bacnetClient
+          .setPointDisplayName(req.body.k, req.body.p, req.body.n)
+          .then(function (result) {
+            res.send(result);
+          })
+          .catch(function (error) {
+            res.send(error);
+            logOut("Error setting device display name:  ", error);
+          });
+      }
+    });
+
+    //route handler for importReadList
+    RED.httpAdmin.post("/bitpool-bacnet-data/importReadList", function (req, res) {
+      if (!node.bacnetClient) {
+        logOut("Issue with the bacnetClient while updating point name: ", node.bacnetClient);
+        res.send(false);
+      } else {
+        node.bacnetClient
+          .importReadList(req.body.p)
+          .then(function (result) {
+            res.send(result);
+          })
+          .catch(function (error) {
+            res.send(error);
+            logOut("Error setting device display name:  ", error);
+          });
+      }
+    });
+
+
     function bindEventListeners() {
       // Value response event handler for READ commands
-      node.bacnetClient.on("values", (device, values, outputType, readNodeName, fullResult) => {
-        if (outputType.json && !outputType.mqtt) {
-          if (objectPropertyType.fullObject && objectPropertyType.simplePayload) {
-            sendSimpleJson(values, readNodeName);
-            sendJsonAsMqtt(values, readNodeName);
-          } else if (objectPropertyType.fullObject && !objectPropertyType.simplePayload) {
-            sendJsonAsMqtt(values, readNodeName);
-          } else if (!objectPropertyType.fullObject && objectPropertyType.simplePayload) {
-            sendSimpleJson(values, readNodeName);
+      node.bacnetClient.on("values", (values, outputType, objectPropertyType, readNodeName, deviceIndex, devicesToRead) => {
+        if (typeof values !== "undefined" && Object.keys(values).length) {
+          let publishText = `Publishing ${readNodeName} ${deviceIndex} / ${devicesToRead} `;
+          node.status({ fill: "blue", shape: "dot", text: publishText });
+          if (deviceIndex == devicesToRead) {
+            setTimeout(() => {
+              node.status({});
+            }, 3000);
           }
-        } else if (!outputType.json && outputType.mqtt) {
-          if (objectPropertyType.fullObject && objectPropertyType.simplePayload) {
-            sendAsMqtt(values, readNodeName);
-            sendSimpleMqtt(values, readNodeName);
-          } else if (objectPropertyType.fullObject && !objectPropertyType.simplePayload) {
-            sendAsMqtt(values, readNodeName);
-          } else if (!objectPropertyType.fullObject && objectPropertyType.simplePayload) {
-            sendSimpleMqtt(values, readNodeName);
+          if (outputType.json && !outputType.mqtt) {
+            if (objectPropertyType.fullObject && objectPropertyType.simplePayload) {
+              sendSimpleJson(values, readNodeName);
+              sendJsonAsMqtt(values, readNodeName);
+            } else if (objectPropertyType.fullObject && !objectPropertyType.simplePayload) {
+              sendJsonAsMqtt(values, readNodeName);
+            } else if (!objectPropertyType.fullObject && objectPropertyType.simplePayload) {
+              sendSimpleJson(values, readNodeName);
+            }
+          } else if (!outputType.json && outputType.mqtt) {
+            if (objectPropertyType.fullObject && objectPropertyType.simplePayload) {
+              sendAsMqtt(values, readNodeName);
+              sendSimpleMqtt(values, readNodeName);
+            } else if (objectPropertyType.fullObject && !objectPropertyType.simplePayload) {
+              sendAsMqtt(values, readNodeName);
+            } else if (!objectPropertyType.fullObject && objectPropertyType.simplePayload) {
+              sendSimpleMqtt(values, readNodeName);
+            }
           }
         }
       });
-      
+
       // Who Is / Iam event handler
       node.bacnetClient.on("deviceFound", (device) => {
         if (node.toLogIam) node.warn(`BACnet device found: ${device.deviceId} - ${device.address}`);
@@ -354,6 +459,13 @@ module.exports = function (RED) {
       }
     }
 
+    function getPointName(object, pointName) {
+      if (object.displayName) {
+        return object.displayName;
+      }
+      return pointName;
+    }
+
     sendSimpleMqtt = function (values, readNodeName) {
       let devices = Object.keys(values);
       devices.forEach(function (device) {
@@ -361,6 +473,7 @@ module.exports = function (RED) {
           let points = values[device];
           for (var point in points) {
             if (points[point]) {
+              let pointName = getPointName(points[point], point);
               let pointProps = Object.keys(points[point]);
               pointProps.forEach(function (prop) {
                 let msg = {};
@@ -372,22 +485,22 @@ module.exports = function (RED) {
                     node.nodeName !== "undefined" &&
                     typeof node.nodeName == "string"
                   ) {
-                    if(readNodeName !== ''&&
+                    if (readNodeName !== '' &&
                       readNodeName !== null &&
                       readNodeName !== undefined
                     ) {
-                      msg.topic = `${node.nodeName}/${readNodeName}/${device}/${point}`;
+                      msg.topic = `${node.nodeName}/${readNodeName}/${device}/${pointName}`;
                     } else {
-                      msg.topic = `${node.nodeName}/${device}/${point}`;
+                      msg.topic = `${node.nodeName}/${device}/${pointName}`;
                     }
                   } else {
-                    if(readNodeName !== ''&&
+                    if (readNodeName !== '' &&
                       readNodeName !== null &&
                       readNodeName !== undefined
                     ) {
-                      msg.topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${device}/${point}`;
+                      msg.topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${device}/${pointName}`;
                     } else {
-                      msg.topic = `BITPOOL_BACNET_GATEWAY/${device}/${point}`;
+                      msg.topic = `BITPOOL_BACNET_GATEWAY/${device}/${pointName}`;
                     }
                   }
                   msg.payload = points[point][prop];
@@ -408,6 +521,7 @@ module.exports = function (RED) {
           let points = values[device];
           for (var point in points) {
             if (points[point]) {
+              let pointName = getPointName(points[point], point);
               let pointProps = Object.keys(points[point]);
               pointProps.forEach(function (prop) {
                 let msg = {};
@@ -419,22 +533,22 @@ module.exports = function (RED) {
                     node.nodeName !== "undefined" &&
                     typeof node.nodeName == "string"
                   ) {
-                    if(readNodeName !== ''&&
+                    if (readNodeName !== '' &&
                       readNodeName !== null &&
                       readNodeName !== undefined
                     ) {
-                      msg.topic = `${node.nodeName}/${readNodeName}/${device}/${point}/${prop}`;
+                      msg.topic = `${node.nodeName}/${readNodeName}/${device}/${pointName}/${prop}`;
                     } else {
-                      msg.topic = `${node.nodeName}/${device}/${point}/${prop}`;
+                      msg.topic = `${node.nodeName}/${device}/${pointName}/${prop}`;
                     }
                   } else {
-                    if(readNodeName !== ''&&
+                    if (readNodeName !== '' &&
                       readNodeName !== null &&
                       readNodeName !== undefined
                     ) {
-                      msg.topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${device}/${point}/${prop}`;
+                      msg.topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${device}/${pointName}/${prop}`;
                     } else {
-                      msg.topic = `BITPOOL_BACNET_GATEWAY/${device}/${point}/${prop}`;
+                      msg.topic = `BITPOOL_BACNET_GATEWAY/${device}/${pointName}/${prop}`;
                     }
                   }
                   msg.payload = points[point][prop];
@@ -458,6 +572,7 @@ module.exports = function (RED) {
           let points = values[device];
           for (var point in points) {
             if (points[point]) {
+              let pointName = getPointName(points[point], point);
               let pointProps = Object.keys(points[point]);
               pointProps.forEach(function (prop) {
                 if (prop == "presentValue") {
@@ -475,18 +590,18 @@ module.exports = function (RED) {
             node.nodeName !== "undefined" &&
             typeof node.nodeName == "string"
           ) {
-            if(readNodeName !== ''&&
-               readNodeName !== null &&
-               readNodeName !== undefined
+            if (readNodeName !== '' &&
+              readNodeName !== null &&
+              readNodeName !== undefined
             ) {
               msgg.topic = `${node.nodeName}/${readNodeName}/${device}`;
             } else {
               msgg.topic = `${node.nodeName}/${device}`;
             }
           } else {
-            if(readNodeName !== ''&&
-               readNodeName !== null &&
-               readNodeName !== undefined
+            if (readNodeName !== '' &&
+              readNodeName !== null &&
+              readNodeName !== undefined
             ) {
               msgg.topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${device}`;
             } else {
@@ -512,18 +627,18 @@ module.exports = function (RED) {
             node.nodeName !== "undefined" &&
             typeof node.nodeName == "string"
           ) {
-            if(readNodeName !== ''&&
-               readNodeName !== null &&
-               readNodeName !== undefined
+            if (readNodeName !== '' &&
+              readNodeName !== null &&
+              readNodeName !== undefined
             ) {
               msgg.topic = `${node.nodeName}/${readNodeName}/${key}`;
             } else {
               msgg.topic = `${node.nodeName}/${key}`;
             }
           } else {
-            if(readNodeName !== ''&&
-               readNodeName !== null &&
-               readNodeName !== undefined
+            if (readNodeName !== '' &&
+              readNodeName !== null &&
+              readNodeName !== undefined
             ) {
               msgg.topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${key}`;
             } else {
