@@ -60,8 +60,18 @@ class treeBuilder {
         }
 
         // Check if the device object exists and the device name is valid
-        if (deviceObject && typeof deviceName !== 'object') {
+        //if (deviceObject && typeof deviceName !== 'object') {
+        if (deviceObject) {
+
+
+            //console.log("processDevice found deviceObject ");
+
+            //await this.processDevicePoints(device, deviceObject, "testingDeviceName", ipAddress, deviceId, index);
+
             await this.processDevicePoints(device, deviceObject, deviceName, ipAddress, deviceId, index);
+
+        } else {
+            //console.log("Unable to find device object");
         }
     }
 
@@ -165,6 +175,7 @@ class treeBuilder {
             children: pointProperties,
             type: 'point',
             parentDevice: deviceName,
+            parentDeviceId: device.getDeviceId(),
             showAdded: false,
             bacnetType: point.meta.objectId.type,
         };
@@ -190,7 +201,6 @@ class treeBuilder {
         this.addPointProperty(pointProperties, 'Modification Date', point.modificationDate);
         this.addPointProperty(pointProperties, 'Program State', point.programState);
         this.addPointProperty(pointProperties, 'Record Count', point.recordCount);
-        this.addPointProperty(pointProperties, 'Vendor Name', point.vendorName);
 
         // Return the array of point properties
         return pointProperties;
@@ -394,7 +404,9 @@ class treeBuilder {
      * @returns {string} - The computed device name.
      */
     computeDeviceName(device) {
-        if (device.getDisplayName() !== null && device.getDisplayName() !== "" && device.getDisplayName() !== undefined) {
+        if (device.getDeviceName() == null && device.getDisplayName() == null) {
+            return `${this.getDeviceIpAddress(device)}-${device.getDeviceId()}`;
+        } else if (device.getDisplayName() !== null && device.getDisplayName() !== "" && device.getDisplayName() !== undefined) {
             return device.getDisplayName();
         }
         return device.getDeviceName();

@@ -218,8 +218,9 @@
                     addPointClicked(slotProps) {
                         let app = this;
                         //update UI
-                        let parentDeviceName = slotProps.node.parentDevice;
-                        let device = this.deviceList.find((ele) => ele.deviceName == parentDeviceName);
+                        const parentDeviceName = slotProps.node.parentDevice;
+                        const slotDeviceId = slotProps.node.parentDeviceId;
+                        let device = this.deviceList.find((ele) => ele.deviceId == slotDeviceId);
                         let foundDeviceIndex = this.readDevices
                             ? this.readDevices.findIndex((ele) => ele.deviceId == device.deviceId)
                             : -1;
@@ -228,11 +229,24 @@
                         let parentDevice = this.devices.find((ele) => ele.ipAddr == deviceAddress);
                         let childDevice;
                         if (device.isMstp) {
-                            let foundChildIndex = parentDevice.children[1].children.findIndex(
-                                (ele) => ele.initialName == parentDeviceName
-                            );
-                            if (foundChildIndex !== -1) {
-                                childDevice = parentDevice.children[1].children[foundChildIndex];
+                            let indexMap = {
+                                deviceIndex: -1,
+                                mstpNetorkIndex: -1
+                            };
+                            parentDevice.children.forEach(function (child, index) {
+                                if (child.label.includes("MSTP")) {
+                                    const tempIndex = child.children.findIndex(
+                                        (ele) => ele.deviceId == slotDeviceId
+                                    );
+                                    if (tempIndex !== -1) {
+                                        indexMap.deviceIndex = tempIndex;
+                                        indexMap.mstpNetorkIndex = index;
+                                    }
+                                }
+                            });
+
+                            if (indexMap.deviceIndex !== -1 && indexMap.mstpNetorkIndex !== -1) {
+                                childDevice = parentDevice.children[indexMap.mstpNetorkIndex].children[indexMap.deviceIndex];
                             }
                         }
 
@@ -246,6 +260,13 @@
                             }
                             newReadParent.children[0].children = [];
                             newReadParent.children[0].children.push(slotProps.node);
+                            while (newReadParent.children.length > 1) {
+                                newReadParent.children.forEach(function (child, index) {
+                                    if (child.label.includes("MSTP")) {
+                                        newReadParent.children.splice(index, 1);
+                                    }
+                                });
+                            }
                             if (this.readDevices) {
                                 this.readDevices.push(newReadParent);
                             } else {

@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.3.1] - 06-06-2024
+
+### Summary 
+
+Primarily bug fixes and performance improvements
+
+### Bug Fixes
+
+- Adding individual points for MSTP devices would add incorrect device name to read list
+
+- Adding individual points for IP devices would add all MSTP network folders to read list
+
+- Intermittent incorrect device naming issues
+
+- Fixed BACnet server incompatibility with YABE and other BACnet browsers.
+
+- Added undefined check to bacstack client
+
+### Improvements
+
+- First poll cycle only queries Object Name and Present Value properties for all applicable Object Types for smaller initial network load. Objects are then back populated with the remaining Object properties on the subsequent poll cycles.
+
+- Devices are immediately added to the UI tree with a device placeholder on a whoIs/iAm response. The devices are then back populated with Names and BACnet Objects. This gives the user a fast understanding of the size and relationships of the BACnet network.
+
+- Added docstrings to bacnet_server.js and code clean up. 
+
+- Set Server enable to default on True
+
+
 ## [1.3.0] - 16-05-2024
 
 ### Summary

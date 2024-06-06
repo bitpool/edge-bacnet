@@ -430,7 +430,7 @@ class Client extends events_1.EventEmitter {
         const result = baNpdu.decode(buffer, offset);
         var addressObject, destAddress;
         // @todo a MSTP Dest & Source could occur. this case is not handled. 
-        if (typeof (result.source) != 'undefined') {
+        if (typeof (result.source) != 'undefined' && result && result.source) {
             addressObject = result.source;
             addressObject.ip = remoteAddress;
         } else {

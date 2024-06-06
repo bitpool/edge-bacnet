@@ -34,6 +34,7 @@ class BacnetDevice {
             that.displayName = config.displayName;
             that.protocolServicesSupported = config.protocolServicesSupported;
             that.isProtocolServicesSet = config.isProtocolServicesSet;
+            that.isInitialQuery = config.isInitialQuery;
 
         } else if (fromImport == false) {
             if (config.net && config.adr) {
@@ -62,6 +63,7 @@ class BacnetDevice {
             that.protocolServicesSupported = [];
             that.protocolServicesSupported = [];
             that.isProtocolServicesSet = false;
+            that.isInitialQuery = true;
         }
     }
 
@@ -352,6 +354,14 @@ class BacnetDevice {
         } else {
             return false;
         }
+    }
+
+    getIsInitialQuery() {
+        return this.isInitialQuery;
+    }
+
+    setIsInitialQuery(bool) {
+        this.isInitialQuery = bool;
     }
 
 }

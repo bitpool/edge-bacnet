@@ -3,6 +3,19 @@ const pjson = require('./package.json');
 const baEnum = bacnet.enum;
 const { Store_Config_Server, Read_Config_Sync_Server } = require('./common');
 
+/**
+ * Class representing a BACnet Server.
+ * 
+ * This class initializes a BACnet server with specified client, device ID, and Node-Red version.
+ * It provides methods to set device name, add objects, retrieve objects, clear server points, clear server point, and get server points.
+ * 
+ * Simulates a BACnet IP device on a regular IP network
+ * 
+ * @constructor
+ * @param {Object} client - The BACnet client object.
+ * @param {number} deviceId - The ID of the device.
+ * @param {string} nodeRedVersion - The version of Node-Red.
+ */
 class BacnetServer {
 
     constructor(client, deviceId, nodeRedVersion) {
@@ -14,13 +27,13 @@ class BacnetServer {
         that.objectIdNumber[baEnum.ObjectType.ANALOG_VALUE] = 0;
         that.objectIdNumber[baEnum.ObjectType.CHARACTERSTRING_VALUE] = 0;
         that.objectIdNumber[baEnum.ObjectType.BINARY_VALUE] = 0;
-
         that.nodeRedVersion = nodeRedVersion;
         that.deviceId = deviceId;
         that.vendorId = 1401;
         that.objectList = [
             { value: { type: baEnum.ObjectType.DEVICE, instance: that.deviceId }, type: 12 }
         ];
+
         that.objectStore = {
             [baEnum.ObjectType.DEVICE]: {
                 [baEnum.PropertyIdentifier.OBJECT_IDENTIFIER]: [{ value: { type: baEnum.ObjectType.DEVICE, instance: that.deviceId }, type: 12 }],
@@ -36,8 +49,7 @@ class BacnetServer {
                 [baEnum.PropertyIdentifier.PROTOCOL_REVISION]: [{ value: 19, type: 2 }],
                 [baEnum.PropertyIdentifier.PROTOCOL_VERSION]: [{ value: 0, type: 2 }],
                 [baEnum.PropertyIdentifier.APPLICATION_SOFTWARE_VERSION]: [{ value: pjson.version, type: 7 }],
-                [baEnum.PropertyIdentifier.PROTOCOL_SERVICES_SUPPORTED]: [{ value: { value: [0, 80, 0, 4, 4], bitsUsed: 40 }, type: 8 }],
-                [baEnum.PropertyIdentifier.PROTOCOL_OBJECT_TYPES_SUPPORTED]: [{ value: { value: [0, 80, 0, 4, 4], bitsUsed: 40 }, type: 8 }],
+                [baEnum.PropertyIdentifier.PROTOCOL_SERVICES_SUPPORTED]: [{ value: { value: [0, 10, 0, 32, 32], bitsUsed: 40 }, type: 8 }],
                 [baEnum.PropertyIdentifier.MAX_APDU_LENGTH_ACCEPTED]: [{ value: 1476, type: 2 }],
                 [baEnum.PropertyIdentifier.SEGMENTATION_SUPPORTED]: [{ value: 0, type: 9 }],
                 [baEnum.PropertyIdentifier.APDU_TIMEOUT]: [{ value: that.bacnetClient.config.apduTimeout, type: 2 }],
@@ -76,8 +88,10 @@ class BacnetServer {
         try {
             let cachedData = JSON.parse(Read_Config_Sync_Server());
             if (typeof cachedData == "object") {
-
-                if (cachedData.objectList) that.objectList = cachedData.objectList;
+                if (cachedData.objectList) {
+                    that.objectList = cachedData.objectList;
+                    that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
+                }
                 if (cachedData.objectStore) {
                     that.objectStore[baEnum.ObjectType.ANALOG_VALUE] = cachedData.objectStore[baEnum.ObjectType.ANALOG_VALUE];
                     that.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE] = cachedData.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE];
@@ -94,24 +108,20 @@ class BacnetServer {
         });
 
         that.bacnetClient.client.on('readPropertyMultiple', (data) => {
-
             let senderAddress = data.address;
             let requestProps = data.request.properties;
             let responseObject = [];
 
             try {
                 if (requestProps) {
-
                     for (let i = 0; i < requestProps.length; i++) {
                         let prop = requestProps[i].properties[0].id;
                         let type = requestProps[i].objectId.type;
                         let instance = requestProps[i].objectId.instance;
                         let foundObject = that.getObjectMultiple(type, prop, instance, requestProps[i].properties);
-
                         if (foundObject !== null && foundObject !== undefined && foundObject !== "undefined") {
                             responseObject.push({ objectId: { type: type, instance: instance }, values: foundObject });
                         }
-
                         if (i == requestProps.length - 1) {
                             if (responseObject.length > 0) {
                                 that.bacnetClient.client.readPropertyMultipleResponse(senderAddress, data.invokeId, responseObject);
@@ -127,7 +137,6 @@ class BacnetServer {
                         }
                     }
                 }
-
             } catch (e) {
                 that.bacnetClient.client.errorResponse(
                     data.address,
@@ -137,24 +146,21 @@ class BacnetServer {
                     baEnum.ErrorCode.UNKNOWN_PROPERTY
                 );
             }
-
         });
 
         that.bacnetClient.client.on('readProperty', (data) => {
-
             try {
-
                 let objectId = data.request.objectId.type;
                 let objectInstance = data.request.objectId.instance;
                 let propId = data.request.property.id.toString();
-
                 let responseObj = that.getObject(objectId, propId, objectInstance);
-
-                if (propId == baEnum.PropertyIdentifier.OBJECT_LIST && ((Date.now() - that.lastWhoIsRecived) / 1000) < 0.7) {
-                    responseObj = [{ value: that.objectList.length, type: 2 }];
+                if (propId == baEnum.PropertyIdentifier.OBJECT_LIST) {
+                    if (data.request.property.index !== 0xFFFFFFFF) {
+                        responseObj = responseObj[data.request.property.index];
+                    }
                 }
                 if (responseObj !== null && responseObj !== undefined && typeof responseObj !== "undefined") {
-                    that.bacnetClient.client.readPropertyResponse(data.address, data.invokeId, objectId, data.request.property, responseObj);
+                    that.bacnetClient.client.readPropertyResponse(data.address, data.invokeId, data.request.objectId, data.request.property, responseObj);
                 } else {
                     that.bacnetClient.client.errorResponse(
                         data.address,
@@ -167,13 +173,17 @@ class BacnetServer {
             } catch (e) {
                 console.log("Local BACnet device readProperty error: ", e);
             }
-
         });
 
         //do initial iAm broadcast when BACnet server starts
         that.bacnetClient.client.iAmResponse(that.deviceId, baEnum.Segmentation.SEGMENTED_BOTH, that.vendorId);
     }
 
+    /**
+     * Set the name of the device.
+     * 
+     * @param {string} nodeName - The new name for the device.
+     */
     setDeviceName(nodeName) {
         let that = this;
         if (typeof nodeName == "string" && nodeName !== "") {
@@ -181,6 +191,13 @@ class BacnetServer {
         }
     }
 
+    /**
+     * Adds a new object to the BacnetServer's object store based on the provided name and value.
+     * 
+     * @param {string} name - The name of the object to be added.
+     * @param {number|boolean|string} value - The value of the object to be added.
+     * @returns {void}
+     */
     addObject(name, value) {
         let that = this;
         let objectType = that.getBacnetObjectType(value);
@@ -290,10 +307,17 @@ class BacnetServer {
         Store_Config_Server(JSON.stringify({ objectList: that.objectList, objectStore: that.objectStore }));
     }
 
+    /**
+     * Retrieves a specific property of an object based on the object ID, property ID, and instance number.
+     * 
+     * @param {number} objectId - The ID of the object type.
+     * @param {number} propId - The ID of the property to retrieve.
+     * @param {number} instance - The instance number of the object.
+     * @returns {any} The requested property value if found, otherwise null.
+     */
     getObject(objectId, propId, instance) {
         let that = this;
         let objectGroup = that.objectStore[objectId];
-
 
         if (Array.isArray(objectGroup)) {
             for (let i = 0; i < objectGroup.length; i++) {
@@ -306,19 +330,26 @@ class BacnetServer {
                 }
             }
         } else {
-
             return objectGroup[propId];
         }
 
         return null;
     }
 
+    /**
+     * Retrieves the properties of a specific object instance from the objectStore based on the provided parameters.
+     * 
+     * @param {number} objectId - The type of the object to retrieve.
+     * @param {number} propId - The property identifier to retrieve.
+     * @param {number} instance - The instance number of the object to retrieve.
+     * @param {Array} properties - An array of additional properties to retrieve along with the main property.
+     * @returns {Array|null} - An array of properties with values for the specified object instance, or null if not found.
+     */
     getObjectMultiple(objectId, propId, instance, properties) {
         let that = this;
         let objectGroup = that.objectStore[objectId];
 
         try {
-
             if (Array.isArray(objectGroup)) {
                 for (let i = 0; i < objectGroup.length; i++) {
                     let object = objectGroup[i];
@@ -379,6 +410,12 @@ class BacnetServer {
         return null;
     }
 
+    /**
+     * Clear all server points by resetting the object lists and object store.
+     * This method resets the object list for the device, clears the character string values,
+     * and clears the analog values. It also resets the object id numbers for analog, character string, and binary values.
+     * Finally, it stores the updated object list and object store in the server configuration.
+     */
     clearServerPoints() {
         let that = this;
 
@@ -397,6 +434,14 @@ class BacnetServer {
         Store_Config_Server(JSON.stringify({ objectList: that.objectList, objectStore: that.objectStore }));
     }
 
+    /**
+     * Removes a server point from the objectStore and objectList based on the provided JSON data.
+     * 
+     * @param {Object} json - The JSON data containing information about the server point to be removed.
+     * @param {string} json.body.type - The type of the server point ('SV' for CharacterString, 'BV' for BinaryValue, default is AnalogValue).
+     * @param {number} json.body.instance - The instance number of the server point to be removed.
+     * @returns {Promise<boolean>} A Promise that resolves to true if the server point is successfully removed, otherwise rejects with an error.
+     */
     clearServerPoint(json) {
         let that = this;
         return new Promise(async function (resolve, reject) {
@@ -447,6 +492,17 @@ class BacnetServer {
         });
     }
 
+    /**
+     * Retrieves all server points from the BacnetServer objectStore.
+     * Points include Analog Value, Character String Value, and Binary Value objects.
+     * Each point is represented as an object with properties:
+     * - name: The name of the object.
+     * - type: The type of the object (AV for Analog Value, SV for Character String Value, BV for Binary Value).
+     * - instance: The instance number of the object.
+     * 
+     * @returns {Promise<Array>} A promise that resolves with an array of points sorted by instance number.
+     * @throws {Error} If an error occurs during the retrieval process.
+     */
     getServerPoints() {
         let that = this;
         let points = [];
@@ -502,10 +558,12 @@ class BacnetServer {
         });
     }
 
-    getRandomArbitrary(min, max) {
-        return Math.random() * (max - min) + min;
-    }
-
+    /**
+     * Determines the BACnet object type based on the provided value.
+     * 
+     * @param {any} value - The value to determine the BACnet object type for.
+     * @returns {string|null} The BACnet object type as a string ('string', 'number', 'boolean') or null if the type is not recognized.
+     */
     getBacnetObjectType(value) {
         let type = typeof value;
 
@@ -521,6 +579,13 @@ class BacnetServer {
         }
     }
 
+    /**
+     * Returns the object identifier for the given type and instance number.
+     * 
+     * @param {string} type - The type of the object.
+     * @param {number} instanceNumber - The instance number of the object.
+     * @returns {number} The object identifier.
+     */
     getObjectIdentifier(type, instanceNumber) {
         let that = this;
         // manual instance numbering
@@ -533,7 +598,6 @@ class BacnetServer {
         that.objectIdNumber[type]++;
         return objectId;
     }
-
 }
 
 module.exports = { BacnetServer };

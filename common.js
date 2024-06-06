@@ -1,5 +1,5 @@
 /*
-  MIT License Copyright 2021, 2022 - Bitpool Pty Ltd
+  MIT License Copyright 2021, 2024 - Bitpool Pty Ltd
 */
 
 const { createLogger, format, transports } = require("winston");

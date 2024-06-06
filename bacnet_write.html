@@ -42,6 +42,10 @@
             pointsToWrite: ref([]),
             nodeService: ref(new NodeService()),
             deviceCount: ref(),
+            showDeviceNameDialog: ref(false),
+            showPointNameDialog: ref(false),
+            deviceDisplayNameValue: ref(),
+            pointDisplayNameValue: ref(),
           };
         },
         setup() {
@@ -301,6 +305,12 @@
 
             return count;
           },
+          hasMstpDevices(slotProps) {
+            if (slotProps.node.children[1] && slotProps.node.children[1].children.length > 0) {
+              return true;
+            }
+            return false;
+          },
           settingDeviceName(slotProps) {
             let app = this;
             if (slotProps.node.settingDisplayName) {
@@ -461,6 +471,8 @@
           "p-tree": primevue.tree,
           "p-button": primevue.button,
           "p-timeline": primevue.timeline,
+          "p-dialog": primevue.dialog,
+          "p-input-text": primevue.inputtext,
         },
       };
 
@@ -794,6 +806,49 @@
 
     <div id="read-networkTree-tab" style="display:none">
       <div id="read-networkTree-tab-content" class="networkTreeContent" style="display:none">
+        <p-dialog
+          v-model:visible="showDeviceNameDialog"
+          modal
+          header="Set Display Name"
+          :style="{ width: '25rem' }"
+          class="deviceNameDialog">
+          <div class="flex align-items-center gap-3 mb-3">
+            <label for="displayName" class="font-semibold">Name</label>
+            <p-input-text id="displayName" class="flex-auto" autocomplete="off" v-model="deviceDisplayNameValue" />
+          </div>
+          <div class="flex justify-content-end gap-2">
+            <p-button
+              class="diplayNameDialogCancel"
+              type="button"
+              label="Cancel"
+              severity="secondary"
+              @click="cancelDisplayNameDialog"></p-button>
+            <p-button class="diplayNameDialogSave" type="button" label="Save" @click="setDeviceName"></p-button>
+          </div>
+        </p-dialog>
+
+        <p-dialog
+          v-model:visible="showPointNameDialog"
+          modal
+          header="Set Point Name"
+          :style="{ width: '25rem' }"
+          class="deviceNameDialog">
+          <div class="flex align-items-center gap-3 mb-3">
+            <label for="displayName" class="font-semibold">Name</label>
+            <p-input-text id="displayName" class="flex-auto" autocomplete="off" v-model="pointDisplayNameValue" />
+          </div>
+          <div class="flex justify-content-end gap-2">
+            <p-button
+              class="diplayNameDialogCancel"
+              type="button"
+              label="Cancel"
+              severity="secondary"
+              @click="cancelPointNameDialog"></p-button>
+            <p-button class="diplayNameDialogSave" type="button" label="Save" @click="setPointName"></p-button>
+          </div>
+        </p-dialog>
+
+
         <div>
           <a class="countStatus" style="margin-left: 15px;">Count: {{deviceCount}} device(s)</a>
           <button @click="getData()" class="reloadButton">
@@ -809,13 +864,19 @@
                 <div v-if="isDeviceActive(slotProps)" class="deviceLabelParent">
                   <b class="deviceLabel">
                     <span class="statusOnline deviceStatus dotOnline dot"></span>
-                    {{slotProps.node.label}} 
+                    {{slotProps.node.label}}
+                    <span v-if="hasMstpDevices(slotProps)" class="mstpDeviceCount"
+                      >&nbsp; {{calculateMstpCount(slotProps)}} &nbsp;</span
+                    > 
                   </b>
                 </div>
                 <div v-else>
                   <b class="deviceLabel">
                     <span class="statusOffline deviceStatus dotOffline dot"></span>
                     {{slotProps.node.label}} 
+                    <span v-if="hasMstpDevices(slotProps)" class="mstpDeviceCount"
+                      >&nbsp; {{calculateMstpCount(slotProps)}} &nbsp;</span
+                    >
                   </b>
                 </div>
 

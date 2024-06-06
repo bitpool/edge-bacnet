@@ -45,6 +45,7 @@ Upon updating to the latest version, we highly recommend:
  - Deploy all flows 
  - Restart Node-RED 
  - Insert and reconfigure new @bitpoolos/edge-bacnet nodes. 
+ - Restart Node-RED again if no devices are discovered.
 ```
 Main reason being, the behaviour of the bacnet client binding to network interfaces can remain stagnent if the Node-RED service is not restarted. This also ensures that all of the nodes are correctly configured as there are often properties added and removed from nodes. 
 
@@ -60,6 +61,8 @@ Main reason being, the behaviour of the bacnet client binding to network interfa
  - Gateway node changes require a restart of Node-RED. This includes any networking or interface adapter changes. 
 
  - If you are using this node in a linux environment, using the 'All interfaces : 0.0.0.0' can be more reliable with a greater range of BACnet devices. 
+
+ - Note your broadcast address, compatibility can vary from 255.255.255.255 (all subnets) and 192.x.x.255 (locked down to your current subnet).
 
 ## Resources
 - [bitpool.com](https://www.bitpool.com/) - who are we.
