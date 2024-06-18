@@ -75,19 +75,19 @@
 <script type="text/javascript">
   class NodeService {
     getNetworkData() {
-      return fetch("/bitpool-bacnet-data/getNetworkTree").then((res) => res.json());
+      return fetch(RED.settings.httpNodeRoot + "bitpool-bacnet-data/getNetworkTree").then((res) => res.json());
     }
     rebuildDataModel() {
-      return fetch("/bitpool-bacnet-data/rebuildDataModel").then((res) => res.json());
+      return fetch(RED.settings.httpNodeRoot + "bitpool-bacnet-data/rebuildDataModel").then((res) => res.json());
     }
     clearBacnetServerPoints() {
-      return fetch("/bitpool-bacnet-data/clearBacnetServerPoints").then((res) => res.json());
+      return fetch(RED.settings.httpNodeRoot + "bitpool-bacnet-data/clearBacnetServerPoints").then((res) => res.json());
     }
     getBacnetServerPoints() {
-      return fetch('/bitpool-bacnet-data/getBacnetServerPoints').then(res => res.json());
+      return fetch(RED.settings.httpNodeRoot + 'bitpool-bacnet-data/getBacnetServerPoints').then(res => res.json());
     }
     purgeDevice(device) {
-      return fetch('/bitpool-bacnet-data/purgeDevice', {
+      return fetch(RED.settings.httpNodeRoot + 'bitpool-bacnet-data/purgeDevice', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -97,7 +97,7 @@
       }).then(res => res.json());
     }
     updatePointsForDevice(device) {
-      return fetch('/bitpool-bacnet-data/updatePointsForDevice', {
+      return fetch(RED.settings.httpNodeRoot + 'bitpool-bacnet-data/updatePointsForDevice', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -107,7 +107,7 @@
       }).then(res => res.json());
     }
     setDeviceDisplayName(device, displayName) {
-      return fetch('/bitpool-bacnet-data/setDeviceDisplayName', {
+      return fetch(RED.settings.httpNodeRoot + 'bitpool-bacnet-data/setDeviceDisplayName', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -117,7 +117,7 @@
       }).then(res => res.json());
     }
     setPointDisplayName(deviceKey, pointName, pointDisplayName) {
-      return fetch('/bitpool-bacnet-data/setPointDisplayName', {
+      return fetch(RED.settings.httpNodeRoot + 'bitpool-bacnet-data/setPointDisplayName', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -127,7 +127,7 @@
       }).then(res => res.json());
     }
     importReadList(payload) {
-      return fetch('/bitpool-bacnet-data/importReadList', {
+      return fetch(RED.settings.httpNodeRoot + 'bitpool-bacnet-data/importReadList', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -213,7 +213,7 @@
       function queryAdapters() {
         let nicSelector = document.getElementById("node-input-local_device_address");
         $.ajax({
-          url: "/bitpool-bacnet-data/getNetworkInterfaces",
+          url: RED.settings.httpNodeRoot + "bitpool-bacnet-data/getNetworkInterfaces",
           success: function (data) {
             let keys = Object.keys(data);
 
@@ -289,7 +289,7 @@
                 let app = this;
                 $.ajax({
                   type: "POST",
-                  url: '/bitpool-bacnet-data/clearBacnetServerPoint',
+                  url: RED.settings.httpNodeRoot + 'bitpool-bacnet-data/clearBacnetServerPoint',
                   dataType: 'json',
                   contentType: 'application/json',
                   data: JSON.stringify(json),
@@ -342,7 +342,7 @@
 
           $.ajax({
             type: "POST",
-            url: "/bitpool-bacnet-data/updateDeviceList",
+            url: RED.settings.httpNodeRoot + "bitpool-bacnet-data/updateDeviceList",
             dataType: "json",
             contentType: "application/json",
             data: JSON.stringify(jsonPayload),
@@ -356,7 +356,7 @@
 
       $("#file-export").click(function (params) {
         $.ajax({
-          url: "/bitpool-bacnet-data/getDeviceList",
+          url: RED.settings.httpNodeRoot + "bitpool-bacnet-data/getDeviceList",
           success: function (deviceList) {
             let data = "text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(deviceList));
             let aEle = document.getElementById("exportJSON");
