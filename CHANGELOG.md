@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.4.0] - 24-06-2024
+
+### Summary
+
+Add feature
+
+### New features
+
+- Added client-side write function for BACnet objects, allowing the server to update the property.
+
+## [1.3.2] - 18-06-2024
+
+### Summary
+
+Primarily bug fixes
+
+### Bug Fixes
+
+- Fix the GUI of the node BACnet gateway path request when Node-RED is not configured at the root of the server
+
 ## [1.3.1] - 06-06-2024
 
 ### Summary 
