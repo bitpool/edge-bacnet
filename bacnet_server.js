@@ -175,6 +175,45 @@ class BacnetServer {
             }
         });
 
+        that.bacnetClient.client.on('createObject', (data) => {
+            var defaultValue;
+            switch (data.request.values[0].value[0].type) {
+                case baEnum.ObjectType.CHARACTERSTRING_VALUE:
+                    defaultValue = "";
+                case baEnum.ObjectType.BINARY_VALUE:
+                    defaultValue = 0;
+                case baEnum.ObjectType.ANALOG_VALUE:
+                    defaultValue = false;
+                default:
+                    defaultValue = 0;
+                    break
+            }
+            that.addObject(data.request.values[0].value[0].value, defaultValue);
+            that.bacnetClient.client.simpleAckResponse(data.address, data.service, data.invokeId);
+        });
+
+        that.bacnetClient.client.on('deleteObject', (data) => {
+            var type;
+            switch (data.request.objectType) {
+                case baEnum.ObjectType.CHARACTERSTRING_VALUE:
+                    type = 'SV';
+                case baEnum.ObjectType.BINARY_VALUE:
+                    type = 'BV';
+                case baEnum.ObjectType.ANALOG_VALUE:
+                    type = 'AV';
+                default:
+                    type = 'AV';
+                    break
+            }
+
+            var req = {body:{ type: type, instance: data.request.instance}};
+            that.clearServerPoint(req).then(function (result) {
+                that.bacnetClient.client.simpleAckResponse(data.address, data.service, data.invokeId);
+            }).catch(function (error) {
+                console.log(error)
+            });
+        });
+
         //do initial iAm broadcast when BACnet server starts
         that.bacnetClient.client.iAmResponse(that.deviceId, baEnum.Segmentation.SEGMENTED_BOTH, that.vendorId);
     }
