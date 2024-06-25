@@ -187,11 +187,12 @@ class BacnetServer extends EventEmitter{
                 that.bacnetClient.errorResponse(data.address, data.service, data.invokeId, bacnet.enum.ErrorClass.OBJECT, bacnet.enum.ErrorCode.UNKNOWN_OBJECT);
             }
             that.getServerPoints(objectId, objectInstance).then(function (result) {
+                that.bacnetClient.client.simpleAckResponse(data.address, data.service, data.invokeId);
                 that.emit("writeProperty", result[0].name, newValue);
             }).catch(function (error) {
-                logOut("Error getting server points:  ", error);
+                that.bacnetClient.errorResponse(data.address, data.service, data.invokeId, bacnet.enum.ErrorClass.OBJECT, bacnet.enum.ErrorCode.UNKNOWN_OBJECT);
+                that.logOut("Error getting server points:  ", error);
             });
-            that.bacnetClient.client.simpleAckResponse(data.address, data.service, data.invokeId);
         });
 
         //do initial iAm broadcast when BACnet server starts
@@ -596,7 +597,7 @@ class BacnetServer extends EventEmitter{
                                 instance
                             });
                         }else{
-                            if((typeFilter === baEnum.ObjectType.ANALOG_VALUE) && (instanceFilter === instance)){
+                            if((typeFilter === baEnum.ObjectType.CHARACTERSTRING_VALUE) && (instanceFilter === instance)){
                                 points.push({
                                     name: objectName,
                                     type: "SV",
@@ -620,7 +621,7 @@ class BacnetServer extends EventEmitter{
                                 instance
                             });
                         }else{
-                            if((typeFilter === baEnum.ObjectType.ANALOG_VALUE) && (instanceFilter === instance)){
+                            if((typeFilter === baEnum.ObjectType.BINARY_VALUE) && (instanceFilter === instance)){
                                 points.push({
                                     name: objectName,
                                     type: "BV",
