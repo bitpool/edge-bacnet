@@ -180,13 +180,15 @@ class BacnetServer {
             switch (data.request.values[0].value[0].type) {
                 case baEnum.ObjectType.CHARACTERSTRING_VALUE:
                     defaultValue = "";
+                    break;
                 case baEnum.ObjectType.BINARY_VALUE:
                     defaultValue = 0;
+                    break;
                 case baEnum.ObjectType.ANALOG_VALUE:
                     defaultValue = false;
+                    break;
                 default:
                     defaultValue = 0;
-                    break
             }
             that.addObject(data.request.values[0].value[0].value, defaultValue);
             that.bacnetClient.client.simpleAckResponse(data.address, data.service, data.invokeId);
@@ -197,13 +199,15 @@ class BacnetServer {
             switch (data.request.objectType) {
                 case baEnum.ObjectType.CHARACTERSTRING_VALUE:
                     type = 'SV';
+                    break;
                 case baEnum.ObjectType.BINARY_VALUE:
                     type = 'BV';
+                    break;
                 case baEnum.ObjectType.ANALOG_VALUE:
                     type = 'AV';
+                    break;
                 default:
                     type = 'AV';
-                    break
             }
 
             var req = {body:{ type: type, instance: data.request.instance}};
