@@ -159,6 +159,10 @@ module.exports = function (RED) {
       }
     }
 
+    node.bacnetServer.on("writeProperty", (topic, newValue) => {
+      node.send({ payload: newValue, topic: topic});
+    });
+
     node.on("input", function (msg) {
       if (msg.topic && msg.payload !== null) {
         if (node.bacnetServer) {
