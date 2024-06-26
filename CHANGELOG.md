@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.0] - 24-06-2024
+
+### Summary
+
+Add feature
+
+### New features
+
+- Added client-side (e.g Yabe) create and delete object.
+
 ## [1.3.1] - 06-06-2024
 
 ### Summary 
