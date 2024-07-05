@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.4.0] - 05-07-2024
+
+### Summary
+
+Fixed read list export for sites with large point counts. 
+
+Removed auto tree reload on read node UI. UI tree must be manually reloaded now. 
+
+Fixed export to CSV bug. 
+
+Fixed state array text not found bug
+
+Removed unecessary debug. 
+
+Updated required json saved to node JSON file. 
+
+Added github pull requests
+    - Added create object and delete object to bacnet server 
+    - Added write property to bacnet server 
+
+Added Simple With Status read property type.
+    - This type sends a msg.payload that consists of {presentValue, timestamp, status}
+    - Status is currently online and offline
+
+Changed inject node to only 1 selectable type of inject (Discover or Poll)
+
+
+## [1.3.2] - 18-06-2024
+
+### Summary 
+
+Bug fix for API request URL paths. Updated for using node-red host setting.
+
 ## [1.3.1] - 06-06-2024
 
 ### Summary 

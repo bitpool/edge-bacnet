@@ -2,6 +2,7 @@ const bacnet = require('./resources/node-bacstack-ts/dist/index.js');
 const pjson = require('./package.json');
 const baEnum = bacnet.enum;
 const { Store_Config_Server, Read_Config_Sync_Server } = require('./common');
+const { EventEmitter } = require("events");
 
 /**
  * Class representing a BACnet Server.
@@ -16,9 +17,10 @@ const { Store_Config_Server, Read_Config_Sync_Server } = require('./common');
  * @param {number} deviceId - The ID of the device.
  * @param {string} nodeRedVersion - The version of Node-Red.
  */
-class BacnetServer {
+class BacnetServer extends EventEmitter {
 
     constructor(client, deviceId, nodeRedVersion) {
+        super();
         let that = this;
         that.bacnetClient = client;
 
@@ -175,6 +177,69 @@ class BacnetServer {
             }
         });
 
+        that.bacnetClient.client.on('writeProperty', (data) => {
+            let objectId = data.request.objectId.type;
+            let objectInstance = data.request.objectId.instance;
+            let propId = data.request.value.property.id.toString();
+            let newValue = data.request.value.value[0].value;
+
+            if (!that.modifyObject(objectId, propId, objectInstance, newValue)) {
+                that.bacnetClient.errorResponse(data.address, data.service, data.invokeId, bacnet.enum.ErrorClass.OBJECT, bacnet.enum.ErrorCode.UNKNOWN_OBJECT);
+            }
+            that.getServerPoints(objectId, objectInstance).then(function (result) {
+                that.bacnetClient.client.simpleAckResponse(data.address, data.service, data.invokeId);
+                that.emit("writeProperty", result[0].name, newValue);
+            }).catch(function (error) {
+                that.bacnetClient.errorResponse(data.address, data.service, data.invokeId, bacnet.enum.ErrorClass.OBJECT, bacnet.enum.ErrorCode.UNKNOWN_OBJECT);
+                that.logOut("Error getting server points:  ", error);
+            });
+        });
+
+        that.bacnetClient.client.on('createObject', (data) => {
+            var defaultValue;
+            switch (data.request.values[0].value[0].type) {
+                case baEnum.ObjectType.CHARACTERSTRING_VALUE:
+                    defaultValue = "";
+                    break;
+                case baEnum.ObjectType.BINARY_VALUE:
+                    defaultValue = 0;
+                    break;
+                case baEnum.ObjectType.ANALOG_VALUE:
+                    defaultValue = false;
+                    break;
+                default:
+                    defaultValue = 0;
+                    break;
+            }
+            that.addObject(data.request.values[0].value[0].value, defaultValue);
+            that.bacnetClient.client.simpleAckResponse(data.address, data.service, data.invokeId);
+        });
+
+        that.bacnetClient.client.on('deleteObject', (data) => {
+            var type;
+            switch (data.request.objectType) {
+                case baEnum.ObjectType.CHARACTERSTRING_VALUE:
+                    type = 'SV';
+                    break;
+                case baEnum.ObjectType.BINARY_VALUE:
+                    type = 'BV';
+                    break;
+                case baEnum.ObjectType.ANALOG_VALUE:
+                    type = 'AV';
+                    break;
+                default:
+                    type = 'AV';
+                    break;
+            }
+
+            var req = { body: { type: type, instance: data.request.instance } };
+            that.clearServerPoint(req).then(function (result) {
+                that.bacnetClient.client.simpleAckResponse(data.address, data.service, data.invokeId);
+            }).catch(function (error) {
+                console.log(error)
+            });
+        });
+
         //do initial iAm broadcast when BACnet server starts
         that.bacnetClient.client.iAmResponse(that.deviceId, baEnum.Segmentation.SEGMENTED_BOTH, that.vendorId);
     }
@@ -325,6 +390,37 @@ class BacnetServer {
                 if (object[baEnum.PropertyIdentifier.OBJECT_IDENTIFIER][0].value.instance == instance) {
                     let requestedProperty = object[propId];
                     if (requestedProperty !== null && requestedProperty !== undefined && typeof requestedProperty !== "undefined") {
+                        return requestedProperty;
+                    }
+                }
+            }
+        } else {
+            return objectGroup[propId];
+        }
+
+        return null;
+    }
+
+    /**
+     * Retrieves a specific property of an object based on the object ID, property ID, and instance number and modify his value.
+     * 
+     * @param {number} objectId - The ID of the object type.
+     * @param {number} propId - The ID of the property to retrieve.
+     * @param {number} instance - The instance number of the object.
+     * @param {number} newValue - The the new value for update.
+     * @returns {any} The requested property value if found, otherwise null.
+     */
+    modifyObject(objectId, propId, instance, newValue) { //TODO factorise with getObject
+        let that = this;
+        let objectGroup = that.objectStore[objectId];
+
+        if (Array.isArray(objectGroup)) {
+            for (let i = 0; i < objectGroup.length; i++) {
+                let object = objectGroup[i];
+                if (object[baEnum.PropertyIdentifier.OBJECT_IDENTIFIER][0].value.instance == instance) {
+                    let requestedProperty = object[propId];
+                    if (requestedProperty !== null && requestedProperty !== undefined && typeof requestedProperty !== "undefined") {
+                        that.objectStore[objectId][i][propId][0].value = newValue;
                         return requestedProperty;
                     }
                 }
@@ -503,7 +599,7 @@ class BacnetServer {
      * @returns {Promise<Array>} A promise that resolves with an array of points sorted by instance number.
      * @throws {Error} If an error occurs during the retrieval process.
      */
-    getServerPoints() {
+    getServerPoints(typeFilter = null, instanceFilter = null) {
         let that = this;
         let points = [];
 
@@ -515,11 +611,21 @@ class BacnetServer {
                         let instance = point[baEnum.PropertyIdentifier.OBJECT_IDENTIFIER][0].value.instance;
                         let objectName = point[baEnum.PropertyIdentifier.OBJECT_NAME][0].value;
 
-                        points.push({
-                            name: objectName,
-                            type: "AV",
-                            instance
-                        });
+                        if (typeFilter === null && instanceFilter === null) {
+                            points.push({
+                                name: objectName,
+                                type: "AV",
+                                instance
+                            });
+                        } else {
+                            if ((typeFilter === baEnum.ObjectType.ANALOG_VALUE) && (instanceFilter === instance)) {
+                                points.push({
+                                    name: objectName,
+                                    type: "AV",
+                                    instance
+                                });
+                            }
+                        }
                     });
                 }
 
@@ -529,11 +635,21 @@ class BacnetServer {
                         let instance = point[baEnum.PropertyIdentifier.OBJECT_IDENTIFIER][0].value.instance;
                         let objectName = point[baEnum.PropertyIdentifier.OBJECT_NAME][0].value;
 
-                        points.push({
-                            name: objectName,
-                            type: "SV",
-                            instance
-                        });
+                        if (typeFilter === null && instanceFilter === null) {
+                            points.push({
+                                name: objectName,
+                                type: "SV",
+                                instance
+                            });
+                        } else {
+                            if ((typeFilter === baEnum.ObjectType.CHARACTERSTRING_VALUE) && (instanceFilter === instance)) {
+                                points.push({
+                                    name: objectName,
+                                    type: "SV",
+                                    instance
+                                });
+                            }
+                        }
                     });
                 }
 
@@ -543,11 +659,21 @@ class BacnetServer {
                         let instance = point[baEnum.PropertyIdentifier.OBJECT_IDENTIFIER][0].value.instance;
                         let objectName = point[baEnum.PropertyIdentifier.OBJECT_NAME][0].value;
 
-                        points.push({
-                            name: objectName,
-                            type: "BV",
-                            instance
-                        });
+                        if (typeFilter === null && instanceFilter === null) {
+                            points.push({
+                                name: objectName,
+                                type: "BV",
+                                instance
+                            });
+                        } else {
+                            if ((typeFilter === baEnum.ObjectType.BINARY_VALUE) && (instanceFilter === instance)) {
+                                points.push({
+                                    name: objectName,
+                                    type: "BV",
+                                    instance
+                                });
+                            }
+                        }
                     });
                 }
 

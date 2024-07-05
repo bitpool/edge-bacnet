@@ -8,35 +8,6 @@ const os = require("os");
 const { exec } = require("child_process");
 const baEnum = require("./resources/node-bacstack-ts/dist/index.js").enum;
 const fs = require("fs");
-const { BitArray } = require("./resources/bitArray.js");
-
-const logger = createLogger({
-  format: format.combine(
-    format.timestamp({
-      format: "YYYY-MM-DD HH:mm:ss",
-    }),
-    format.json()
-  ),
-  transports: [new transports.Console()],
-});
-
-class DeviceObjectId {
-  constructor(type, instance) {
-    this.type = type;
-    this.instance = instance;
-  }
-}
-
-class DeviceObject {
-  constructor(objectId, name, description, type, units, presentValue) {
-    this.objectId = objectId;
-    this.name = name;
-    this.description = description;
-    this.type = type;
-    this.units = units;
-    this.presentValue = presentValue;
-  }
-}
 
 class BacnetConfig {
   constructor(

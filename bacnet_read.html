@@ -20,6 +20,7 @@
             readDevices: { value: [] },
             devicesToRead: [],
             object_property_simplePayload: { value: false },
+            object_property_simpleWithStatus: { value: false },
             object_property_fullObject: { value: true },
         },
         inputs: 1,
@@ -96,9 +97,6 @@
                 mounted() {
                     let app = this;
                     this.getData(true);
-                    if (!node.reloadTimer) {
-                        node.reloadTimer = setInterval(() => app.getData(false), 7000);
-                    }
 
                     $("#readlist-file-upload").on("change", function (event) {
                         const input = event.target.files[0];
@@ -408,29 +406,31 @@
                                     return ele.address == ipAddress && ele.deviceId == deviceId;
                                 }
                             });
-                            const deviceName = device.deviceName;
-                            const points = Object.keys(deviceObject);
-                            for (point in points) {
-                                csvContent +=
-                                    ipAddress +
-                                    "," +
-                                    deviceId +
-                                    "," +
-                                    deviceName +
-                                    "," +
-                                    points[point] +
-                                    "," +
-                                    deviceObject[points[point]].meta.objectId.type +
-                                    "\r\n";
+                            if (device) {
+                                const deviceName = device.deviceName;
+                                const points = Object.keys(deviceObject);
+                                for (point in points) {
+                                    csvContent +=
+                                        ipAddress +
+                                        "," +
+                                        deviceId +
+                                        "," +
+                                        deviceName +
+                                        "," +
+                                        points[point] +
+                                        "," +
+                                        deviceObject[points[point]].meta.objectId.type +
+                                        "\r\n";
 
-                                if (parseInt(point) == points.length - 1 && parseInt(key) == keys.length - 1) {
-                                    // last iteration
-                                    var encodedUri = encodeURI(csvContent);
-                                    var link = document.createElement("a");
-                                    link.setAttribute("href", encodedUri);
-                                    link.setAttribute("download", "pointslist.csv");
-                                    document.body.appendChild(link);
-                                    link.click();
+                                    if (parseInt(point) == points.length - 1 && parseInt(key) == keys.length - 1) {
+                                        // last iteration
+                                        var encodedUri = encodeURI(csvContent);
+                                        var link = document.createElement("a");
+                                        link.setAttribute("href", encodedUri);
+                                        link.setAttribute("download", "pointslist.csv");
+                                        document.body.appendChild(link);
+                                        link.click();
+                                    }
                                 }
                             }
                         }
@@ -661,28 +661,22 @@
                             }
 
                             const devicePoints = Object.keys(device);
-                            let pointIndex = 0;
-                            doPoints(pointIndex);
 
-                            function doPoints(pointIndex) {
+                            for (let pointIndex = 0; pointIndex <= devicePoints.length; pointIndex++) {
                                 let pointName = devicePoints[pointIndex];
                                 let pointObject = device[pointName];
 
                                 //formatting json payload, still in progress
 
-                                exportJson[key][pointName] = {
-                                    meta: pointObject.meta,
-                                    objectName: pointObject.objectName,
-                                    displayName: pointObject.displayName,
-                                };
+                                if (pointObject) {
+                                    exportJson[key][pointName] = {
+                                        meta: pointObject.meta,
+                                        objectName: pointObject.objectName,
+                                        displayName: pointObject.displayName,
+                                    };
+                                }
 
-                                // exportJson[key][pointName] = pointObject;
-
-                                if (pointIndex < devicePoints.length - 1) {
-                                    //more points to read for device
-                                    pointIndex++;
-                                    doPoints(pointIndex);
-                                } else if (pointIndex == devicePoints.length - 1) {
+                                if (pointIndex == devicePoints.length - 1) {
                                     //all points have been iterated
 
                                     if (deviceIndex < devicesToExport.length - 1) {
@@ -873,6 +867,8 @@
 
             document.getElementById("node-input-object_property_simplePayload").checked = node.object_property_simplePayload;
             document.getElementById("node-input-object_property_simplePayload").onclick = handleCheckboxClick;
+            document.getElementById("node-input-object_property_simpleWithStatus").checked = node.object_property_simpleWithStatus;
+            document.getElementById("node-input-object_property_simpleWithStatus").onclick = handleCheckboxClick;
             document.getElementById("node-input-object_property_fullObject").checked = node.object_property_fullObject;
             document.getElementById("node-input-object_property_fullObject").onclick = handleCheckboxClick;
 
@@ -894,14 +890,16 @@
 
             function handleCheckboxClick() {
                 if (this.id == "node-input-object_property_simplePayload") {
-                    document.getElementById("node-input-object_property_fullObject").checked = !document.getElementById(
-                        "node-input-object_property_fullObject"
-                    ).checked;
+                    document.getElementById("node-input-object_property_fullObject").checked = false;
+                    document.getElementById("node-input-object_property_simpleWithStatus").checked = false;
+                }
+                if (this.id == "node-input-object_property_simpleWithStatus") {
+                    document.getElementById("node-input-object_property_fullObject").checked = false;
+                    document.getElementById("node-input-object_property_simplePayload").checked = false;
                 }
                 if (this.id == "node-input-object_property_fullObject") {
-                    document.getElementById("node-input-object_property_simplePayload").checked = !document.getElementById(
-                        "node-input-object_property_simplePayload"
-                    ).checked;
+                    document.getElementById("node-input-object_property_simplePayload").checked = false;
+                    document.getElementById("node-input-object_property_simpleWithStatus").checked = false;
                 }
             }
 
@@ -948,25 +946,13 @@
         },
         oneditsave: function () {
             let node = this;
-            if (node.vm.$data.devices) node.devices = node.vm.$data.devices;
             if (node.vm.$data.readDevices) node.readDevices = node.vm.$data.readDevices;
             if (node.vm.$data.pointsToRead) node.pointsToRead = node.vm.$data.pointsToRead;
-            //clear reload data function
-            if (node.reloadTimer) {
-                clearInterval(node.reloadTimer);
-                node.reloadTimer = null;
-            }
         },
         oneditcancel: function () {
             let node = this;
-            if (node.vm.$data.devices) node.devices = node.vm.$data.devices;
             if (node.vm.$data.readDevices) node.readDevices = node.vm.$data.readDevices;
             if (node.vm.$data.pointsToRead) node.pointsToRead = node.vm.$data.pointsToRead;
-            //clear reload data function
-            if (node.reloadTimer) {
-                clearInterval(node.reloadTimer);
-                node.reloadTimer = null;
-            }
         },
     });
 </script>
@@ -1266,6 +1252,21 @@
 
           <div class="objectPropertiesLabel">
             <label
+              for="node-input-object_property_simpleWithStatus"
+              style="padding-left: 4px; width: auto; align-items: start;"
+              class="objectPropertiesLabel">
+              <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_simpleWithStatus"></span>
+              <input
+                style="margin-left: 5px;"
+                class=" objectProp"
+                type="checkbox"
+                id="node-input-object_property_simpleWithStatus" />
+              <a style="white-space: nowrap; padding-left: 20px;">Simple With Status</a>
+            </label>
+          </div>
+
+          <div class="objectPropertiesLabel">
+            <label
               for="node-input-object_property_fullObject"
               style="padding-left: 4px; width: auto; align-items: start;"
               class="objectPropertiesLabel">
@@ -1278,6 +1279,7 @@
               <a style="white-space: nowrap; padding-left: 20px;">Full Object</a>
             </label>
           </div>
+
         </div>
       </div>
 

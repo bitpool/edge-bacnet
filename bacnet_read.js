@@ -22,6 +22,7 @@ module.exports = function (RED) {
     this.nodeName = config.name;
 
     this.object_property_simplePayload = config.object_property_simplePayload;
+    this.object_property_simpleWithStatus = config.object_property_simpleWithStatus;
     this.object_property_fullObject = config.object_property_fullObject;
 
 
@@ -62,6 +63,7 @@ module.exports = function (RED) {
         options: readConfig,
         objectPropertyType: {
           simplePayload: node.object_property_simplePayload,
+          simpleWithStatus: node.object_property_simpleWithStatus,
           fullObject: node.object_property_fullObject
         },
         outputType: {
