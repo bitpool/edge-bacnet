@@ -271,102 +271,71 @@ class BacnetServer extends EventEmitter {
             if (name.includes('|')) {
                 // split name, assign last part to instanceNumber and the rest to name
                 let nameParts = name.split('|');
-                instanceNumber = nameParts[nameParts.length - 1];
-                nameParts.pop();
+                instanceNumber = nameParts.pop();
                 name = nameParts.join('|');
             }
-            let formattedName = name.replaceAll('.', '_');
-            formattedName = formattedName.replaceAll('/', '_');
-            if (objectType == "number") {
-                let foundIndex = that.objectStore[baEnum.ObjectType.ANALOG_VALUE].findIndex(ele => ele[baEnum.PropertyIdentifier.OBJECT_NAME][0].value == formattedName);
-                if (foundIndex == -1) {
-                    let objectId = that.getObjectIdentifier(baEnum.ObjectType.ANALOG_VALUE, instanceNumber);
-                    that.objectStore[baEnum.ObjectType.ANALOG_VALUE].push({
-                        [baEnum.PropertyIdentifier.OBJECT_NAME]: [{ value: formattedName, type: 7 }],
-                        [baEnum.PropertyIdentifier.OBJECT_TYPE]: [{ value: baEnum.ObjectType.ANALOG_VALUE, type: 9 }],
-                        [baEnum.PropertyIdentifier.DESCRIPTION]: [{ value: payload.description ?? '', type: 7 }],
-                        [baEnum.PropertyIdentifier.OBJECT_IDENTIFIER]: [{ value: { type: baEnum.ObjectType.ANALOG_VALUE, instance: objectId }, type: 12 }],
-                        [baEnum.PropertyIdentifier.PRESENT_VALUE]: [{ value: payload.value ?? payload, type: 4 }],
-                        [baEnum.PropertyIdentifier.STATUS_FLAGS]: [{ value: payload.statusFlags ?? 0, type: 8 }],
-                        [baEnum.PropertyIdentifier.EVENT_STATE]: [{ value: payload.eventState ?? 0, type: 9 }],
-                        [baEnum.PropertyIdentifier.OUT_OF_SERVICE]: [{ value: payload.outOfService ?? 0, type: 9 }],
-                        [baEnum.PropertyIdentifier.UNITS]: [{ value: payload.units ?? 95, type: 9 }],
-                        [baEnum.PropertyIdentifier.PRIORITY_ARRAY]: [{ value: payload.priorityArray ?? 0, type: 9 }],
-                        [baEnum.PropertyIdentifier.MAX_PRES_VALUE]: [{ value: payload.value ?? payload, type: 4 }],
-                        [baEnum.PropertyIdentifier.MIN_PRES_VALUE]: [{ value: payload.value ?? payload, type: 4 }],
-                        [baEnum.PropertyIdentifier.RESOLUTION]: [{ value: payload.resolution ?? 0, type: 4 }],
-                        [baEnum.PropertyIdentifier.PROPERTY_LIST]:
-                            [
-                                { value: baEnum.PropertyIdentifier.OBJECT_NAME, type: 9 },
-                                { value: baEnum.PropertyIdentifier.OBJECT_TYPE, type: 9 },
-                                { value: baEnum.PropertyIdentifier.DESCRIPTION, type: 9 },
-                                { value: baEnum.PropertyIdentifier.OBJECT_IDENTIFIER, type: 9 },
-                                { value: baEnum.PropertyIdentifier.PRESENT_VALUE, type: 9 },
-                                { value: baEnum.PropertyIdentifier.STATUS_FLAGS, type: 9 },
-                                { value: baEnum.PropertyIdentifier.EVENT_STATE, type: 9 },
-                                { value: baEnum.PropertyIdentifier.OUT_OF_SERVICE, type: 9 },
-                                { value: baEnum.PropertyIdentifier.UNITS, type: 9 },
-                                { value: baEnum.PropertyIdentifier.PRIORITY_ARRAY, type: 9 },
-                                { value: baEnum.PropertyIdentifier.MAX_PRES_VALUE, type: 9 },
-                                { value: baEnum.PropertyIdentifier.MIN_PRES_VALUE, type: 9 },
-                                { value: baEnum.PropertyIdentifier.RESOLUTION, type: 9 },
-                            ],
-                    });
+            let formattedName = name.replaceAll('.', '_').replaceAll('/', '_');
 
-                    that.objectList.push({ value: { type: baEnum.ObjectType.ANALOG_VALUE, instance: objectId }, type: 12 })
+            const getCommonProperties = (type, valueType) => ({
+                [baEnum.PropertyIdentifier.OBJECT_NAME]: [{ value: formattedName, type: 7 }],
+                [baEnum.PropertyIdentifier.OBJECT_TYPE]: [{ value: type, type: 9 }],
+                [baEnum.PropertyIdentifier.DESCRIPTION]: [{ value: payload.description ?? '', type: 7 }],
+                [baEnum.PropertyIdentifier.OBJECT_IDENTIFIER]: [{ value: { type: type, instance: that.getObjectIdentifier(type, instanceNumber) }, type: 12 }],
+                [baEnum.PropertyIdentifier.PRESENT_VALUE]: [{ value: payload.value ?? payload, type: valueType }],
+                [baEnum.PropertyIdentifier.STATUS_FLAGS]: [{ value: payload.statusFlags ?? 0, type: 8 }],
+                [baEnum.PropertyIdentifier.EVENT_STATE]: [{ value: payload.eventState ?? 0, type: 9 }],
+                [baEnum.PropertyIdentifier.OUT_OF_SERVICE]: [{ value: payload.outOfService ?? 0, type: 9 }],
+            });
+
+            const addObjectToStore = (type, valueType, extraProperties = {}) => {
+                let foundIndex = that.objectStore[type].findIndex(ele => ele[baEnum.PropertyIdentifier.OBJECT_NAME][0].value == formattedName);
+                if (foundIndex == -1) {
+                    let newObject = {
+                        ...getCommonProperties(type, valueType),
+                        ...extraProperties
+                    };
+                    that.objectStore[type].push(newObject);
+                    that.objectList.push({ value: { type: type, instance: newObject[baEnum.PropertyIdentifier.OBJECT_IDENTIFIER][0].value.instance }, type: 12 });
                     that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
-                } else if (foundIndex !== -1) {
-                    let foundObject = that.objectStore[baEnum.ObjectType.ANALOG_VALUE][foundIndex];
+                } else {
+                    let foundObject = that.objectStore[type][foundIndex];
                     foundObject[baEnum.PropertyIdentifier.PRESENT_VALUE][0].value = payload.value ?? payload;
                     that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
                 }
-            } else if (objectType == "boolean") {
-                let foundIndex = that.objectStore[baEnum.ObjectType.BINARY_VALUE].findIndex(ele => ele[baEnum.PropertyIdentifier.OBJECT_NAME][0].value == formattedName);
-                if (foundIndex == -1) {
-                    let objectId = that.getObjectIdentifier(baEnum.ObjectType.BINARY_VALUE);
-                    that.objectStore[baEnum.ObjectType.BINARY_VALUE].push({
-                        [baEnum.PropertyIdentifier.OBJECT_NAME]: [{ value: formattedName, type: 7 }],
-                        [baEnum.PropertyIdentifier.OBJECT_TYPE]: [{ value: baEnum.ObjectType.BINARY_VALUE, type: 9 }],
-                        [baEnum.PropertyIdentifier.DESCRIPTION]: [{ value: payload.description ?? '', type: 7 }],
-                        [baEnum.PropertyIdentifier.OBJECT_IDENTIFIER]: [{ value: { type: baEnum.ObjectType.BINARY_VALUE, instance: objectId }, type: 12 }],
-                        [baEnum.PropertyIdentifier.PRESENT_VALUE]: [{ value: payload.value ?? payload, type: 1 }],
-                        [baEnum.PropertyIdentifier.STATUS_FLAGS]: [{ value: payload.statusFlags ?? 0, type: 8 }],
-                        [baEnum.PropertyIdentifier.EVENT_STATE]: [{ value: payload.eventState ?? 0, type: 9 }],
-                        [baEnum.PropertyIdentifier.OUT_OF_SERVICE]: [{ value: payload.outOfService ?? 0, type: 9 }],
-                        [baEnum.PropertyIdentifier.ACTIVE_TEXT]: [{ value: 'ACTIVE', type: 7 }],
-                        [baEnum.PropertyIdentifier.INACTIVE_TEXT]: [{ value: 'INACTIVE', type: 7 }],
-                    });
+            };
 
-                    that.objectList.push({ value: { type: baEnum.ObjectType.BINARY_VALUE, instance: objectId }, type: 12 })
-                    that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
-                } else if (foundIndex !== -1) {
-                    let foundObject = that.objectStore[baEnum.ObjectType.BINARY_VALUE][foundIndex];
-                    foundObject[baEnum.PropertyIdentifier.PRESENT_VALUE][0].value = payload.value ?? payload;
-                    that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
-                }
-            } else if (objectType == "string") {
-                let foundIndex = that.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE].findIndex(ele => ele[baEnum.PropertyIdentifier.OBJECT_NAME][0].value == formattedName);
-                if (foundIndex == -1) {
-                    let objectId = that.getObjectIdentifier(baEnum.ObjectType.CHARACTERSTRING_VALUE);
-                    that.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE].push({
-                        [baEnum.PropertyIdentifier.OBJECT_NAME]: [{ value: formattedName, type: 7 }],
-                        [baEnum.PropertyIdentifier.OBJECT_TYPE]: [{ value: baEnum.ObjectType.CHARACTERSTRING_VALUE, type: 9 }],
-                        [baEnum.PropertyIdentifier.DESCRIPTION]: [{ value: payload.description, type: 7 }],
-                        [baEnum.PropertyIdentifier.OBJECT_IDENTIFIER]: [{ value: { type: baEnum.ObjectType.CHARACTERSTRING_VALUE, instance: objectId }, type: 12 }],
-                        [baEnum.PropertyIdentifier.PRESENT_VALUE]: [{ value: payload.value ?? payload, type: 7 }],
-                        [baEnum.PropertyIdentifier.STATUS_FLAGS]: [{ value: payload.statusFlags ?? 0, type: 8 }],
-                        [baEnum.PropertyIdentifier.EVENT_STATE]: [{ value: payload.eventState ?? 0, type: 9 }],
-                        [baEnum.PropertyIdentifier.OUT_OF_SERVICE]: [{ value: payload.outOfService ?? 0, type: 9 }],
-                        [baEnum.PropertyIdentifier.UNITS]: [{ value: payload.units ?? 95, type: 9 }]
-                    });
-
-                    that.objectList.push({ value: { type: baEnum.ObjectType.CHARACTERSTRING_VALUE, instance: objectId }, type: 12 })
-                    that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
-                } else if (foundIndex !== -1) {
-                    let foundObject = that.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE][foundIndex];
-                    foundObject[baEnum.PropertyIdentifier.PRESENT_VALUE][0].value = payload.value ?? payload;
-                    that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
-                }
+            if (objectType === "number") {
+                addObjectToStore(baEnum.ObjectType.ANALOG_VALUE, 4, {
+                    [baEnum.PropertyIdentifier.UNITS]: [{ value: payload.units ?? 95, type: 9 }],
+                    [baEnum.PropertyIdentifier.MAX_PRES_VALUE]: [{ value: payload.value ?? payload, type: 4 }],
+                    [baEnum.PropertyIdentifier.MIN_PRES_VALUE]: [{ value: payload.value ?? payload, type: 4 }],
+                    [baEnum.PropertyIdentifier.RESOLUTION]: [{ value: payload.resolution ?? 0, type: 4 }],
+                    [baEnum.PropertyIdentifier.PRIORITY_ARRAY]: [{ value: payload.priorityArray ?? 0, type: 9 }],
+                    [baEnum.PropertyIdentifier.PROPERTY_LIST]: [
+                        { value: baEnum.PropertyIdentifier.OBJECT_NAME, type: 9 },
+                        { value: baEnum.PropertyIdentifier.OBJECT_TYPE, type: 9 },
+                        { value: baEnum.PropertyIdentifier.DESCRIPTION, type: 9 },
+                        { value: baEnum.PropertyIdentifier.OBJECT_IDENTIFIER, type: 9 },
+                        { value: baEnum.PropertyIdentifier.PRESENT_VALUE, type: 9 },
+                        { value: baEnum.PropertyIdentifier.STATUS_FLAGS, type: 9 },
+                        { value: baEnum.PropertyIdentifier.EVENT_STATE, type: 9 },
+                        { value: baEnum.PropertyIdentifier.OUT_OF_SERVICE, type: 9 },
+                        { value: baEnum.PropertyIdentifier.UNITS, type: 9 },
+                        { value: baEnum.PropertyIdentifier.PRIORITY_ARRAY, type: 9 },
+                        { value: baEnum.PropertyIdentifier.MAX_PRES_VALUE, type: 9 },
+                        { value: baEnum.PropertyIdentifier.MIN_PRES_VALUE, type: 9 },
+                        { value: baEnum.PropertyIdentifier.RESOLUTION, type: 9 },
+                    ]
+                });
+            } else if (objectType === "boolean") {
+                addObjectToStore(baEnum.ObjectType.BINARY_VALUE, 1, {
+                    [baEnum.PropertyIdentifier.ACTIVE_TEXT]: [{ value: 'ACTIVE', type: 7 }],
+                    [baEnum.PropertyIdentifier.INACTIVE_TEXT]: [{ value: 'INACTIVE', type: 7 }]
+                });
+            } else if (objectType === "string") {
+                addObjectToStore(baEnum.ObjectType.CHARACTERSTRING_VALUE, 7, {
+                    [baEnum.PropertyIdentifier.UNITS]: [{ value: payload.units ?? 95, type: 9 }]
+                });
             }
         }
         Store_Config_Server(JSON.stringify({ objectList: that.objectList, objectStore: that.objectStore }));
