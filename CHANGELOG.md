@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.0] - 08-07-2024
+
+### Summary
+
+Add the possibility of configuration at the creation of an object.
+
 ## [1.4.0] - 05-07-2024
 
 ### Summary

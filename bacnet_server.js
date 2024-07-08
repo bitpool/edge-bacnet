@@ -6,12 +6,12 @@ const { EventEmitter } = require("events");
 
 /**
  * Class representing a BACnet Server.
- * 
+ *
  * This class initializes a BACnet server with specified client, device ID, and Node-Red version.
  * It provides methods to set device name, add objects, retrieve objects, clear server points, clear server point, and get server points.
- * 
+ *
  * Simulates a BACnet IP device on a regular IP network
- * 
+ *
  * @constructor
  * @param {Object} client - The BACnet client object.
  * @param {number} deviceId - The ID of the device.
@@ -246,7 +246,7 @@ class BacnetServer extends EventEmitter {
 
     /**
      * Set the name of the device.
-     * 
+     *
      * @param {string} nodeName - The new name for the device.
      */
     setDeviceName(nodeName) {
@@ -257,15 +257,15 @@ class BacnetServer extends EventEmitter {
     }
 
     /**
-     * Adds a new object to the BacnetServer's object store based on the provided name and value.
-     * 
+     * Adds a new object to the BacnetServer's object store based on the provided name and payload.
+     *
      * @param {string} name - The name of the object to be added.
-     * @param {number|boolean|string} value - The value of the object to be added.
+     * @param {number|boolean|string|object} payload - The payload of the object to be added.
      * @returns {void}
      */
-    addObject(name, value) {
+    addObject(name, payload) {
         let that = this;
-        let objectType = that.getBacnetObjectType(value);
+        let objectType = that.getBacnetObjectType(payload.value ?? payload);
         if (name && objectType) {
             let instanceNumber;
             if (name.includes('|')) {
@@ -284,17 +284,17 @@ class BacnetServer extends EventEmitter {
                     that.objectStore[baEnum.ObjectType.ANALOG_VALUE].push({
                         [baEnum.PropertyIdentifier.OBJECT_NAME]: [{ value: formattedName, type: 7 }],
                         [baEnum.PropertyIdentifier.OBJECT_TYPE]: [{ value: baEnum.ObjectType.ANALOG_VALUE, type: 9 }],
-                        [baEnum.PropertyIdentifier.DESCRIPTION]: [{ value: '', type: 7 }],
+                        [baEnum.PropertyIdentifier.DESCRIPTION]: [{ value: payload.description ?? '', type: 7 }],
                         [baEnum.PropertyIdentifier.OBJECT_IDENTIFIER]: [{ value: { type: baEnum.ObjectType.ANALOG_VALUE, instance: objectId }, type: 12 }],
-                        [baEnum.PropertyIdentifier.PRESENT_VALUE]: [{ value: value, type: 4 }],
-                        [baEnum.PropertyIdentifier.STATUS_FLAGS]: [{ value: 0, type: 8 }],
-                        [baEnum.PropertyIdentifier.EVENT_STATE]: [{ value: 0, type: 9 }],
-                        [baEnum.PropertyIdentifier.OUT_OF_SERVICE]: [{ value: 0, type: 9 }],
-                        [baEnum.PropertyIdentifier.UNITS]: [{ value: 95, type: 9 }],
-                        [baEnum.PropertyIdentifier.PRIORITY_ARRAY]: [{ value: 0, type: 9 }],
-                        [baEnum.PropertyIdentifier.MAX_PRES_VALUE]: [{ value: value, type: 4 }],
-                        [baEnum.PropertyIdentifier.MIN_PRES_VALUE]: [{ value: value, type: 4 }],
-                        [baEnum.PropertyIdentifier.RESOLUTION]: [{ value: 0, type: 4 }],
+                        [baEnum.PropertyIdentifier.PRESENT_VALUE]: [{ value: payload.value ?? payload, type: 4 }],
+                        [baEnum.PropertyIdentifier.STATUS_FLAGS]: [{ value: payload.statusFlags ?? 0, type: 8 }],
+                        [baEnum.PropertyIdentifier.EVENT_STATE]: [{ value: payload.eventState ?? 0, type: 9 }],
+                        [baEnum.PropertyIdentifier.OUT_OF_SERVICE]: [{ value: payload.outOfService ?? 0, type: 9 }],
+                        [baEnum.PropertyIdentifier.UNITS]: [{ value: payload.units ?? 95, type: 9 }],
+                        [baEnum.PropertyIdentifier.PRIORITY_ARRAY]: [{ value: payload.priorityArray ?? 0, type: 9 }],
+                        [baEnum.PropertyIdentifier.MAX_PRES_VALUE]: [{ value: payload.value ?? payload, type: 4 }],
+                        [baEnum.PropertyIdentifier.MIN_PRES_VALUE]: [{ value: payload.value ?? payload, type: 4 }],
+                        [baEnum.PropertyIdentifier.RESOLUTION]: [{ value: payload.resolution ?? 0, type: 4 }],
                         [baEnum.PropertyIdentifier.PROPERTY_LIST]:
                             [
                                 { value: baEnum.PropertyIdentifier.OBJECT_NAME, type: 9 },
@@ -317,7 +317,7 @@ class BacnetServer extends EventEmitter {
                     that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
                 } else if (foundIndex !== -1) {
                     let foundObject = that.objectStore[baEnum.ObjectType.ANALOG_VALUE][foundIndex];
-                    foundObject[baEnum.PropertyIdentifier.PRESENT_VALUE][0].value = value;
+                    foundObject[baEnum.PropertyIdentifier.PRESENT_VALUE][0].value = payload.value ?? payload;
                     that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
                 }
             } else if (objectType == "boolean") {
@@ -327,12 +327,12 @@ class BacnetServer extends EventEmitter {
                     that.objectStore[baEnum.ObjectType.BINARY_VALUE].push({
                         [baEnum.PropertyIdentifier.OBJECT_NAME]: [{ value: formattedName, type: 7 }],
                         [baEnum.PropertyIdentifier.OBJECT_TYPE]: [{ value: baEnum.ObjectType.BINARY_VALUE, type: 9 }],
-                        [baEnum.PropertyIdentifier.DESCRIPTION]: [{ value: '', type: 7 }],
+                        [baEnum.PropertyIdentifier.DESCRIPTION]: [{ value: payload.description ?? '', type: 7 }],
                         [baEnum.PropertyIdentifier.OBJECT_IDENTIFIER]: [{ value: { type: baEnum.ObjectType.BINARY_VALUE, instance: objectId }, type: 12 }],
-                        [baEnum.PropertyIdentifier.PRESENT_VALUE]: [{ value: value, type: 1 }],
-                        [baEnum.PropertyIdentifier.STATUS_FLAGS]: [{ value: 0, type: 8 }],
-                        [baEnum.PropertyIdentifier.EVENT_STATE]: [{ value: 0, type: 9 }],
-                        [baEnum.PropertyIdentifier.OUT_OF_SERVICE]: [{ value: 0, type: 9 }],
+                        [baEnum.PropertyIdentifier.PRESENT_VALUE]: [{ value: payload.value ?? payload, type: 1 }],
+                        [baEnum.PropertyIdentifier.STATUS_FLAGS]: [{ value: payload.statusFlags ?? 0, type: 8 }],
+                        [baEnum.PropertyIdentifier.EVENT_STATE]: [{ value: payload.eventState ?? 0, type: 9 }],
+                        [baEnum.PropertyIdentifier.OUT_OF_SERVICE]: [{ value: payload.outOfService ?? 0, type: 9 }],
                         [baEnum.PropertyIdentifier.ACTIVE_TEXT]: [{ value: 'ACTIVE', type: 7 }],
                         [baEnum.PropertyIdentifier.INACTIVE_TEXT]: [{ value: 'INACTIVE', type: 7 }],
                     });
@@ -341,7 +341,7 @@ class BacnetServer extends EventEmitter {
                     that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
                 } else if (foundIndex !== -1) {
                     let foundObject = that.objectStore[baEnum.ObjectType.BINARY_VALUE][foundIndex];
-                    foundObject[baEnum.PropertyIdentifier.PRESENT_VALUE][0].value = value;
+                    foundObject[baEnum.PropertyIdentifier.PRESENT_VALUE][0].value = payload.value ?? payload;
                     that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
                 }
             } else if (objectType == "string") {
@@ -351,20 +351,20 @@ class BacnetServer extends EventEmitter {
                     that.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE].push({
                         [baEnum.PropertyIdentifier.OBJECT_NAME]: [{ value: formattedName, type: 7 }],
                         [baEnum.PropertyIdentifier.OBJECT_TYPE]: [{ value: baEnum.ObjectType.CHARACTERSTRING_VALUE, type: 9 }],
-                        [baEnum.PropertyIdentifier.DESCRIPTION]: [{ value: '', type: 7 }],
+                        [baEnum.PropertyIdentifier.DESCRIPTION]: [{ value: payload.description, type: 7 }],
                         [baEnum.PropertyIdentifier.OBJECT_IDENTIFIER]: [{ value: { type: baEnum.ObjectType.CHARACTERSTRING_VALUE, instance: objectId }, type: 12 }],
-                        [baEnum.PropertyIdentifier.PRESENT_VALUE]: [{ value: value, type: 7 }],
-                        [baEnum.PropertyIdentifier.STATUS_FLAGS]: [{ value: 0, type: 8 }],
-                        [baEnum.PropertyIdentifier.EVENT_STATE]: [{ value: 0, type: 9 }],
-                        [baEnum.PropertyIdentifier.OUT_OF_SERVICE]: [{ value: 0, type: 9 }],
-                        [baEnum.PropertyIdentifier.UNITS]: [{ value: 95, type: 9 }]
+                        [baEnum.PropertyIdentifier.PRESENT_VALUE]: [{ value: payload.value ?? payload, type: 7 }],
+                        [baEnum.PropertyIdentifier.STATUS_FLAGS]: [{ value: payload.statusFlags ?? 0, type: 8 }],
+                        [baEnum.PropertyIdentifier.EVENT_STATE]: [{ value: payload.eventState ?? 0, type: 9 }],
+                        [baEnum.PropertyIdentifier.OUT_OF_SERVICE]: [{ value: payload.outOfService ?? 0, type: 9 }],
+                        [baEnum.PropertyIdentifier.UNITS]: [{ value: payload.units ?? 95, type: 9 }]
                     });
 
                     that.objectList.push({ value: { type: baEnum.ObjectType.CHARACTERSTRING_VALUE, instance: objectId }, type: 12 })
                     that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
                 } else if (foundIndex !== -1) {
                     let foundObject = that.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE][foundIndex];
-                    foundObject[baEnum.PropertyIdentifier.PRESENT_VALUE][0].value = value;
+                    foundObject[baEnum.PropertyIdentifier.PRESENT_VALUE][0].value = payload.value ?? payload;
                     that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
                 }
             }
@@ -374,7 +374,7 @@ class BacnetServer extends EventEmitter {
 
     /**
      * Retrieves a specific property of an object based on the object ID, property ID, and instance number.
-     * 
+     *
      * @param {number} objectId - The ID of the object type.
      * @param {number} propId - The ID of the property to retrieve.
      * @param {number} instance - The instance number of the object.
@@ -403,7 +403,7 @@ class BacnetServer extends EventEmitter {
 
     /**
      * Retrieves a specific property of an object based on the object ID, property ID, and instance number and modify his value.
-     * 
+     *
      * @param {number} objectId - The ID of the object type.
      * @param {number} propId - The ID of the property to retrieve.
      * @param {number} instance - The instance number of the object.
@@ -434,7 +434,7 @@ class BacnetServer extends EventEmitter {
 
     /**
      * Retrieves the properties of a specific object instance from the objectStore based on the provided parameters.
-     * 
+     *
      * @param {number} objectId - The type of the object to retrieve.
      * @param {number} propId - The property identifier to retrieve.
      * @param {number} instance - The instance number of the object to retrieve.
@@ -532,7 +532,7 @@ class BacnetServer extends EventEmitter {
 
     /**
      * Removes a server point from the objectStore and objectList based on the provided JSON data.
-     * 
+     *
      * @param {Object} json - The JSON data containing information about the server point to be removed.
      * @param {string} json.body.type - The type of the server point ('SV' for CharacterString, 'BV' for BinaryValue, default is AnalogValue).
      * @param {number} json.body.instance - The instance number of the server point to be removed.
@@ -595,7 +595,7 @@ class BacnetServer extends EventEmitter {
      * - name: The name of the object.
      * - type: The type of the object (AV for Analog Value, SV for Character String Value, BV for Binary Value).
      * - instance: The instance number of the object.
-     * 
+     *
      * @returns {Promise<Array>} A promise that resolves with an array of points sorted by instance number.
      * @throws {Error} If an error occurs during the retrieval process.
      */
@@ -686,7 +686,7 @@ class BacnetServer extends EventEmitter {
 
     /**
      * Determines the BACnet object type based on the provided value.
-     * 
+     *
      * @param {any} value - The value to determine the BACnet object type for.
      * @returns {string|null} The BACnet object type as a string ('string', 'number', 'boolean') or null if the type is not recognized.
      */
@@ -700,6 +700,8 @@ class BacnetServer extends EventEmitter {
                 return "number"
             case "boolean":
                 return "boolean"
+            case "object":
+                return "object"
             default:
                 return null
         }
@@ -707,7 +709,7 @@ class BacnetServer extends EventEmitter {
 
     /**
      * Returns the object identifier for the given type and instance number.
-     * 
+     *
      * @param {string} type - The type of the object.
      * @param {number} instanceNumber - The instance number of the object.
      * @returns {number} The object identifier.
