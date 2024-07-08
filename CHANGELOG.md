@@ -5,6 +5,14 @@
 ### Summary
 
 Add the possibility of configuration at the creation of an object.
+```javascript
+payload = {
+value: 12,
+resolution: 0,
+priorityArray: 0,
+units: 0,
+}
+```
 
 ## [1.4.0] - 05-07-2024
 
