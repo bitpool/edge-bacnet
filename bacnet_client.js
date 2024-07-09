@@ -773,7 +773,7 @@ class BacnetClient extends EventEmitter {
         let pointRef = request.pointRef;
         pointRef.status = "offline";
 
-        bacnetResults[deviceName][cacheRef.pointName] = pointRef;
+        bacnetResults[deviceName][request.pointName] = pointRef;
       });
 
     }

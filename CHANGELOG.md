@@ -1,4 +1,12 @@
 # Changelog
+## [1.4.1] - 09-07-2024
+
+### Summary
+
+Bug fixes
+ - incorrect variable used in doRead try catch
+ - setmaxlisteners on bacnet server event parent class
+
 
 ## [1.5.0] - 08-07-2024
 

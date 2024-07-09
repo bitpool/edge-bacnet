@@ -173,7 +173,7 @@ class BacnetServer extends EventEmitter {
                     );
                 }
             } catch (e) {
-                console.log("Local BACnet device readProperty error: ", e);
+                //console.log("Local BACnet device readProperty error: ", e);
             }
         });
 
@@ -242,6 +242,8 @@ class BacnetServer extends EventEmitter {
 
         //do initial iAm broadcast when BACnet server starts
         that.bacnetClient.client.iAmResponse(that.deviceId, baEnum.Segmentation.SEGMENTED_BOTH, that.vendorId);
+
+        that.setMaxListeners(2);
     }
 
     /**
