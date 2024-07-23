@@ -11,6 +11,7 @@
             events: { value: true },
             json: { value: true },
             mqtt: { value: false },
+            pointJson: { value: false },
             hiddenDeployToggle: { value: false },
             prevHiddenToggleState: { value: false },
             roundDecimal: { value: 2 },
@@ -725,75 +726,21 @@
                                         if (pointName == "deviceName") {
                                             app.nodeService.setDeviceDisplayName(device, point);
                                             treeDevice.label = point;
-                                        }
-                                        let pointInTree = treeDevice.children[0].children.find(
-                                            (ele) => ele.data == pointName && ele.bacnetType == point.meta.objectId.type
-                                        );
-
-                                        if (pointInTree) {
-                                            pointInTree.label = point.displayName;
-
-                                            const isDeviceInReadList = app.readDevices
-                                                ? app.readDevices.findIndex((ele) => ele.deviceId == treeDevice.deviceId)
-                                                : -1;
-
-                                            if (isDeviceInReadList == -1) {
-                                                //no read devices present, add new
-                                                let newReadParent = JSON.parse(JSON.stringify(treeDevice));
-                                                newReadParent.children[0].children = [];
-                                                newReadParent.children[0].children.push(pointInTree);
-                                                if (app.readDevices) {
-                                                    app.readDevices.push(newReadParent);
-                                                } else {
-                                                    app.readDevices = [newReadParent];
-                                                }
-                                            } else {
-                                                // read device found, add point to existing
-                                                let pointIndex = app.readDevices[isDeviceInReadList].children[0].children.findIndex(
-                                                    (ele) => ele.data == point.objectName
-                                                );
-                                                if (pointIndex == -1) {
-                                                    app.readDevices[isDeviceInReadList].children[0].children.push(pointInTree);
-                                                } else {
-                                                    app.readDevices[isDeviceInReadList].children[0].children[pointIndex] = pointInTree;
-                                                }
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    //search mstp devices
-                                    let mstpIndex = app.devices[foundIndex].children[1].children.findIndex((ele) => ele.deviceId == id);
-
-                                    if (mstpIndex !== -1) {
-                                        let mstpDevice = app.devices[foundIndex].children[1].children[mstpIndex];
-                                        let device = app.deviceList.find((ele) => {
-                                            if (ele.address.address) {
-                                                return ele.address.address == ip && ele.deviceId == id;
-                                            } else {
-                                                return ele.address == ip && ele.deviceId == id;
-                                            }
-                                        });
-
-                                        for (let pointName in importedDevice) {
-                                            let point = importedDevice[pointName];
-                                            if (pointName == "deviceName") {
-                                                app.nodeService.setDeviceDisplayName(device, point);
-                                                mstpDevice.label = point;
-                                            }
-                                            let pointInTree = mstpDevice.children[0].children.find(
-                                                (ele) => ele.data == pointName && ele.bacnetType == point.meta.objectId.type
+                                        } else {
+                                            let pointInTree = treeDevice.children[0].children.find(
+                                                (ele) => ele.bacnetInstance == point.meta.objectId.instance && ele.bacnetType == point.meta.objectId.type
                                             );
 
                                             if (pointInTree) {
                                                 pointInTree.label = point.displayName;
 
                                                 const isDeviceInReadList = app.readDevices
-                                                    ? app.readDevices.findIndex((ele) => ele.deviceId == mstpDevice.deviceId)
+                                                    ? app.readDevices.findIndex((ele) => ele.deviceId == treeDevice.deviceId)
                                                     : -1;
 
                                                 if (isDeviceInReadList == -1) {
                                                     //no read devices present, add new
-                                                    let newReadParent = JSON.parse(JSON.stringify(mstpDevice));
+                                                    let newReadParent = JSON.parse(JSON.stringify(treeDevice));
                                                     newReadParent.children[0].children = [];
                                                     newReadParent.children[0].children.push(pointInTree);
                                                     if (app.readDevices) {
@@ -810,6 +757,74 @@
                                                         app.readDevices[isDeviceInReadList].children[0].children.push(pointInTree);
                                                     } else {
                                                         app.readDevices[isDeviceInReadList].children[0].children[pointIndex] = pointInTree;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    //search mstp devices
+                                    let mstpIndex = -1;
+                                    let folderIndex = -1;
+
+                                    app.devices[foundIndex].children.forEach(function (child, index) {
+                                        let temporaryIndex = -1;
+                                        if (child.label.includes("MSTP")) {
+                                            temporaryIndex = child.children.findIndex((ele) => ele.deviceId == id);
+                                        }
+                                        if (temporaryIndex !== -1) {
+                                            mstpIndex = temporaryIndex;
+                                            folderIndex = index;
+                                        }
+                                    });
+
+                                    if (mstpIndex !== -1 && folderIndex !== -1) {
+                                        let mstpDevice = app.devices[foundIndex].children[folderIndex].children[mstpIndex];
+                                        let device = app.deviceList.find((ele) => {
+                                            if (ele.address.address) {
+                                                return ele.address.address == ip && ele.deviceId == id;
+                                            } else {
+                                                return ele.address == ip && ele.deviceId == id;
+                                            }
+                                        });
+
+                                        for (let pointName in importedDevice) {
+                                            let point = importedDevice[pointName];
+                                            if (pointName == "deviceName") {
+                                                app.nodeService.setDeviceDisplayName(device, point);
+                                                mstpDevice.label = point;
+                                            } else {
+                                                let pointInTree = mstpDevice.children[0].children.find(
+                                                    (ele) => ele.bacnetInstance == point.meta.objectId.instance && ele.bacnetType == point.meta.objectId.type
+                                                );
+
+                                                if (pointInTree) {
+                                                    pointInTree.label = point.displayName;
+
+                                                    const isDeviceInReadList = app.readDevices
+                                                        ? app.readDevices.findIndex((ele) => ele.deviceId == mstpDevice.deviceId)
+                                                        : -1;
+
+                                                    if (isDeviceInReadList == -1) {
+                                                        //no read devices present, add new
+                                                        let newReadParent = JSON.parse(JSON.stringify(mstpDevice));
+                                                        newReadParent.children[0].children = [];
+                                                        newReadParent.children[0].children.push(pointInTree);
+                                                        if (app.readDevices) {
+                                                            app.readDevices.push(newReadParent);
+                                                        } else {
+                                                            app.readDevices = [newReadParent];
+                                                        }
+                                                    } else {
+                                                        // read device found, add point to existing
+                                                        let pointIndex = app.readDevices[isDeviceInReadList].children[0].children.findIndex(
+                                                            (ele) => ele.data == point.objectName
+                                                        );
+                                                        if (pointIndex == -1) {
+                                                            app.readDevices[isDeviceInReadList].children[0].children.push(pointInTree);
+                                                        } else {
+                                                            app.readDevices[isDeviceInReadList].children[0].children[pointIndex] = pointInTree;
+                                                        }
                                                     }
                                                 }
                                             }
@@ -876,6 +891,8 @@
             document.getElementById("node-input-json").onclick = handleMsgTypeClick;
             document.getElementById("node-input-mqtt").checked = node.mqtt;
             document.getElementById("node-input-mqtt").onclick = handleMsgTypeClick;
+            document.getElementById("node-input-pointJson").checked = node.pointJson;
+            document.getElementById("node-input-pointJson").onclick = handleMsgTypeClick;
 
             var menu = document.querySelector(".context-menu");
             window.addEventListener("click", (event) => {
@@ -904,10 +921,16 @@
 
             function handleMsgTypeClick() {
                 if (this.id == "node-input-json") {
-                    document.getElementById("node-input-mqtt").checked = !document.getElementById("node-input-mqtt").checked;
+                    document.getElementById("node-input-mqtt").checked = false;
+                    document.getElementById("node-input-pointJson").checked = false;
                 }
                 if (this.id == "node-input-mqtt") {
-                    document.getElementById("node-input-json").checked = !document.getElementById("node-input-json").checked;
+                    document.getElementById("node-input-json").checked = false;
+                    document.getElementById("node-input-pointJson").checked = false;
+                }
+                if (this.id == "node-input-pointJson") {
+                    document.getElementById("node-input-json").checked = false;
+                    document.getElementById("node-input-mqtt").checked = false;
                 }
             }
 
@@ -1310,6 +1333,17 @@
               for="node-input-mqtt"
               style="padding-left: 20px; width: fit-content;"
               >Individual msgs</label
+            >
+          </div>
+          <div style="display: flex; flex-direction: row; align-items: flex-start;">
+            <input
+              class="checkbox-round"
+              type="checkbox"
+              id="node-input-pointJson"
+              style="width: 13px; margin-left: 5px;" /><label
+              for="node-input-pointJson"
+              style="padding-left: 20px; width: fit-content;"
+              >Individual JSON</label
             >
           </div>
         </div>

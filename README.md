@@ -39,6 +39,8 @@ $ npm install @bitpoolos/edge-bacnet
 The module can be updated via the Node-RED pallette manager, or via the npm cli. 
 
 ```javascript
+Note: the following is our reccommendation based on error encountered in our experience. The below steps are mostly critical for updates that modify or add new properties to the UI of a node. Refer to comments in changelog.
+
 Upon updating to the latest version, we highly recommend:
  - Check out the changelog for latest feature notes and updates 
  - Remove all @bitpoolos/edge-bacnet nodes from all flows 

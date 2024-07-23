@@ -45,8 +45,6 @@ module.exports = function (RED) {
     //determines whether or not to log a found device on whoIs response
     this.toLogIam = config.toLogIam;
 
-    this.websocketListener = null;
-
     node.bacnetConfig = new BacnetClientConfig(
       node.apduTimeout,
       node.localDeviceAddress,
@@ -75,6 +73,8 @@ module.exports = function (RED) {
     } else {
       node.bacnetClient = new BacnetClient(node.bacnetConfig);
       nodeContext.set("bacnetClient", node.bacnetClient);
+
+      nodeContext.set("serverWritePropEvent", false);
     }
 
     node.bacnetClient.scanMatrix = node.deviceRangeRegisters.filter((ele) => ele.enabled === true);
@@ -107,7 +107,7 @@ module.exports = function (RED) {
             node.status({});
           }, 3000);
         }
-        if (outputType.json && !outputType.mqtt) {
+        if (outputType.json && !outputType.mqtt && !outputType.pointJson) {
           //json
           if (objectPropertyType.simpleWithStatus && !objectPropertyType.fullObject && !objectPropertyType.simplePayload) {
             //simpleWithStatus
@@ -119,7 +119,7 @@ module.exports = function (RED) {
             //simplePayload
             sendSimpleJson(values, readNodeName);
           }
-        } else if (!outputType.json && outputType.mqtt) {
+        } else if (outputType.mqtt && !outputType.json && !outputType.pointJson) {
           //mqtt
           if (objectPropertyType.simpleWithStatus && !objectPropertyType.fullObject && !objectPropertyType.simplePayload) {
             //simpleWithStatus
@@ -130,6 +130,18 @@ module.exports = function (RED) {
           } else if (objectPropertyType.simplePayload && !objectPropertyType.fullObject && !objectPropertyType.simpleWithStatus) {
             //simplePayload
             sendSimpleMqtt(values, readNodeName);
+          }
+        } else if (outputType.pointJson && !outputType.json && !outputType.mqtt) {
+          //pointJson
+          if (objectPropertyType.simpleWithStatus && !objectPropertyType.fullObject && !objectPropertyType.simplePayload) {
+            //simpleWithStatus
+            sendSimpleWithStatus(values, readNodeName, false);
+          } else if (objectPropertyType.fullObject && !objectPropertyType.simplePayload && !objectPropertyType.simpleWithStatus) {
+            //fullObject
+            sendIndividualMsgJson(values, readNodeName);
+          } else if (objectPropertyType.simplePayload && !objectPropertyType.fullObject && !objectPropertyType.simpleWithStatus) {
+            //simplePayload
+            sendSimpleJsonPerPoint(values, readNodeName);
           }
         }
       }
@@ -164,22 +176,25 @@ module.exports = function (RED) {
       }
     }
 
-    node.bacnetServer.on("writeProperty", (topic, newValue) => {
-      let formattedTopic = topic;
-      if (
-        node.nodeName !== "gateway" &&
-        node.nodeName !== "" &&
-        node.nodeName !== "null" &&
-        node.nodeName !== "undefined" &&
-        typeof node.nodeName == "string"
-      ) {
-        formattedTopic = `${node.nodeName}/BITPOOL_EDGE_BACNET_GATEWAY/BACNET_SERVER/${topic}`;
-      } else {
-        formattedTopic = `BITPOOL_EDGE_BACNET_GATEWAY/BACNET_SERVER/${topic}`;
-      }
+    if (node.bacnetServerEnabled == true && node.bacnetClient && node.bacnetServer && nodeContext.get("serverWritePropEvent") == false) {
+      node.bacnetServer.on("writeProperty", (topic, newValue) => {
+        let formattedTopic = topic;
+        if (
+          node.nodeName !== "gateway" &&
+          node.nodeName !== "" &&
+          node.nodeName !== "null" &&
+          node.nodeName !== "undefined" &&
+          typeof node.nodeName == "string"
+        ) {
+          formattedTopic = `${node.nodeName}/BITPOOL_EDGE_BACNET_GATEWAY/BACNET_SERVER/${topic}`;
+        } else {
+          formattedTopic = `BITPOOL_EDGE_BACNET_GATEWAY/BACNET_SERVER/${topic}`;
+        }
 
-      node.send({ payload: newValue, topic: formattedTopic });
-    });
+        node.send({ payload: newValue, topic: formattedTopic });
+      });
+      nodeContext.set("serverWritePropEvent", true);
+    }
 
     node.on("input", function (msg) {
       if (msg.topic && msg.payload !== null) {
@@ -441,7 +456,7 @@ module.exports = function (RED) {
               node.status({});
             }, 3000);
           }
-          if (outputType.json && !outputType.mqtt) {
+          if (outputType.json && !outputType.mqtt && !outputType.pointJson) {
             //json
             if (objectPropertyType.simpleWithStatus && !objectPropertyType.fullObject && !objectPropertyType.simplePayload) {
               //simpleWithStatus
@@ -453,7 +468,7 @@ module.exports = function (RED) {
               //simplePayload
               sendSimpleJson(values, readNodeName);
             }
-          } else if (!outputType.json && outputType.mqtt) {
+          } else if (outputType.mqtt && !outputType.json && !outputType.pointJson) {
             //mqtt
             if (objectPropertyType.simpleWithStatus && !objectPropertyType.fullObject && !objectPropertyType.simplePayload) {
               //simpleWithStatus
@@ -464,6 +479,18 @@ module.exports = function (RED) {
             } else if (objectPropertyType.simplePayload && !objectPropertyType.fullObject && !objectPropertyType.simpleWithStatus) {
               //simplePayload
               sendSimpleMqtt(values, readNodeName);
+            }
+          } else if (outputType.pointJson && !outputType.json && !outputType.mqtt) {
+            //pointJson
+            if (objectPropertyType.simpleWithStatus && !objectPropertyType.fullObject && !objectPropertyType.simplePayload) {
+              //simpleWithStatus
+              sendSimpleWithStatus(values, readNodeName, false);
+            } else if (objectPropertyType.fullObject && !objectPropertyType.simplePayload && !objectPropertyType.simpleWithStatus) {
+              //fullObject
+              sendIndividualMsgJson(values, readNodeName);
+            } else if (objectPropertyType.simplePayload && !objectPropertyType.fullObject && !objectPropertyType.simpleWithStatus) {
+              //simplePayload
+              sendSimpleJsonPerPoint(values, readNodeName);
             }
           }
         }
@@ -485,13 +512,6 @@ module.exports = function (RED) {
           console.log(param1, param2);
         }
       }
-    }
-
-    function getPointName(object, pointName) {
-      if (object.displayName) {
-        return object.displayName;
-      }
-      return pointName;
     }
 
     sendSimpleWithStatus = function (values, readNodeName, isJson) {
@@ -739,6 +759,7 @@ module.exports = function (RED) {
         keys.forEach(function (key) {
           let points = values[key];
           let msgg = {};
+          let structuredObject = {};
           if (
             node.nodeName !== "gateway" &&
             node.nodeName !== "" &&
@@ -764,12 +785,112 @@ module.exports = function (RED) {
               msgg.topic = `BITPOOL_BACNET_GATEWAY/${key}`;
             }
           }
-          msgg.payload = points;
+          for (let point in points) {
+            let pointName = getPointName(points[point], point);
+            structuredObject[pointName] = points[point];
+          }
+
+          msgg.payload = structuredObject;
           node.send(msgg);
         });
       }
     };
-  }
 
+    sendIndividualMsgJson = function (values, readNodeName) {
+      if (typeof values == "object") {
+        let keys = Object.keys(values);
+        keys.forEach(function (key) {
+          let points = values[key];
+          let msgg = {};
+          for (let point in points) {
+            let pointName = getPointName(points[point], point);
+            if (
+              node.nodeName !== "gateway" &&
+              node.nodeName !== "" &&
+              node.nodeName !== "null" &&
+              node.nodeName !== "undefined" &&
+              typeof node.nodeName == "string"
+            ) {
+              if (readNodeName !== '' &&
+                readNodeName !== null &&
+                readNodeName !== undefined
+              ) {
+                msgg.topic = `${node.nodeName}/${readNodeName}/${key}/${pointName}`;
+              } else {
+                msgg.topic = `${node.nodeName}/${key}/${pointName}`;
+              }
+            } else {
+              if (readNodeName !== '' &&
+                readNodeName !== null &&
+                readNodeName !== undefined
+              ) {
+                msgg.topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${key}/${pointName}`;
+              } else {
+                msgg.topic = `BITPOOL_BACNET_GATEWAY/${key}/${pointName}`;
+              }
+            }
+
+            msgg.payload = points[point];
+            node.send(msgg);
+            msgg = {};
+          }
+        });
+      }
+    }
+
+    sendSimpleJsonPerPoint = function (values, readNodeName) {
+      let devices = Object.keys(values);
+      devices.forEach(function (device) {
+        if (device !== "_msgid") {
+          let points = values[device];
+          let msgg = {};
+          for (let point in points) {
+            if (points[point] && "presentValue" in points[point]) {
+              let pointName = getPointName(points[point], point);
+              if (
+                node.nodeName !== "gateway" &&
+                node.nodeName !== "" &&
+                node.nodeName !== "null" &&
+                node.nodeName !== "undefined" &&
+                typeof node.nodeName == "string"
+              ) {
+                if (readNodeName !== '' &&
+                  readNodeName !== null &&
+                  readNodeName !== undefined
+                ) {
+                  msgg.topic = `${node.nodeName}/${readNodeName}/${device}/${pointName}`;
+                } else {
+                  msgg.topic = `${node.nodeName}/${device}/${pointName}`;
+                }
+              } else {
+                if (readNodeName !== '' &&
+                  readNodeName !== null &&
+                  readNodeName !== undefined
+                ) {
+                  msgg.topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${device}/${pointName}`;
+                } else {
+                  msgg.topic = `BITPOOL_BACNET_GATEWAY/${device}/${pointName}`;
+                }
+              }
+              let payload = {
+                presentValue: points[point]["presentValue"]
+              };
+              msgg.payload = payload;
+              node.send(msgg);
+              msgg = {};
+            }
+          }
+        }
+      });
+    }
+
+    function getPointName(object, pointName) {
+      if (object.displayName) {
+        return object.displayName;
+      }
+      return pointName;
+    }
+
+  }
   RED.nodes.registerType("Bacnet-Gateway", BitpoolBacnetGatewayDevice);
 };
