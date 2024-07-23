@@ -19,28 +19,28 @@
 */
 
 
- module.exports = function(RED) {
+module.exports = function (RED) {
     "use strict";
-    const {scheduleTask} = require("cronosjs");
+    const { scheduleTask } = require("cronosjs");
 
     function BitpoolInjectNode(n) {
-        RED.nodes.createNode(this,n);
+        RED.nodes.createNode(this, n);
 
         /* Handle legacy */
-        if(!Array.isArray(n.props)){
+        if (!Array.isArray(n.props)) {
             n.props = [];
             n.props.push({
-                p:'payload',
-                v:n.payload,
-                vt:n.payloadType
+                p: 'payload',
+                v: n.payload,
+                vt: n.payloadType
             });
             n.props.push({
-                p:'topic',
-                v:n.topic,
-                vt:'str'
+                p: 'topic',
+                v: n.topic,
+                vt: 'str'
             });
         } else {
-            for (var i=0,l=n.props.length; i<l; i++) {
+            for (var i = 0, l = n.props.length; i < l; i++) {
                 if (n.props[i].p === 'payload' && !n.props[i].hasOwnProperty('v')) {
                     n.props[i].v = n.payload;
                     n.props[i].vt = n.payloadType;
@@ -56,6 +56,14 @@
         this.once = n.once;
         this.doPoll = n.doPoll;
         this.doDiscover = n.doDiscover;
+
+        this.object_property_simplePayload = n.object_property_simplePayload;
+        this.object_property_simpleWithStatus = n.object_property_simpleWithStatus;
+        this.object_property_fullObject = n.object_property_fullObject;
+        this.json = n.json;
+        this.mqtt = n.mqtt;
+        this.pointJson = n.pointJson;
+
         this.onceDelay = (n.onceDelay || 0.1) * 1000;
         this.interval_id = null;
         this.cronjob = null;
@@ -68,7 +76,7 @@
                     prop.exp = RED.util.prepareJSONataExpression(val, node);
                 }
                 catch (err) {
-                    node.error(RED._("inject.errors.invalid-expr", {error:err.message}));
+                    node.error(RED._("inject.errors.invalid-expr", { error: err.message }));
                     prop.exp = null;
                 }
             }
@@ -83,27 +91,37 @@
             if (this.repeat && !isNaN(this.repeat) && this.repeat > 0) {
                 this.repeat = this.repeat * 1000;
                 this.debug(RED._("inject.repeat", this));
-                this.interval_id = setInterval(function() {
+                this.interval_id = setInterval(function () {
                     node.emit("input", {});
                 }, this.repeat);
             } else if (this.crontab) {
                 this.debug(RED._("inject.crontab", this));
-                this.cronjob = scheduleTask(this.crontab,() => { node.emit("input", {})});
+                this.cronjob = scheduleTask(this.crontab, () => { node.emit("input", {}) });
             }
         };
 
         if (this.once) {
-            this.onceTimeout = setTimeout( function() {
-                node.emit("input",{});
+            this.onceTimeout = setTimeout(function () {
+                node.emit("input", {});
                 node.repeaterSetup();
             }, this.onceDelay);
         } else {
             node.repeaterSetup();
         }
 
-        this.on("input", function(msg, send, done) {
+        this.on("input", function (msg, send, done) {
             msg.doDiscover = node.doDiscover;
             msg.doPoll = node.doPoll;
+
+            msg.simplePayload = node.object_property_simplePayload;
+            msg.simpleWithStatus = node.object_property_simpleWithStatus;
+            msg.fullObject = node.object_property_fullObject;
+
+            msg.json = node.json;
+            msg.mqtt = node.mqtt;
+            msg.pointJson = node.pointJson;
+
+
             var errors = [];
             var props = this.props;
             if (msg.__user_inject_props__ && Array.isArray(msg.__user_inject_props__)) {
@@ -124,14 +142,14 @@
                             var val = RED.util.evaluateJSONataExpression(exp, msg);
                             RED.util.setMessageProperty(msg, property, val, true);
                         }
-                        catch  (err) {
+                        catch (err) {
                             errors.push(err.message);
                         }
                     }
                     return;
                 }
                 try {
-                    RED.util.setMessageProperty(msg,property,RED.util.evaluateNodeProperty(value, valueType, this, msg),true);
+                    RED.util.setMessageProperty(msg, property, RED.util.evaluateNodeProperty(value, valueType, this, msg), true);
                 } catch (err) {
                     errors.push(err.toString());
                 }
@@ -146,9 +164,9 @@
         });
     }
 
-    RED.nodes.registerType("Bitpool-Inject",BitpoolInjectNode);
+    RED.nodes.registerType("Bitpool-Inject", BitpoolInjectNode);
 
-    BitpoolInjectNode.prototype.close = function() {
+    BitpoolInjectNode.prototype.close = function () {
         if (this.onceTimeout) {
             clearTimeout(this.onceTimeout);
         }
@@ -160,7 +178,7 @@
         }
     };
 
-    RED.httpAdmin.post("/inject/:id", RED.auth.needsPermission("inject.write"), function(req,res) {
+    RED.httpAdmin.post("/inject/:id", RED.auth.needsPermission("inject.write"), function (req, res) {
         var node = RED.nodes.getNode(req.params.id);
         if (node != null) {
             try {
@@ -170,9 +188,9 @@
                     node.receive();
                 }
                 res.sendStatus(200);
-            } catch(err) {
+            } catch (err) {
                 res.sendStatus(500);
-                node.error(RED._("inject.failed",{error:err.toString()}));
+                node.error(RED._("inject.failed", { error: err.toString() }));
             }
         } else {
             res.sendStatus(404);

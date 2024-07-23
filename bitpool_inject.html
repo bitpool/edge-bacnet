@@ -42,7 +42,104 @@
                 </div>
             </div>
 
-            
+            <div class="form-row" style="display: flex; width: fit-content; flex-wrap: nowrap; flex-direction: row; padding-top: 10px; margin-left: auto; margin-right: auto;">
+
+                <div
+                  id="node-input-object_properties_group"
+                  style="display: flex; align-items: flex-start; flex-direction: column;">
+                    <label
+                    for="node-input-object_properties_group"
+                    style="display: flex; align-items: center; white-space: nowrap; text-decoration: underline;"
+                    >
+                        Object Properties:
+                    </label>
+                    
+                    <div class="objectPropertiesLabel">
+                        <label
+                        for="node-input-object_property_simplePayload"
+                        style="padding-left: 4px; width: auto; align-items: start;"
+                        class="objectPropertiesLabel">
+                        <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_simplePayload"></span>
+                        <input
+                            style="margin-left: 5px;"
+                            class=" objectProp"
+                            type="checkbox"
+                            id="node-input-object_property_simplePayload" />
+                        <a style="white-space: nowrap; padding-left: 20px;">Simple Payload</a>
+                        </label>
+                    </div>
+        
+                    <div class="objectPropertiesLabel">
+                        <label
+                        for="node-input-object_property_simpleWithStatus"
+                        style="padding-left: 4px; width: auto; align-items: start;"
+                        class="objectPropertiesLabel">
+                        <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_simpleWithStatus"></span>
+                        <input
+                            style="margin-left: 5px;"
+                            class=" objectProp"
+                            type="checkbox"
+                            id="node-input-object_property_simpleWithStatus" />
+                        <a style="white-space: nowrap; padding-left: 20px;">Simple With Status</a>
+                        </label>
+                    </div>
+        
+                    <div class="objectPropertiesLabel">
+                        <label
+                        for="node-input-object_property_fullObject"
+                        style="padding-left: 4px; width: auto; align-items: start;"
+                        class="objectPropertiesLabel">
+                        <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_fullObject"></span>
+                        <input
+                            style="margin-left: 5px;"
+                            class=" objectProp"
+                            type="checkbox"
+                            id="node-input-object_property_fullObject" />
+                        <a style="white-space: nowrap; padding-left: 20px;">Full Object</a>
+                        </label>
+                    </div>
+        
+                </div>
+                <div
+                  id="node-input-msgType"
+                  style="display: flex; align-items: flex-start; flex-direction: column; padding-left: 50px;">
+                  <label for="node-input-msgType" style="text-decoration: underline;"> Message type: </label>
+                  <!-- class= checkbox-round -->
+                  <div style="display: flex; flex-direction: row; align-items: flex-start;">
+                    <input
+                      class="checkbox-round"
+                      type="checkbox"
+                      id="node-input-json"
+                      style="width: 13px; margin-left: 5px;" /><label
+                      for="node-input-json"
+                      style="padding-left: 20px; width: fit-content;"
+                      >Block per device</label
+                    >
+                  </div>
+                  <div style="display: flex; flex-direction: row; align-items: flex-start;">
+                    <input
+                      class="checkbox-round"
+                      type="checkbox"
+                      id="node-input-mqtt"
+                      style="width: 13px; margin-left: 5px;" /><label
+                      for="node-input-mqtt"
+                      style="padding-left: 20px; width: fit-content;"
+                      >Individual msgs</label
+                    >
+                  </div>
+                  <div style="display: flex; flex-direction: row; align-items: flex-start;">
+                    <input
+                      class="checkbox-round"
+                      type="checkbox"
+                      id="node-input-pointJson"
+                      style="width: 13px; margin-left: 5px;" /><label
+                      for="node-input-pointJson"
+                      style="padding-left: 20px; width: fit-content;"
+                      >Individual JSON</label
+                    >
+                  </div>
+                </div>
+            </div>
         </div>
 
         <div class="injectHeading" style="margin-top: 20px;">
@@ -373,6 +470,12 @@
                 payloadType: { value: "date" },
                 doPoll: { value: true },
                 doDiscover: { value: false },
+                json: { value: false },
+                mqtt: { value: false },
+                pointJson: { value: true },
+                object_property_simplePayload: { value: false },
+                object_property_simpleWithStatus: { value: false },
+                object_property_fullObject: { value: true },
             },
             icon: "bitpool.svg",
             inputs: 0,
@@ -669,9 +772,25 @@
                 $("#inject-time-type-select").trigger("change");
                 $("#inject-time-interval-time-start").trigger("change");
 
+                document.getElementById("node-input-object_property_simplePayload").checked = node.object_property_simplePayload;
+                document.getElementById("node-input-object_property_simplePayload").onclick = handlePayloadCheckboxClick;
+                document.getElementById("node-input-object_property_simpleWithStatus").checked = node.object_property_simpleWithStatus;
+                document.getElementById("node-input-object_property_simpleWithStatus").onclick = handlePayloadCheckboxClick;
+                document.getElementById("node-input-object_property_fullObject").checked = node.object_property_fullObject;
+                document.getElementById("node-input-object_property_fullObject").onclick = handlePayloadCheckboxClick;
+
 
                 document.getElementById("node-input-doDiscover").onclick = handleCheckboxClick;
                 document.getElementById("node-input-doPoll").onclick = handleCheckboxClick;
+
+                document.getElementById("node-input-json").checked = node.json;
+                document.getElementById("node-input-json").onclick = handleMsgTypeClick;
+                document.getElementById("node-input-mqtt").checked = node.mqtt;
+                document.getElementById("node-input-mqtt").onclick = handleMsgTypeClick;
+                document.getElementById("node-input-pointJson").checked = node.pointJson;
+                document.getElementById("node-input-pointJson").onclick = handleMsgTypeClick;
+
+
 
                 function handleCheckboxClick() {
                     if (this.id == "node-input-doDiscover") {
@@ -679,6 +798,36 @@
                     }
                     if (this.id == "node-input-doPoll") {
                         document.getElementById("node-input-doDiscover").checked = false;
+                    }
+                }
+
+                function handlePayloadCheckboxClick() {
+                    if (this.id == "node-input-object_property_simplePayload") {
+                        document.getElementById("node-input-object_property_fullObject").checked = false;
+                        document.getElementById("node-input-object_property_simpleWithStatus").checked = false;
+                    }
+                    if (this.id == "node-input-object_property_simpleWithStatus") {
+                        document.getElementById("node-input-object_property_fullObject").checked = false;
+                        document.getElementById("node-input-object_property_simplePayload").checked = false;
+                    }
+                    if (this.id == "node-input-object_property_fullObject") {
+                        document.getElementById("node-input-object_property_simplePayload").checked = false;
+                        document.getElementById("node-input-object_property_simpleWithStatus").checked = false;
+                    }
+                }
+
+                function handleMsgTypeClick() {
+                    if (this.id == "node-input-json") {
+                        document.getElementById("node-input-mqtt").checked = false;
+                        document.getElementById("node-input-pointJson").checked = false;
+                    }
+                    if (this.id == "node-input-mqtt") {
+                        document.getElementById("node-input-json").checked = false;
+                        document.getElementById("node-input-pointJson").checked = false;
+                    }
+                    if (this.id == "node-input-pointJson") {
+                        document.getElementById("node-input-json").checked = false;
+                        document.getElementById("node-input-mqtt").checked = false;
                     }
                 }
 

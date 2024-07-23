@@ -1,4 +1,25 @@
 # Changelog
+
+## [1.4.2] - 23-07-2024
+### Summary 
+
+Improved UI tree generation, fixing some unique scenarios where devices were not being correctly added. 
+
+Added new payload type: Individual JSON. This publishes JSON payloads to a point level, rather than to a device or property level. 
+
+Added payload and output types to be configured via Inject node. Any checked options in the inject node will take priority over read node options. Note - to use read node output types only, please deselect all inject node output options.
+
+Added dumb BACnet parent devices to UI tree, for unique situations where MSTP devices are on a network without a parent IP device. 
+
+Bug fixes:
+ - Importing read list was incorrectly generating UI 
+ - Block per device JSON payloads were not using DisplayName and JSON key 
+ - Added node-red context variable to monitor if writeProperty event has been subscribed to, avoiding a new subscription for every node-red deploy.
+ - Fixed issue requiring Bacnet server to be constantly enabled in order for the node to function. 
+
+
+No nodes need to be deleted and replaced for this update. 
+
 ## [1.4.1] - 09-07-2024
 
 ### Summary

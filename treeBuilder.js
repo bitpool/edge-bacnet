@@ -1,4 +1,5 @@
 const { Store_Config } = require("./common");
+const { BacnetDevice } = require("./bacnet_device");
 
 /**
  * The `treeBuilder` class is responsible for building and processing the network tree structure.
@@ -111,6 +112,42 @@ class treeBuilder {
         }
     }
 
+    addEmptyIpRootDevice(childDevice) {
+
+        const ipAddress = this.getDeviceIpAddress(childDevice);
+
+        let deviceIndex = this.deviceList.findIndex(ele => ele.address === ipAddress && ele.deviceId === null && ele.deviceName === ipAddress && ele.displayName === ipAddress);
+
+        if (deviceIndex === -1) {
+            let newDevice = {
+                address: ipAddress,
+                isMstp: false,
+                deviceId: null,
+                maxApdu: childDevice.getMaxApdu(),
+                segmentation: childDevice.getSegmentation(),
+                vendorId: childDevice.getVendorId(),
+                lastSeen: null,
+                deviceName: ipAddress,
+                pointsList: [],
+                pointListUpdateTs: null,
+                manualDiscoveryMode: false,
+                pointListRetryCount: 0,
+                priorityQueueIsActive: false,
+                priorityQueue: [],
+                lastPriorityQueueTS: null,
+                childDevices: [childDevice.getDeviceId()],
+                parentDeviceId: null,
+                displayName: ipAddress,
+                protocolServicesSupported: [],
+                isProtocolServicesSet: false,
+                isInitialQuery: true,
+            };
+
+            let newBacnetDevice = new BacnetDevice(true, newDevice);
+            this.deviceList.push(newBacnetDevice);
+        }
+    }
+
     /**
      * Process the points of a device and add them to the render list.
      * 
@@ -124,7 +161,7 @@ class treeBuilder {
      */
     async processDevicePoints(device, deviceObject, deviceName, ipAddress, deviceId, index) {
         // Initialize the list of children points
-        const children = [];
+        let children = [];
 
         // Process each point in the device object
         for (const pointName in deviceObject) {
@@ -171,6 +208,7 @@ class treeBuilder {
             parentDeviceId: device.getDeviceId(),
             showAdded: false,
             bacnetType: point.meta.objectId.type,
+            bacnetInstance: point.meta.objectId.instance,
         };
     }
 
@@ -305,7 +343,21 @@ class treeBuilder {
                 } else {
                     mstpNetworkFolder.children[mstpDeviceIndex] = newDeviceEntry;
                 }
+            } else {
+                //no parent found in render list
+
+                if (parentDeviceId !== null) {
+                    let parentDeviceListIndex = this.deviceList.findIndex(ele => ele.getDeviceId == parentDeviceId);
+
+                    if (parentDeviceListIndex !== -1) {
+                        let parentDevice = this.deviceList[parentDeviceListIndex];
+                        this.addRootDeviceFolder(parentDevice, parentDevice.getDeviceName(), parentDeviceListIndex, parentDevice.getAddress(), parentDeviceId);
+                    }
+                } else {
+                    this.addEmptyIpRootDevice(device);
+                }
             }
+
         } else {
             // Add the new device entry to the root of the render list
             if (foundIndex === -1) {

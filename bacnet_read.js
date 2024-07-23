@@ -15,6 +15,7 @@ module.exports = function (RED) {
 
     this.json = config.json;
     this.mqtt = config.mqtt;
+    this.pointJson = config.pointJson;
     this.roundDecimal = config.roundDecimal;
     this.pointsToRead = config.pointsToRead;
     this.readDevices = config.readDevices;
@@ -55,20 +56,54 @@ module.exports = function (RED) {
     node.on('input', function (msg) {
       node.status({ fill: "blue", shape: "dot", text: "Reading values" });
 
+      let object_property_simplePayload = false;
+      let object_property_simpleWithStatus = false;
+      let object_property_fullObject = false;
+
+      let jsonType = false;
+      let mqttType = false;
+      let pointJsonType = false;
+
+      if (msg.simplePayload) {
+        object_property_simplePayload = msg.simplePayload;
+      } else if (msg.simpleWithStatus) {
+        object_property_simpleWithStatus = msg.simpleWithStatus;
+      } else if (msg.fullObject) {
+        object_property_fullObject = msg.fullObject;
+      } else {
+        object_property_simplePayload = node.object_property_simplePayload;
+        object_property_simpleWithStatus = node.object_property_simpleWithStatus;
+        object_property_fullObject = node.object_property_fullObject;
+      }
+
+      if (msg.json) {
+        jsonType = msg.json;
+      } else if (msg.mqtt) {
+        mqttType = msg.mqtt;
+      } else if (msg.pointJson) {
+        pointJsonType = msg.pointJson;
+      } else {
+        jsonType = node.json;
+        mqttType = node.mqtt;
+        pointJsonType = node.pointJson
+      }
+
       let readConfig = new ReadCommandConfig(node.pointsToRead, node.object_props, node.roundDecimal);
+
       let output = {
         type: "Read",
         id: node.id,
         readNodeName: node.nodeName,
         options: readConfig,
         objectPropertyType: {
-          simplePayload: node.object_property_simplePayload,
-          simpleWithStatus: node.object_property_simpleWithStatus,
-          fullObject: node.object_property_fullObject
+          simplePayload: object_property_simplePayload,
+          simpleWithStatus: object_property_simpleWithStatus,
+          fullObject: object_property_fullObject
         },
         outputType: {
-          json: node.json,
-          mqtt: node.mqtt
+          json: jsonType,
+          mqtt: mqttType,
+          pointJson: pointJsonType
         }
       };
 
