@@ -60,6 +60,9 @@ module.exports = function (RED) {
         this.object_property_simplePayload = n.object_property_simplePayload;
         this.object_property_simpleWithStatus = n.object_property_simpleWithStatus;
         this.object_property_fullObject = n.object_property_fullObject;
+
+        this.useDeviceName = n.useDeviceName;
+
         this.json = n.json;
         this.mqtt = n.mqtt;
         this.pointJson = n.pointJson;
@@ -120,6 +123,8 @@ module.exports = function (RED) {
             msg.json = node.json;
             msg.mqtt = node.mqtt;
             msg.pointJson = node.pointJson;
+
+            msg.useDeviceName = node.useDeviceName;
 
 
             var errors = [];

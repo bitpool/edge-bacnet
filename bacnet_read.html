@@ -22,6 +22,7 @@
             object_property_simplePayload: { value: false },
             object_property_simpleWithStatus: { value: false },
             object_property_fullObject: { value: true },
+            useDeviceName: { value: true },
         },
         inputs: 1,
         outputs: 1,
@@ -838,6 +839,9 @@
 
                         app.$forceUpdate();
                     },
+                    refreshReadListTree() {
+                        this.addToReadDevices(this.pointsToRead);
+                    },
                     calculateMstpCount(slotProps) {
                         let count = 0;
                         slotProps.node.children.forEach(function (child) {
@@ -893,6 +897,8 @@
             document.getElementById("node-input-mqtt").onclick = handleMsgTypeClick;
             document.getElementById("node-input-pointJson").checked = node.pointJson;
             document.getElementById("node-input-pointJson").onclick = handleMsgTypeClick;
+
+            document.getElementById("node-input-useDeviceName").checked = node.useDeviceName;
 
             var menu = document.querySelector(".context-menu");
             window.addEventListener("click", (event) => {
@@ -1218,8 +1224,11 @@
         <input type="file" id="readlist-file-upload" accept="application/JSON" class="inputStyle" style="display: none;" />
 
         <button @click="removeAllDevices()" class="removeAllDevicesButton" title="Remove all devices">
-          <i class="pi pi-minus-circle" style="color: #ff0000; padding-right: 5px;"> </i
-          ><a style="color: #ff0000;">Remove All Devices</a>
+          <a style="color: #ff0000;">Remove All Devices</a>
+        </button>
+
+        <button @click="refreshReadListTree()" class="refreshReadListButton" title="Refresh tree">
+            <i class="pi pi-refresh" style="color: #00AEEF;"> </i>
         </button>
       </div>
 
@@ -1347,6 +1356,22 @@
             >
           </div>
         </div>
+      </div>
+
+      <hr />
+
+      <div class="objectPropertiesLabel" style="margin-top: 20px; margin-bottom: 20px;">
+        <label
+        for="node-input-useDeviceName"
+        style="width: auto; align-items: start;"
+        class="objectPropertiesLabel">
+        <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.useDeviceName"></span>
+        <input
+            class=" objectProp"
+            type="checkbox"
+            id="node-input-useDeviceName" />
+        <a style="white-space: nowrap; padding-left: 20px;">Use device name in topic</a>
+        </label>
       </div>
 
       <div class="form-row">

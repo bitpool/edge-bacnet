@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.4.3] - 01-08-2024
+### Summary 
+
+Minor updates.
+
+Added refresh button to readList tab on read node, to handle scenarios where read node jsons may be programatically created. 
+
+Added "Use device name in topic" topic property in inject and read nodes. This option toggles whether or not the device name is included in the msg.topic. 
+
+Merge github PR 19. Added ability to configure the creation of a BacnetServer object:
+```javascript
+        payload = {
+            value: 12,
+            resolution: 0,
+            priorityArray: 0,
+            units: 0,
+        }
+```
+
+Inject nodes may need to be deleted and replaced. Try deploying node-red 2 times to instantiate the new deviceName property.
+
+
 ## [1.4.2] - 23-07-2024
 ### Summary 
 

@@ -107,41 +107,42 @@ module.exports = function (RED) {
             node.status({});
           }, 3000);
         }
+        let useDeviceName = outputType.useDeviceName;
         if (outputType.json && !outputType.mqtt && !outputType.pointJson) {
           //json
           if (objectPropertyType.simpleWithStatus && !objectPropertyType.fullObject && !objectPropertyType.simplePayload) {
             //simpleWithStatus
-            sendSimpleWithStatus(values, readNodeName, true);
+            sendSimpleWithStatus(values, readNodeName, true, useDeviceName);
           } else if (objectPropertyType.fullObject && !objectPropertyType.simplePayload && !objectPropertyType.simpleWithStatus) {
             //fullObject
-            sendJsonAsMqtt(values, readNodeName);
+            sendJsonAsMqtt(values, readNodeName, useDeviceName);
           } else if (objectPropertyType.simplePayload && !objectPropertyType.fullObject && !objectPropertyType.simpleWithStatus) {
             //simplePayload
-            sendSimpleJson(values, readNodeName);
+            sendSimpleJson(values, readNodeName, useDeviceName);
           }
         } else if (outputType.mqtt && !outputType.json && !outputType.pointJson) {
           //mqtt
           if (objectPropertyType.simpleWithStatus && !objectPropertyType.fullObject && !objectPropertyType.simplePayload) {
             //simpleWithStatus
-            sendSimpleWithStatus(values, readNodeName, false);
+            sendSimpleWithStatus(values, readNodeName, false, useDeviceName);
           } else if (objectPropertyType.fullObject && !objectPropertyType.simplePayload && !objectPropertyType.simpleWithStatus) {
             //fullObject
-            sendAsMqtt(values, readNodeName);
+            sendAsMqtt(values, readNodeName, useDeviceName);
           } else if (objectPropertyType.simplePayload && !objectPropertyType.fullObject && !objectPropertyType.simpleWithStatus) {
             //simplePayload
-            sendSimpleMqtt(values, readNodeName);
+            sendSimpleMqtt(values, readNodeName, useDeviceName);
           }
         } else if (outputType.pointJson && !outputType.json && !outputType.mqtt) {
           //pointJson
           if (objectPropertyType.simpleWithStatus && !objectPropertyType.fullObject && !objectPropertyType.simplePayload) {
             //simpleWithStatus
-            sendSimpleWithStatus(values, readNodeName, false);
+            sendSimpleWithStatus(values, readNodeName, false, useDeviceName);
           } else if (objectPropertyType.fullObject && !objectPropertyType.simplePayload && !objectPropertyType.simpleWithStatus) {
             //fullObject
-            sendIndividualMsgJson(values, readNodeName);
+            sendIndividualMsgJson(values, readNodeName, useDeviceName);
           } else if (objectPropertyType.simplePayload && !objectPropertyType.fullObject && !objectPropertyType.simpleWithStatus) {
             //simplePayload
-            sendSimpleJsonPerPoint(values, readNodeName);
+            sendSimpleJsonPerPoint(values, readNodeName, useDeviceName);
           }
         }
       }
@@ -456,41 +457,42 @@ module.exports = function (RED) {
               node.status({});
             }, 3000);
           }
+          let useDeviceName = outputType.useDeviceName;
           if (outputType.json && !outputType.mqtt && !outputType.pointJson) {
             //json
             if (objectPropertyType.simpleWithStatus && !objectPropertyType.fullObject && !objectPropertyType.simplePayload) {
               //simpleWithStatus
-              sendSimpleWithStatus(values, readNodeName, true);
+              sendSimpleWithStatus(values, readNodeName, true, useDeviceName);
             } else if (objectPropertyType.fullObject && !objectPropertyType.simplePayload && !objectPropertyType.simpleWithStatus) {
               //fullObject
-              sendJsonAsMqtt(values, readNodeName);
+              sendJsonAsMqtt(values, readNodeName, useDeviceName);
             } else if (objectPropertyType.simplePayload && !objectPropertyType.fullObject && !objectPropertyType.simpleWithStatus) {
               //simplePayload
-              sendSimpleJson(values, readNodeName);
+              sendSimpleJson(values, readNodeName, useDeviceName);
             }
           } else if (outputType.mqtt && !outputType.json && !outputType.pointJson) {
             //mqtt
             if (objectPropertyType.simpleWithStatus && !objectPropertyType.fullObject && !objectPropertyType.simplePayload) {
               //simpleWithStatus
-              sendSimpleWithStatus(values, readNodeName, false);
+              sendSimpleWithStatus(values, readNodeName, false, useDeviceName);
             } else if (objectPropertyType.fullObject && !objectPropertyType.simplePayload && !objectPropertyType.simpleWithStatus) {
               //fullObject
-              sendAsMqtt(values, readNodeName);
+              sendAsMqtt(values, readNodeName, useDeviceName);
             } else if (objectPropertyType.simplePayload && !objectPropertyType.fullObject && !objectPropertyType.simpleWithStatus) {
               //simplePayload
-              sendSimpleMqtt(values, readNodeName);
+              sendSimpleMqtt(values, readNodeName, useDeviceName);
             }
           } else if (outputType.pointJson && !outputType.json && !outputType.mqtt) {
             //pointJson
             if (objectPropertyType.simpleWithStatus && !objectPropertyType.fullObject && !objectPropertyType.simplePayload) {
               //simpleWithStatus
-              sendSimpleWithStatus(values, readNodeName, false);
+              sendSimpleWithStatus(values, readNodeName, false, useDeviceName);
             } else if (objectPropertyType.fullObject && !objectPropertyType.simplePayload && !objectPropertyType.simpleWithStatus) {
               //fullObject
-              sendIndividualMsgJson(values, readNodeName);
+              sendIndividualMsgJson(values, readNodeName, useDeviceName);
             } else if (objectPropertyType.simplePayload && !objectPropertyType.fullObject && !objectPropertyType.simpleWithStatus) {
               //simplePayload
-              sendSimpleJsonPerPoint(values, readNodeName);
+              sendSimpleJsonPerPoint(values, readNodeName, useDeviceName);
             }
           }
         }
@@ -514,7 +516,94 @@ module.exports = function (RED) {
       }
     }
 
-    sendSimpleWithStatus = function (values, readNodeName, isJson) {
+    function getTopicString(type, useDeviceName, readNodeName, device, pointName, prop) {
+      let topic = "";
+      if (
+        node.nodeName !== "gateway" &&
+        node.nodeName !== "" &&
+        node.nodeName !== "null" &&
+        node.nodeName !== "undefined" &&
+        typeof node.nodeName == "string"
+      ) {
+        if (readNodeName !== '' &&
+          readNodeName !== null &&
+          readNodeName !== undefined
+        ) {
+          if (useDeviceName) {
+            topic = `${node.nodeName}/${readNodeName}/${device}`;
+          } else {
+            topic = `${node.nodeName}/${readNodeName}`;
+          }
+
+        } else {
+          if (useDeviceName) {
+            topic = `${node.nodeName}/${device}`;
+          } else {
+            topic = `${node.nodeName}`;
+          }
+        }
+      } else {
+        if (readNodeName !== '' &&
+          readNodeName !== null &&
+          readNodeName !== undefined
+        ) {
+          if (useDeviceName) {
+            topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${device}`;
+          } else {
+            topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}`;
+          }
+
+        } else {
+          if (useDeviceName) {
+            topic = `BITPOOL_BACNET_GATEWAY/${device}`;
+          } else {
+            topic = `BITPOOL_BACNET_GATEWAY`;
+          }
+        }
+      }
+
+      switch (type) {
+        case "sendSimpleWithStatus":
+          topic += `/${pointName}`;
+          break;
+
+        case "sendSimpleWithStatusJson":
+          //do nothing
+          break;
+
+        case "sendSimpleMqtt":
+          topic += `/${pointName}`;
+          break;
+
+        case "sendAsMqtt":
+          topic += `/${pointName}/${prop}`;
+          break;
+
+        case "sendSimpleJson":
+          //do nothing
+          break;
+
+        case "sendJsonAsMqtt":
+          //do nothing
+          break;
+
+        case "sendIndividualMsgJson":
+          topic += `/${pointName}`;
+          break;
+
+        case "sendSimpleJsonPerPoint":
+          topic += `/${pointName}`;
+          break;
+
+        default:
+          break;
+      }
+
+      return topic;
+
+    }
+
+    sendSimpleWithStatus = function (values, readNodeName, isJson, useDeviceName) {
       let devices = Object.keys(values);
       devices.forEach(function (device) {
         if (device !== "_msgid") {
@@ -524,31 +613,9 @@ module.exports = function (RED) {
           for (let point in points) {
             if (points[point] && "presentValue" in points[point]) {
               let pointName = getPointName(points[point], point);
-              if (
-                node.nodeName !== "gateway" &&
-                node.nodeName !== "" &&
-                node.nodeName !== "null" &&
-                node.nodeName !== "undefined" &&
-                typeof node.nodeName == "string"
-              ) {
-                if (readNodeName !== '' &&
-                  readNodeName !== null &&
-                  readNodeName !== undefined
-                ) {
-                  msgg.topic = `${node.nodeName}/${readNodeName}/${device}/${pointName}`;
-                } else {
-                  msgg.topic = `${node.nodeName}/${device}/${pointName}`;
-                }
-              } else {
-                if (readNodeName !== '' &&
-                  readNodeName !== null &&
-                  readNodeName !== undefined
-                ) {
-                  msgg.topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${device}/${pointName}`;
-                } else {
-                  msgg.topic = `BITPOOL_BACNET_GATEWAY/${device}/${pointName}`;
-                }
-              }
+              let topic = getTopicString("sendSimpleWithStatus", useDeviceName, readNodeName, device, pointName);
+
+              msgg.topic = topic;
               let payload = {
                 presentValue: points[point]["presentValue"],
                 timestamp: points[point]["timestamp"],
@@ -569,32 +636,7 @@ module.exports = function (RED) {
 
           if (isJson) {
             //json payload
-            let topic = "";
-            if (
-              node.nodeName !== "gateway" &&
-              node.nodeName !== "" &&
-              node.nodeName !== "null" &&
-              node.nodeName !== "undefined" &&
-              typeof node.nodeName == "string"
-            ) {
-              if (readNodeName !== '' &&
-                readNodeName !== null &&
-                readNodeName !== undefined
-              ) {
-                topic = `${node.nodeName}/${readNodeName}/${device}`;
-              } else {
-                topic = `${node.nodeName}/${device}`;
-              }
-            } else {
-              if (readNodeName !== '' &&
-                readNodeName !== null &&
-                readNodeName !== undefined
-              ) {
-                topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${device}`;
-              } else {
-                topic = `BITPOOL_BACNET_GATEWAY/${device}`;
-              }
-            }
+            let topic = getTopicString("sendSimpleWithStatusJson", useDeviceName, readNodeName, device);
 
             msgg.topic = topic;
             msgg.payload = structuredObject;
@@ -605,7 +647,7 @@ module.exports = function (RED) {
       });
     }
 
-    sendSimpleMqtt = function (values, readNodeName) {
+    sendSimpleMqtt = function (values, readNodeName, useDeviceName) {
       let devices = Object.keys(values);
       devices.forEach(function (device) {
         if (device !== "_msgid") {
@@ -617,31 +659,9 @@ module.exports = function (RED) {
               pointProps.forEach(function (prop) {
                 let msg = {};
                 if (prop == "presentValue") {
-                  if (
-                    node.nodeName !== "gateway" &&
-                    node.nodeName !== "" &&
-                    node.nodeName !== "null" &&
-                    node.nodeName !== "undefined" &&
-                    typeof node.nodeName == "string"
-                  ) {
-                    if (readNodeName !== '' &&
-                      readNodeName !== null &&
-                      readNodeName !== undefined
-                    ) {
-                      msg.topic = `${node.nodeName}/${readNodeName}/${device}/${pointName}`;
-                    } else {
-                      msg.topic = `${node.nodeName}/${device}/${pointName}`;
-                    }
-                  } else {
-                    if (readNodeName !== '' &&
-                      readNodeName !== null &&
-                      readNodeName !== undefined
-                    ) {
-                      msg.topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${device}/${pointName}`;
-                    } else {
-                      msg.topic = `BITPOOL_BACNET_GATEWAY/${device}/${pointName}`;
-                    }
-                  }
+                  let topic = getTopicString("sendSimpleMqtt", useDeviceName, readNodeName, device, pointName);
+
+                  msg.topic = topic;
                   msg.payload = points[point][prop];
                   node.send(msg);
                 }
@@ -653,7 +673,7 @@ module.exports = function (RED) {
     };
 
     // Breaks down response JSON object into mqtt topic / payload
-    sendAsMqtt = function (values, readNodeName) {
+    sendAsMqtt = function (values, readNodeName, useDeviceName) {
       let devices = Object.keys(values);
       devices.forEach(function (device) {
         if (device !== "_msgid") {
@@ -665,31 +685,8 @@ module.exports = function (RED) {
               pointProps.forEach(function (prop) {
                 let msg = {};
                 if (prop !== "objectName") {
-                  if (
-                    node.nodeName !== "gateway" &&
-                    node.nodeName !== "" &&
-                    node.nodeName !== "null" &&
-                    node.nodeName !== "undefined" &&
-                    typeof node.nodeName == "string"
-                  ) {
-                    if (readNodeName !== '' &&
-                      readNodeName !== null &&
-                      readNodeName !== undefined
-                    ) {
-                      msg.topic = `${node.nodeName}/${readNodeName}/${device}/${pointName}/${prop}`;
-                    } else {
-                      msg.topic = `${node.nodeName}/${device}/${pointName}/${prop}`;
-                    }
-                  } else {
-                    if (readNodeName !== '' &&
-                      readNodeName !== null &&
-                      readNodeName !== undefined
-                    ) {
-                      msg.topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${device}/${pointName}/${prop}`;
-                    } else {
-                      msg.topic = `BITPOOL_BACNET_GATEWAY/${device}/${pointName}/${prop}`;
-                    }
-                  }
+                  let topic = getTopicString("sendAsMqtt", useDeviceName, readNodeName, device, pointName, prop);
+                  msg.topic = topic;
                   msg.payload = points[point][prop];
                   node.send(msg);
                 }
@@ -700,7 +697,7 @@ module.exports = function (RED) {
       });
     };
 
-    sendSimpleJson = function (values, readNodeName) {
+    sendSimpleJson = function (values, readNodeName, useDeviceName) {
       let devices = Object.keys(values);
       devices.forEach(function (device) {
         let msgg = {};
@@ -722,81 +719,36 @@ module.exports = function (RED) {
               });
             }
           }
-          if (
-            node.nodeName !== "gateway" &&
-            node.nodeName !== "" &&
-            node.nodeName !== "null" &&
-            node.nodeName !== "undefined" &&
-            typeof node.nodeName == "string"
-          ) {
-            if (readNodeName !== '' &&
-              readNodeName !== null &&
-              readNodeName !== undefined
-            ) {
-              msgg.topic = `${node.nodeName}/${readNodeName}/${device}`;
-            } else {
-              msgg.topic = `${node.nodeName}/${device}`;
-            }
-          } else {
-            if (readNodeName !== '' &&
-              readNodeName !== null &&
-              readNodeName !== undefined
-            ) {
-              msgg.topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${device}`;
-            } else {
-              msgg.topic = `BITPOOL_BACNET_GATEWAY/${device}`;
-            }
-          }
+          let topic = getTopicString("sendSimpleJson", useDeviceName, readNodeName, device);
+          msgg.topic = topic;
           msgg.payload = value[device];
           node.send(msgg);
         }
       });
     };
 
-    sendJsonAsMqtt = function (values, readNodeName) {
+    sendJsonAsMqtt = function (values, readNodeName, useDeviceName) {
       if (typeof values == "object") {
         let keys = Object.keys(values);
         keys.forEach(function (key) {
           let points = values[key];
           let msgg = {};
           let structuredObject = {};
-          if (
-            node.nodeName !== "gateway" &&
-            node.nodeName !== "" &&
-            node.nodeName !== "null" &&
-            node.nodeName !== "undefined" &&
-            typeof node.nodeName == "string"
-          ) {
-            if (readNodeName !== '' &&
-              readNodeName !== null &&
-              readNodeName !== undefined
-            ) {
-              msgg.topic = `${node.nodeName}/${readNodeName}/${key}`;
-            } else {
-              msgg.topic = `${node.nodeName}/${key}`;
-            }
-          } else {
-            if (readNodeName !== '' &&
-              readNodeName !== null &&
-              readNodeName !== undefined
-            ) {
-              msgg.topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${key}`;
-            } else {
-              msgg.topic = `BITPOOL_BACNET_GATEWAY/${key}`;
-            }
-          }
+
+          let topic = getTopicString("sendJsonAsMqtt", useDeviceName, readNodeName, key);
+          msgg.topic = topic;
+
           for (let point in points) {
             let pointName = getPointName(points[point], point);
             structuredObject[pointName] = points[point];
           }
-
           msgg.payload = structuredObject;
           node.send(msgg);
         });
       }
     };
 
-    sendIndividualMsgJson = function (values, readNodeName) {
+    sendIndividualMsgJson = function (values, readNodeName, useDeviceName) {
       if (typeof values == "object") {
         let keys = Object.keys(values);
         keys.forEach(function (key) {
@@ -804,31 +756,8 @@ module.exports = function (RED) {
           let msgg = {};
           for (let point in points) {
             let pointName = getPointName(points[point], point);
-            if (
-              node.nodeName !== "gateway" &&
-              node.nodeName !== "" &&
-              node.nodeName !== "null" &&
-              node.nodeName !== "undefined" &&
-              typeof node.nodeName == "string"
-            ) {
-              if (readNodeName !== '' &&
-                readNodeName !== null &&
-                readNodeName !== undefined
-              ) {
-                msgg.topic = `${node.nodeName}/${readNodeName}/${key}/${pointName}`;
-              } else {
-                msgg.topic = `${node.nodeName}/${key}/${pointName}`;
-              }
-            } else {
-              if (readNodeName !== '' &&
-                readNodeName !== null &&
-                readNodeName !== undefined
-              ) {
-                msgg.topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${key}/${pointName}`;
-              } else {
-                msgg.topic = `BITPOOL_BACNET_GATEWAY/${key}/${pointName}`;
-              }
-            }
+            let topic = getTopicString("sendIndividualMsgJson", useDeviceName, readNodeName, key, pointName);
+            msgg.topic = topic;
 
             msgg.payload = points[point];
             node.send(msgg);
@@ -838,7 +767,7 @@ module.exports = function (RED) {
       }
     }
 
-    sendSimpleJsonPerPoint = function (values, readNodeName) {
+    sendSimpleJsonPerPoint = function (values, readNodeName, useDeviceName) {
       let devices = Object.keys(values);
       devices.forEach(function (device) {
         if (device !== "_msgid") {
@@ -847,31 +776,9 @@ module.exports = function (RED) {
           for (let point in points) {
             if (points[point] && "presentValue" in points[point]) {
               let pointName = getPointName(points[point], point);
-              if (
-                node.nodeName !== "gateway" &&
-                node.nodeName !== "" &&
-                node.nodeName !== "null" &&
-                node.nodeName !== "undefined" &&
-                typeof node.nodeName == "string"
-              ) {
-                if (readNodeName !== '' &&
-                  readNodeName !== null &&
-                  readNodeName !== undefined
-                ) {
-                  msgg.topic = `${node.nodeName}/${readNodeName}/${device}/${pointName}`;
-                } else {
-                  msgg.topic = `${node.nodeName}/${device}/${pointName}`;
-                }
-              } else {
-                if (readNodeName !== '' &&
-                  readNodeName !== null &&
-                  readNodeName !== undefined
-                ) {
-                  msgg.topic = `BITPOOL_BACNET_GATEWAY/${readNodeName}/${device}/${pointName}`;
-                } else {
-                  msgg.topic = `BITPOOL_BACNET_GATEWAY/${device}/${pointName}`;
-                }
-              }
+              let topic = getTopicString("sendSimpleJsonPerPoint", useDeviceName, readNodeName, device, pointName);
+
+              msgg.topic = topic;
               let payload = {
                 presentValue: points[point]["presentValue"]
               };

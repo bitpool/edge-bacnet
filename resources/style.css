@@ -15,6 +15,16 @@
 
 /* Read node styles */
 
+.refreshReadListButton {
+    border: none;
+    border-radius: 40px;
+    height: 35px;
+    width: 35px;
+    & i {
+        color: #6c757d !important;
+    }
+}
+
 .p-treenode-label {
     color: black;
     width: 100%;
@@ -150,6 +160,8 @@
     float: right;
     display: flex;
     align-items: center;
+    padding: 5px;
+    font-weight: bold;
 }
 .removeAllDevicesButton:hover {
     background-color: #d5d5d5;
@@ -246,7 +258,6 @@
     transform: translateX(min(var(--mouse-x), calc(100vw - 100%))) translateY(min(var(--mouse-y), calc(100vh - 100%)));
     z-index: 10;
 }
-
 
 .context-menu {
     --mouse-x: 0;

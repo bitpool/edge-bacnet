@@ -142,6 +142,26 @@
             </div>
         </div>
 
+
+        <div class="injectHeading" style="margin-top: 20px;">
+            <a>Topic Properties</a>
+        </div>
+
+        <div class="objectPropertiesLabel" style="margin-top: 20px;">
+            <label
+            for="node-input-useDeviceName"
+            style="padding-left: 4px; width: auto; align-items: start;"
+            class="objectPropertiesLabel">
+            <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.useDeviceName"></span>
+            <input
+                style="margin-left: 5px;"
+                class=" objectProp"
+                type="checkbox"
+                id="node-input-useDeviceName" />
+            <a style="white-space: nowrap; padding-left: 20px;">Use device name in topic</a>
+            </label>
+        </div>
+
         <div class="injectHeading" style="margin-top: 20px;">
             <a>Msg Properties</a>
         </div>
@@ -476,6 +496,7 @@
                 object_property_simplePayload: { value: false },
                 object_property_simpleWithStatus: { value: false },
                 object_property_fullObject: { value: true },
+                useDeviceName: { value: true },
             },
             icon: "bitpool.svg",
             inputs: 0,
@@ -778,6 +799,8 @@
                 document.getElementById("node-input-object_property_simpleWithStatus").onclick = handlePayloadCheckboxClick;
                 document.getElementById("node-input-object_property_fullObject").checked = node.object_property_fullObject;
                 document.getElementById("node-input-object_property_fullObject").onclick = handlePayloadCheckboxClick;
+
+                document.getElementById("node-input-useDeviceName").checked = node.useDeviceName;
 
 
                 document.getElementById("node-input-doDiscover").onclick = handleCheckboxClick;

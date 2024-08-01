@@ -26,7 +26,7 @@ module.exports = function (RED) {
     this.object_property_simpleWithStatus = config.object_property_simpleWithStatus;
     this.object_property_fullObject = config.object_property_fullObject;
 
-
+    this.useDeviceName = config.useDeviceName;
 
     this.object_props = getObjectProps(this);
 
@@ -63,6 +63,7 @@ module.exports = function (RED) {
       let jsonType = false;
       let mqttType = false;
       let pointJsonType = false;
+      let useDeviceName = false;
 
       if (msg.simplePayload) {
         object_property_simplePayload = msg.simplePayload;
@@ -88,6 +89,12 @@ module.exports = function (RED) {
         pointJsonType = node.pointJson
       }
 
+      if (msg.useDeviceName) {
+        useDeviceName = msg.useDeviceName;
+      } else {
+        useDeviceName = node.useDeviceName;
+      }
+
       let readConfig = new ReadCommandConfig(node.pointsToRead, node.object_props, node.roundDecimal);
 
       let output = {
@@ -103,7 +110,8 @@ module.exports = function (RED) {
         outputType: {
           json: jsonType,
           mqtt: mqttType,
-          pointJson: pointJsonType
+          pointJson: pointJsonType,
+          useDeviceName: useDeviceName
         }
       };
 
