@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.4.4] - 08-08-2024
+### Summary 
+
+Minor updates.
+
+Added device details to meta property when full object property type is selected. 
+
+Implemented applyDisplayName feature. Triggered via:
+```javascript 
+applyDisplayNames = true 
+```
+property in an inject node, directly linked to a read node. Function flow: inject applyDisplayNames = true to read node -> read node passes msg to gateway node -> gateway node updates bacnet model for device and point display names. 
+
+This feature is for use in scenarios where the flows.json or node json structure is programattically generated with a prefilled pointsToRead property. Some devices and points may need displayNames updating.
+
+
 ## [1.4.3] - 01-08-2024
 ### Summary 
 

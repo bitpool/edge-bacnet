@@ -63,7 +63,6 @@ class treeBuilder {
         // Check if the device object exists and the device name is valid
         if (deviceObject) {
             await this.processDevicePoints(device, deviceObject, deviceName, ipAddress, deviceId, index);
-
         } else {
             //console.log("Unable to find device object");
         }

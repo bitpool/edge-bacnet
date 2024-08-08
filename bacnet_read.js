@@ -5,7 +5,6 @@
 
 
 module.exports = function (RED) {
-  const http = require("http");
   const { ReadCommandConfig } = require('./common');
   const baEnum = require('./resources/node-bacstack-ts/dist/index.js').enum;
 
@@ -54,72 +53,82 @@ module.exports = function (RED) {
     };
 
     node.on('input', function (msg) {
-      node.status({ fill: "blue", shape: "dot", text: "Reading values" });
 
-      let object_property_simplePayload = false;
-      let object_property_simpleWithStatus = false;
-      let object_property_fullObject = false;
+      if (msg.applyDisplayNames) {
 
-      let jsonType = false;
-      let mqttType = false;
-      let pointJsonType = false;
-      let useDeviceName = false;
+        msg.pointsToRead = node.pointsToRead;
+        node.send(msg);
 
-      if (msg.simplePayload) {
-        object_property_simplePayload = msg.simplePayload;
-      } else if (msg.simpleWithStatus) {
-        object_property_simpleWithStatus = msg.simpleWithStatus;
-      } else if (msg.fullObject) {
-        object_property_fullObject = msg.fullObject;
       } else {
-        object_property_simplePayload = node.object_property_simplePayload;
-        object_property_simpleWithStatus = node.object_property_simpleWithStatus;
-        object_property_fullObject = node.object_property_fullObject;
-      }
 
-      if (msg.json) {
-        jsonType = msg.json;
-      } else if (msg.mqtt) {
-        mqttType = msg.mqtt;
-      } else if (msg.pointJson) {
-        pointJsonType = msg.pointJson;
-      } else {
-        jsonType = node.json;
-        mqttType = node.mqtt;
-        pointJsonType = node.pointJson
-      }
+        node.status({ fill: "blue", shape: "dot", text: "Reading values" });
 
-      if (msg.useDeviceName) {
-        useDeviceName = msg.useDeviceName;
-      } else {
-        useDeviceName = node.useDeviceName;
-      }
+        let object_property_simplePayload = false;
+        let object_property_simpleWithStatus = false;
+        let object_property_fullObject = false;
 
-      let readConfig = new ReadCommandConfig(node.pointsToRead, node.object_props, node.roundDecimal);
+        let jsonType = false;
+        let mqttType = false;
+        let pointJsonType = false;
+        let useDeviceName = false;
 
-      let output = {
-        type: "Read",
-        id: node.id,
-        readNodeName: node.nodeName,
-        options: readConfig,
-        objectPropertyType: {
-          simplePayload: object_property_simplePayload,
-          simpleWithStatus: object_property_simpleWithStatus,
-          fullObject: object_property_fullObject
-        },
-        outputType: {
-          json: jsonType,
-          mqtt: mqttType,
-          pointJson: pointJsonType,
-          useDeviceName: useDeviceName
+        if (msg.simplePayload) {
+          object_property_simplePayload = msg.simplePayload;
+        } else if (msg.simpleWithStatus) {
+          object_property_simpleWithStatus = msg.simpleWithStatus;
+        } else if (msg.fullObject) {
+          object_property_fullObject = msg.fullObject;
+        } else {
+          object_property_simplePayload = node.object_property_simplePayload;
+          object_property_simpleWithStatus = node.object_property_simpleWithStatus;
+          object_property_fullObject = node.object_property_fullObject;
         }
-      };
 
-      node.send(output);
+        if (msg.json) {
+          jsonType = msg.json;
+        } else if (msg.mqtt) {
+          mqttType = msg.mqtt;
+        } else if (msg.pointJson) {
+          pointJsonType = msg.pointJson;
+        } else {
+          jsonType = node.json;
+          mqttType = node.mqtt;
+          pointJsonType = node.pointJson
+        }
 
-      setTimeout(() => {
-        node.status({});
-      }, 3000);
+        if (msg.useDeviceName) {
+          useDeviceName = msg.useDeviceName;
+        } else {
+          useDeviceName = node.useDeviceName;
+        }
+
+        let readConfig = new ReadCommandConfig(node.pointsToRead, node.object_props, node.roundDecimal);
+
+        let output = {
+          type: "Read",
+          id: node.id,
+          readNodeName: node.nodeName,
+          options: readConfig,
+          objectPropertyType: {
+            simplePayload: object_property_simplePayload,
+            simpleWithStatus: object_property_simpleWithStatus,
+            fullObject: object_property_fullObject
+          },
+          outputType: {
+            json: jsonType,
+            mqtt: mqttType,
+            pointJson: pointJsonType,
+            useDeviceName: useDeviceName
+          }
+        };
+
+        node.send(output);
+
+        setTimeout(() => {
+          node.status({});
+        }, 3000);
+
+      }
 
     });
 

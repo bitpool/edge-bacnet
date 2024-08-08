@@ -226,6 +226,21 @@ module.exports = function (RED) {
           });
       } else if (msg.testFunc == true) {
         node.bacnetClient.testFunction(msg.address, msg.type, msg.instance, msg.property);
+      } else if (msg.applyDisplayNames) {
+
+        node.status({ fill: "blue", shape: "dot", text: "Updating display names" });
+
+        setTimeout(() => {
+          node.status({});
+        }, 2000);
+
+        node.bacnetClient
+          .applyDisplayNames(msg.pointsToRead)
+          .then(function (result) {
+          }).catch(function (error) {
+            logOut("Error in applyDisplayNames: ", error);
+          });
+
       }
     });
 

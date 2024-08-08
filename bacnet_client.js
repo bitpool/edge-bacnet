@@ -375,16 +375,39 @@ class BacnetClient extends EventEmitter {
     });
   }
 
+  applyDisplayNames(pointsToRead) {
+    let that = this;
+    return new Promise((resolve, reject) => {
+      try {
+        for (let key in pointsToRead) {
+          let deviceModel = that.findDeviceByKey(key);
+          let device = pointsToRead[key];
+          for (let pointName in device) {
+            let pointObject = device[pointName];
+            if (pointName == "deviceName") {
+              deviceModel.setDisplayName(pointObject);
+            }
+            if (that.networkTree[key][pointName]) {
+              that.networkTree[key][pointName] = pointObject;
+            }
+          }
+        }
+
+        resolve(true);
+      } catch (e) {
+        that.logOut("applyDisplayNames error: ", e);
+        reject(e);
+      }
+    });
+  }
+
   setDeviceDisplayName(deviceObject, displayName) {
     let that = this;
     return new Promise((resolve, reject) => {
       try {
         let device = that.deviceList.find((ele) => ele.getDeviceId() == deviceObject.deviceId);
-
         device.setDisplayName(displayName);
-
         that.buildTreeException = true;
-
         resolve(true);
       } catch (e) {
         that.logOut("setDeviceDisplayName error: ", e);
@@ -401,9 +424,7 @@ class BacnetClient extends EventEmitter {
         if (that.networkTree[deviceKey][pointName]) {
           that.networkTree[deviceKey][pointName].displayName = pointDisplayName;
         }
-
         that.buildTreeException = true;
-
         resolve(true);
       } catch (e) {
         that.logOut("setPointDisplayName error: ", e);
@@ -414,11 +435,9 @@ class BacnetClient extends EventEmitter {
 
   importReadList(payload) {
     let that = this;
-
     return new Promise((resolve, reject) => {
       try {
         that.buildTreeException = true;
-
         for (let key in payload) {
           let device = payload[key];
           for (let pointName in device) {
@@ -617,8 +636,9 @@ class BacnetClient extends EventEmitter {
     return newProps;
   }
 
-  findDeviceByKey(key, deviceList, that) {
-    return deviceList.find(ele => `${that.getDeviceAddress(ele)}-${ele.getDeviceId()}` === key);
+  findDeviceByKey(key) {
+    let that = this;
+    return that.deviceList.find(ele => `${that.getDeviceAddress(ele)}-${ele.getDeviceId()}` === key);
   }
 
   getObjectId(pointName, pointConfig, that) {
@@ -652,7 +672,7 @@ class BacnetClient extends EventEmitter {
       // Process all devices in sequence
       for (let deviceIndex = 0; deviceIndex < devicesToRead.length; deviceIndex++) {
         const key = devicesToRead[deviceIndex];
-        const device = that.findDeviceByKey(key, that.deviceList, that);
+        const device = that.findDeviceByKey(key);
         if (!device) continue;
 
         const deviceName = that.computeDeviceName(device);
@@ -730,6 +750,14 @@ class BacnetClient extends EventEmitter {
         throw results.error;
       }
 
+      let deviceMetaInfo = {
+        "address": device.getAddress(),
+        "isMstp": device.getIsMstpDevice(),
+        "deviceId": device.getDeviceId(),
+        "vendorId": device.getVendorId(),
+        "deviceName": deviceName
+      };
+
       // Process the results of the batch
       results.value.values.forEach(pointResult => {
         const cacheRef = requestArray.find(ele =>
@@ -759,6 +787,7 @@ class BacnetClient extends EventEmitter {
             }
           }
 
+          pointRef.meta["device"] = deviceMetaInfo;
           pointRef.timestamp = Date.now();
           pointRef.status = "online";
 
@@ -769,9 +798,18 @@ class BacnetClient extends EventEmitter {
     } catch (err) {
       that.logOut("Error processing batch:", err);
 
+      let deviceMetaInfo = {
+        "address": device.getAddress(),
+        "isMstp": device.getIsMstpDevice(),
+        "deviceId": device.getDeviceId(),
+        "vendorId": device.getVendorId(),
+        "deviceName": deviceName
+      };
+
       requestArray.forEach(request => {
         let pointRef = request.pointRef;
         pointRef.status = "offline";
+        pointRef.meta["device"] = deviceMetaInfo;
 
         bacnetResults[deviceName][request.pointName] = pointRef;
       });
@@ -780,6 +818,14 @@ class BacnetClient extends EventEmitter {
   }
 
   async processIndividualPoints(device, requestArray, deviceName, bacnetResults, that, roundDecimal) {
+    let deviceMetaInfo = {
+      "address": device.getAddress(),
+      "isMstp": device.getIsMstpDevice(),
+      "deviceId": device.getDeviceId(),
+      "vendorId": device.getVendorId(),
+      "deviceName": deviceName
+    };
+
     for (const request of requestArray) {
       const { objectId, pointRef, pointName } = request;
       try {
@@ -792,10 +838,14 @@ class BacnetClient extends EventEmitter {
           pointRef.presentValue = val;
         }
 
+        pointRef.meta["device"] = deviceMetaInfo;
+
         // Store the point data in results
         bacnetResults[deviceName][pointName] = pointRef;
       } catch (err) {
         that.logOut(`Error updating point ${pointName}:`, err);
+
+        pointRef.meta["device"] = deviceMetaInfo;
 
         pointRef.status = "offline";
         bacnetResults[deviceName][pointName] = pointRef;
