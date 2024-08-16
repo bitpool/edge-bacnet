@@ -84,57 +84,57 @@
       return fetch(RED.settings.httpNodeRoot + "bitpool-bacnet-data/clearBacnetServerPoints").then((res) => res.json());
     }
     getBacnetServerPoints() {
-      return fetch(RED.settings.httpNodeRoot + 'bitpool-bacnet-data/getBacnetServerPoints').then(res => res.json());
+      return fetch(RED.settings.httpNodeRoot + "bitpool-bacnet-data/getBacnetServerPoints").then((res) => res.json());
     }
     purgeDevice(device) {
-      return fetch(RED.settings.httpNodeRoot + 'bitpool-bacnet-data/purgeDevice', {
-        method: 'POST',
+      return fetch(RED.settings.httpNodeRoot + "bitpool-bacnet-data/purgeDevice", {
+        method: "POST",
         headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
+          Accept: "application/json",
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ d: device })
-      }).then(res => res.json());
+        body: JSON.stringify({ d: device }),
+      }).then((res) => res.json());
     }
     updatePointsForDevice(device) {
-      return fetch(RED.settings.httpNodeRoot + 'bitpool-bacnet-data/updatePointsForDevice', {
-        method: 'POST',
+      return fetch(RED.settings.httpNodeRoot + "bitpool-bacnet-data/updatePointsForDevice", {
+        method: "POST",
         headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
+          Accept: "application/json",
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ d: device })
-      }).then(res => res.json());
+        body: JSON.stringify({ d: device }),
+      }).then((res) => res.json());
     }
     setDeviceDisplayName(device, displayName) {
-      return fetch(RED.settings.httpNodeRoot + 'bitpool-bacnet-data/setDeviceDisplayName', {
-        method: 'POST',
+      return fetch(RED.settings.httpNodeRoot + "bitpool-bacnet-data/setDeviceDisplayName", {
+        method: "POST",
         headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
+          Accept: "application/json",
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ d: device, n: displayName })
-      }).then(res => res.json());
+        body: JSON.stringify({ d: device, n: displayName }),
+      }).then((res) => res.json());
     }
     setPointDisplayName(deviceKey, pointName, pointDisplayName) {
-      return fetch(RED.settings.httpNodeRoot + 'bitpool-bacnet-data/setPointDisplayName', {
-        method: 'POST',
+      return fetch(RED.settings.httpNodeRoot + "bitpool-bacnet-data/setPointDisplayName", {
+        method: "POST",
         headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
+          Accept: "application/json",
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ k: deviceKey, p: pointName, n: pointDisplayName })
-      }).then(res => res.json());
+        body: JSON.stringify({ k: deviceKey, p: pointName, n: pointDisplayName }),
+      }).then((res) => res.json());
     }
     importReadList(payload) {
-      return fetch(RED.settings.httpNodeRoot + 'bitpool-bacnet-data/importReadList', {
-        method: 'POST',
+      return fetch(RED.settings.httpNodeRoot + "bitpool-bacnet-data/importReadList", {
+        method: "POST",
         headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
+          Accept: "application/json",
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ p: payload })
-      }).then(res => res.json());
+        body: JSON.stringify({ p: payload }),
+      }).then((res) => res.json());
     }
   }
   RED.nodes.registerType("Bacnet-Gateway", {
@@ -253,7 +253,7 @@
           return {
             nodeService: ref(new NodeService()),
             serverObjects: ref([]),
-            selectedServerObject: ref()
+            selectedServerObject: ref(),
           };
         },
         mounted() {
@@ -280,35 +280,35 @@
           },
           confirm(json) {
             this.$confirm.require({
-              message: 'Do you want to clear this BACnet server point? This action is not reversible',
-              header: 'Delete Confirmation',
-              icon: 'pi pi-info-circle',
-              acceptClass: 'p-button-danger',
+              message: "Do you want to clear this BACnet server point? This action is not reversible",
+              header: "Delete Confirmation",
+              icon: "pi pi-info-circle",
+              acceptClass: "p-button-danger",
               accept: () => {
-                //handle accept 
+                //handle accept
                 let app = this;
                 $.ajax({
                   type: "POST",
-                  url: RED.settings.httpNodeRoot + 'bitpool-bacnet-data/clearBacnetServerPoint',
-                  dataType: 'json',
-                  contentType: 'application/json',
+                  url: RED.settings.httpNodeRoot + "bitpool-bacnet-data/clearBacnetServerPoint",
+                  dataType: "json",
+                  contentType: "application/json",
                   data: JSON.stringify(json),
                   success: function (result) {
                     app.getServerObjects();
                   },
-                  timeout: 10000
+                  timeout: 10000,
                 });
               },
               reject: () => {
                 //handle reject
-              }
+              },
             });
           },
           getServerObjects() {
             let app = this;
             this.nodeService.getBacnetServerPoints().then(function (result) {
               app.serverObjects = result;
-            })
+            });
           },
           formatObjectName(name) {
             //return shortened point name if longer than 50 characters
@@ -316,7 +316,7 @@
               return name.slice(0, 45).concat("...");
             }
             return name;
-          }
+          },
         },
         components: {
           "p-button": primevue.button,
@@ -389,13 +389,15 @@
               rowData.end = "";
             }
 
+            let itemNumber = index + 1;
             let fragment = document.createDocumentFragment();
             let htmlRow = `
                 <div class="form-row deviceIdRangeEntry" id="node-input-device_id_range">
-                    <label for="node-input-device_id_range_entry"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.device_id_range_entry"></span>Enabled</label>
-                    <input type="checkbox" id="node-input-device_id_range_entry_enabled" style="width: auto;" ${rowData.enabled} />
+                    <span class='bp-matrix-itemIndex'> ${itemNumber} </span>
                     <a style="padding-left: 60px;">Start: </a><input type="number" id="node-input-device_id_range_entry_start" style="width: 125px;" min="0" max="4194303" value="${rowData.start}" />
                     <a style="padding-left: 35px;">End: </a><input type="number" id="node-input-device_id_range_entry_end" style="width: 125px;" min="1" max="4194303" value="${rowData.end}" />
+                    <label class='bp-matrix-enable' for="node-input-device_id_range_entry"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.device_id_range_entry"></span>
+                    <input type="checkbox" id="node-input-device_id_range_entry_enabled" style="width: auto;" ${rowData.enabled} /> </label>
                 </div>`;
 
             $(htmlRow).appendTo(fragment);
@@ -413,7 +415,7 @@
           scrollOnAdd: false,
           header: $("<div style='display:flex; padding:10px 10px 0px 5px; column-gap: 10px'>").append(
             $.parseHTML(
-              "<div><p>Count:</p></div><div style='color: gray'><label id='node-input-reg-block-count'>0</label> <span style='padding-left: 85px;'>Device ID Range(s)</span> </div>"
+              "<div><span class='bp-matrix-heading'>Device ID Range(s)</span> </div><div class='bp-matrix-count' style='color: gray'><label id='node-input-reg-block-count' >0</label>  </div>"
             )
           ),
           buttons: [
@@ -557,10 +559,11 @@
       font-size: 12px;
     }
     .bacnetServerRebuildSchedule_clearButton {
-      box-shadow: 0 0 0 0.2rem #edacac !important;
+      background: #00adef;
+      border-color: #00adef;
       width: 200px;
       border-radius: 3px;
-      margin-left: 140px !important;
+      margin-left: 110px !important;
     }
     .clearServerContainer {
       position: absolute;
@@ -568,11 +571,13 @@
       margin-left: 280px;
     }
     .bacnetServerPoint_clearButton {
-        box-shadow: 0 0 0 0.2rem #edacac !important;
-        width: 200px;
-        border-radius: 3px;
-        margin-left: 420px  !important;
-        margin-top: -75px !important;
+      background: none !important;
+      box-shadow: none !important;
+      width: 30px;
+      border-radius: 3px;
+      margin-left: 550px !important;
+      margin-top: -75px !important;
+      border: none !important;
     }
     .bacnetServerPoint_clearButton > .p-button-label {
       color: white;
@@ -620,58 +625,54 @@
 
   <div id="node-input-tabs-content">
     <div id="read-properties-tab" style="display:none">
-      <div class="form-row">
+      <div class="form-row bp-row">
         <label for="node-input-name"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.name"></span> Name</label>
         <input type="text" id="node-input-name" placeholder="Name" />
       </div>
 
-      <div class="form-row node-input-read-tabs-row">
-        <ul style="min-width:600px;margin-bottom:20px" id="node-input-read-tabs"></ul>
-      </div>
-
-      <div class="form-row" id="networkInterfaceDiv">
+      <div class="form-row bp-row" id="networkInterfaceDiv">
         <label for="node-input-local_device_address"
           ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.local_device_address"></span> Network
           Interface</label
         >
-        <select id="node-input-local_device_address" style="width: 70%;"></select>
+        <select id="node-input-local_device_address"></select>
       </div>
 
-      <div class="form-row">
+      <div class="form-row bp-row">
         <label for="node-input-broadCastAddr"
           ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.broadCastAddr"></span> Broadcast Address
         </label>
         <input type="text" id="node-input-broadCastAddr" placeholder="255.255.255.255" />
       </div>
 
-      <div class="form-row">
+      <div class="form-row bp-row">
         <label for="node-input-local_device_port"
           ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.local_device_port"></span> Local Device Port</label
         >
         <input type="text" id="node-input-local_device_port" placeholder="47808" />
       </div>
 
-      <div class="form-row">
+      <div class="form-row bp-row">
         <label for="node-input-deviceId"
           ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.deviceId"></span> Device ID
         </label>
         <input type="text" id="node-input-deviceId" placeholder="817001" />
       </div>
 
-      <div class="form-row node-input-deviceIdRangeMatrix-container-row">
-        <ol id="node-input-deviceIdRangeMatrix-container" style="width: 600px;"></ol>
+      <div class="form-row node-input-deviceIdRangeMatrix-container-row bp-row">
+        <ol id="node-input-deviceIdRangeMatrix-container"></ol>
       </div>
     </div>
 
     <div id="read-discover-tab" style="display:none">
-      <div class="form-row">
+      <div class="form-row bp-row">
         <label for="node-input-apduTimeout"
           ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.apduTimeout"></span>Apdu Timeout</label
         >
         <input type="text" id="node-input-apduTimeout" placeholder="10000" />
       </div>
 
-      <div class="form-row" style="display: none;">
+      <div class="form-row bp-row" style="display: none;">
         <label for="node-input-apduSize"
           ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.apduSize"></span>Max Apdu Size</label
         >
@@ -685,7 +686,7 @@
         </select>
       </div>
 
-      <div class="form-row" style="display: none;">
+      <div class="form-row bp-row" style="display: none;">
         <label for="node-input-maxSegments"
           ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.maxSegments"></span>Max Segments</label
         >
@@ -701,7 +702,7 @@
         </select>
       </div>
 
-      <div class="form-row" style="display: none;">
+      <div class="form-row bp-row" style="display: none;">
         <label for="node-input-retries"
           ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.retries"></span>Number of Retries</label
         >
@@ -720,50 +721,51 @@
         </select>
       </div>
 
-      <div class="form-row" style="align-items: center; display: flex;">
-        <label for="node-input-discover_polling_schedule_value"
-          ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.bacnet_polling_schedule"></span>Device Discover
-          Frequency</label
-        >
-        <p style="margin-right: 5px; margin-bottom: 0px; padding-left: 7px;">Every</p>
-        <input type="text" id="node-input-discover_polling_schedule" style="display: none;" />
-        <input
-          type="text"
-          id="node-input-discover_polling_schedule_value"
-          placeholder="5"
-          style="width: 70px; margin-right: 5px;" />
-        <select name="timePeriod" id="node-input-discover_polling_schedule_options" style="width: 120px; margin-right: 5px;">
-          <option value="Seconds">Seconds</option>
-          <option value="Minutes">Minutes</option>
-          <option value="Hours">Hours</option>
-          <option value="Days">Days</option>
-        </select>
+      <div class="form-row bp-row">
+        <label for="node-input-discover_polling_schedule_value">
+          <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.bacnet_polling_schedule"></span>
+          Device Discover Frequency
+        </label>
+        <div class="bp-frequency-container">
+          <p>Every</p>
+          <input type="text" id="node-input-discover_polling_schedule" style="display: none;" />
+          <input type="text" class="bp-frequency-input" id="node-input-discover_polling_schedule_value" placeholder="5" />
+          <select name="timePeriod" id="node-input-discover_polling_schedule_options" class="bp-frequency-select">
+            <option value="Seconds">Seconds</option>
+            <option value="Minutes">Minutes</option>
+            <option value="Hours">Hours</option>
+            <option value="Days">Days</option>
+          </select>
+        </div>
       </div>
 
-      <div class="form-row" style="align-items: center; display: flex;">
+      <div class="form-row bp-row">
         <label for="node-input-device_read_schedule_value"
           ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.device_read_schedule"></span>Object Discover
           Frequency</label
         >
-        <p style="margin-right: 5px; margin-bottom: 0px; padding-left: 7px;">Every</p>
-        <input type="text" id="node-input-device_read_schedule" style="display: none;" />
-        <input
-          type="text"
-          id="node-input-device_read_schedule_value"
-          placeholder="5"
-          style="width: 70px; margin-right: 5px;" />
-        <select name="timePeriod" id="node-input-device_read_schedule_options" style="width: 120px; margin-right: 5px;">
-          <option value="Seconds">Seconds</option>
-          <option value="Minutes">Minutes</option>
-          <option value="Hours">Hours</option>
-          <option value="Days">Days</option>
-        </select>
+        <div class="bp-frequency-container">
+          <p>Every</p>
+          <input type="text" id="node-input-device_read_schedule" style="display: none;" />
+          <input
+            type="text"
+            class="bp-frequency-input"
+            id="node-input-device_read_schedule_value"
+            placeholder="5"
+            style="width: 70px; margin-right: 5px;" />
+          <select name="timePeriod" id="node-input-device_read_schedule_options" class="bp-frequency-select">
+            <option value="Seconds">Seconds</option>
+            <option value="Minutes">Minutes</option>
+            <option value="Hours">Hours</option>
+            <option value="Days">Days</option>
+          </select>
+        </div>
       </div>
 
-      <div class="form-row" style="align-items: center; display: none;">
+      <div class="form-row bp-row" style="align-items: center; display: none;">
         <label for="node-input-sanitise_device_schedule_value"
-          ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.sanitise_device_schedule"></span>Device Sanitisation 
-          Frequency</label
+          ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.sanitise_device_schedule"></span>Device
+          Sanitisation Frequency</label
         >
         <p style="margin-right: 5px; margin-bottom: 0px; padding-left: 7px;">Every</p>
         <input type="text" id="node-input-sanitise_device_schedule" style="display: none;" />
@@ -780,29 +782,31 @@
         </select>
       </div>
 
-      <div class="form-row">
-        <label for="node-input-cacheFileEnabled"> Cache file enabled: </label>
-        <input type="checkbox" id="node-input-cacheFileEnabled" style="width: auto;" />
+      <div class="form-row bp-checkbox-row">
+        <input type="checkbox" id="node-input-cacheFileEnabled" class="bp-checkbox"/>
+        <label for="node-input-cacheFileEnabled"> Enable cache file </label>
       </div>
 
-      <div class="form-row">
-        <label for="node-input-toLog"> Log found device: </label>
-        <input type="checkbox" id="node-input-toLogIam" style="width: auto;" />
+      <div class="form-row bp-checkbox-row">
+        <input type="checkbox" id="node-input-toLogIam" class="bp-checkbox"/>
+        <label for="node-input-toLogIam"> Log found device </label>
       </div>
 
-      <div class="form-row">
-        <label for="node-input-logErrorToConsole"> Log BACnet errors to console: </label>
-        <input type="checkbox" id="node-input-logErrorToConsole" style="width: auto;" />
+      <div class="form-row bp-checkbox-row" style="border-bottom: 1px solid #cbcbcb; padding-bottom: 20px;">
+        <input type="checkbox" id="node-input-logErrorToConsole" class="bp-checkbox"/>
+        <label for="node-input-logErrorToConsole"> Log BACnet errors to console </label>
       </div>
 
-      <div class="form-row" id="importDeviceList">
-        <label> Device List: </label>
+      <div class="form-row bp-import-buttons" id="importDeviceList">
+        <!-- <label> Device List: </label> -->
         <label for="file-upload" class="custom-file-upload">
-          <i class="fa fa-cloud-upload" id="fileLabel"></i> <a id="fileLabelText" style="padding-left: 10px;">Import</a>
+          <i class="fa fa-arrow-circle-up" id="fileLabel"></i>
+          <a id="fileLabelText" style="padding-left: 10px;">Import device list</a>
         </label>
         <input type="file" id="file-upload" accept="application/JSON" class="inputStyle" style="width: 258px;" />
-        <label for="file-export" class="custom-file-upload" style="margin-left: 30px;">
-          <i class="fa fa-cloud-download" id="fileLabel"></i> <a id="fileLabelText" style="padding-left: 10px;">Export</a>
+        <label for="file-export" class="custom-file-upload" style="margin-left: 5px;">
+          <i class="fa fa-arrow-circle-down" id="fileLabel"></i>
+          <a id="fileLabelText" style="padding-left: 10px;">Export device list</a>
         </label>
         <input id="file-export" class="inputStyle" style="width: 258px; display: none;" />
         <a id="exportJSON" style="display: none"></a>
@@ -810,33 +814,35 @@
     </div>
 
     <div id="read-server-tab" style="display:none">
-
-      <div class="form-row">
-        <label for="node-input-serverEnabled"> Enabled: </label>
-        <input type="checkbox" id="node-input-serverEnabled" style="width: auto;" />
+      <div class="form-row bp-checkbox-row">
+        <input type="checkbox" id="node-input-serverEnabled" class="bp-checkbox"/>
+        <label for="node-input-serverEnabled"> Enable Server </label>
       </div>
 
       <div class="read_server_parent_div" id="serverParent">
-
-        <div class="form-row clearServerContainer" id="clearServerContainer" style="align-items: center; display: flex;">
-          <p-button
-            class="bacnetServerRebuildSchedule_clearButton p-button-danger"
-            @click="confirmAll($event)"
-            label="Reinitialize Server">
+        <div
+          class="form-row bp-row clearServerContainer"
+          id="clearServerContainer"
+          style="align-items: center; display: flex;">
+          <p-button class="bacnetServerRebuildSchedule_clearButton" @click="confirmAll($event)" label="Reinitialize Server">
           </p-button>
         </div>
 
-        <div class="form-row" id="clearServerPointContainer">
-          <label>Server Objects</label>
+        <div class="form-row bp-row" id="clearServerPointContainer" style="margin-top: 20px;">
+          <label style="margin-bottom: 20px;"> Server Objects</label>
           <div v-for="object in serverObjects" :key="object.name">
-              <div><p class="point_name">[{{ object.type }}{{ object.instance }}]    {{ formatObjectName(object.name) }}</p></div>
-              <p-button class="bacnetServerPoint_clearButton p-button-danger" @click="confirm({
+            <div><p class="point_name">[{{ object.type }}{{ object.instance }}] {{ formatObjectName(object.name) }}</p></div>
+            <p-button
+              class="bacnetServerPoint_clearButton"
+              aria-label="Cancel"
+              @click="confirm({
                   type: object.type, 
                   instance: object.instance, 
                   name: object.name
-              })" label="Remove Object"></p-button>
+              })"
+              icon="pi pi-times"></p-button>
           </div>
-        </div> 
+        </div>
       </div>
     </div>
   </div>

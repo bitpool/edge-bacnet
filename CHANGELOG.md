@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.5] - 16-08-2024
+### Summary
+
+User interface redesign and restyle. Predominantly colors, buttons, fonts, and placement of UI components.
+
+Added timestamp update, and online/offline status update for points when an error has occured during the network request for present value. Use in Simple with status and Full Object payload types. 
+
+
 ## [1.4.4] - 08-08-2024
 ### Summary 
 

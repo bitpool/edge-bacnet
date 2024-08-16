@@ -170,7 +170,9 @@
             let foundDeviceIndex = this.writeDevices
               ? this.writeDevices.findIndex((ele) => ele.label == parentDeviceName)
               : -1;
-            let device = this.deviceList.find((ele) => ele.deviceName == parentDeviceName);
+
+            const slotDeviceId = slotProps.node.parentDeviceId;
+            let device = this.deviceList.find((ele) => ele.deviceId == slotDeviceId);
             let deviceAddress = app.getDeviceAddress(device.address);
             let key = `${deviceAddress}-${device.deviceId}`;
             let parentDevice = this.devices.find((ele) => ele.ipAddr == deviceAddress);
@@ -852,7 +854,7 @@
         <div>
           <a class="countStatus" style="margin-left: 15px;">Count: {{deviceCount}} device(s)</a>
           <button @click="getData()" class="reloadButton">
-            <i class="pi pi-refresh" style="color: #00AEEF;"><a class="allFunctionsText">Reload data</a></i>
+            <i class="fa fa-refresh" style="color: #4D88B7;"><a class="allFunctionsText">Refresh list</a></i>
           </button>
         </div>
 
@@ -920,7 +922,7 @@
       </p>
     </div>
 
-    <div id="read-writeList-tab" style="display:none">
+    <div id="read-writeList-tab" class="read-writeList-tab" style="display:none">
       <p-tree :value="writeDevices">
         <template #device="slotProps">
           <b class="deviceLabel">{{slotProps.node.label}} </b>
@@ -936,7 +938,7 @@
     </div>
 
     <div id="read-write-tab" style="display:none">
-      <div class="form-row">
+      <div class="form-row bp-row">
         <label for="node-input-applicationTag"
           ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.applicationTag"></span> Application Tag</label
         >
@@ -982,7 +984,7 @@
         </select>
       </div>
 
-      <div class="form-row">
+      <div class="form-row bp-row">
         <label for="node-input-priority"
           ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.priority"></span> Priority</label
         >

@@ -359,7 +359,8 @@
                         //update UI
                         let parentDeviceName = slotProps.node.parentDevice;
                         let parentDevice = this.devices.find((ele) => ele.label == parentDeviceName);
-                        let device = this.deviceList.find((ele) => ele.deviceName == parentDeviceName);
+                        const slotDeviceId = slotProps.node.parentDeviceId;
+                        let device = this.deviceList.find((ele) => ele.deviceId == slotDeviceId);
                         let foundDeviceIndex = this.readDevices
                             ? this.readDevices.findIndex((ele) => ele.deviceId == device.deviceId)
                             : -1;
@@ -1105,17 +1106,19 @@
         </p-dialog>
 
         <div class="headerDiv">
-          <a class="countStatus" style="margin-left: 15px;">Count: {{deviceCount}} device(s)</a>
-          <p-progressbar :value="progressBarValue" :show-value="true" style="width: 300px; height: 20px;"></p-progressbar>
+          <a class="countStatus" style="margin-left: 15px;"> <span class="bp-deviceCount">{{deviceCount}}</span> Device(s)</a>
+          <p-progressbar :value="progressBarValue" :show-value="true" style="width: 220px; height: 20px;"></p-progressbar>
           <div class="buttonGroup" style="padding-left: 15px;">
             <button @click="rebuildDataModel()" class="rebuildDataButton" title="Rebuild Data Model">
-              <i class="pi pi-wrench" style="color: #ff0000;"></i>
+              <i class="pi pi-wrench" style="color: #969696;"></i>
             </button>
-            <button @click="getData()" class="reloadButton" title="Reload Data">
-              <i class="pi pi-refresh" style="color: #00AEEF;"></i>
-            </button>
+            
             <button @click="addAllDevices()" class="reloadButton" title="Add all devices">
-              <i class="pi pi-plus" style="color: #00AEEF;"></i>
+              <i class="pi pi-plus" style="color: #62ABE9;"></i> <span>Add all devices</span>
+            </button>
+
+            <button @click="getData()" class="reloadButton" title="Reload Data">
+                <i class="fa fa-refresh" style="color: #4D88B7;"></i> <span>Refresh tree</span>
             </button>
           </div>
         </div>
@@ -1157,12 +1160,12 @@
                 </template>
                 <template v-else>
                   <button @click="addAllClicked(slotProps)" class="addAllButton bacnetbutton">
-                    <i class="pi pi-plus-circle "><a class="allFunctionsText">Add all</a></i>
+                    <i class="pi pi-plus " title="Add all points"><a class="allFunctionsText"></a></i>
                   </button>
                 </template>
 
                 <button @click="removeAllClicked(slotProps, this)" class="removeAllButton bacnetbutton">
-                  <i class="pi pi-minus-circle "><a class="allFunctionsText">Remove all</a></i>
+                  <i class="pi pi-times" title="Remove all points"><a class="allFunctionsText">Remove all</a></i>
                 </button>
               </div>
             </template>
@@ -1210,33 +1213,35 @@
                 *
                 *
             -->
-    <div id="read-readList-tab" style="display:none">
+    <div id="read-readList-tab" class="read-readList-tab" style="display:none">
       <div class="removeAllDevicesDiv">
         <button @click="exportReadList()" class="export-points-button" title="Export Read List">
-          <i class="fa fa-cloud-download"> </i><a id="fileLabelText" style="padding-left: 10px;">Export</a>
+          <i class="fa fa-arrow-circle-down"> </i><a id="fileLabelText" style="padding-left: 10px;">Export</a>
         </button>
         <a id="exportJSON" style="display: none"></a>
 
         <button @click="importReadList()" class="export-points-button" title="Import Read List">
-          <i class="fa fa-cloud-upload" id="importReadListButton"></i
+          <i class="fa fa-arrow-circle-up" id="importReadListButton"></i
           ><a id="fileLabelText" style="padding-left: 10px;">Import</a>
         </button>
         <input type="file" id="readlist-file-upload" accept="application/JSON" class="inputStyle" style="display: none;" />
 
         <button @click="removeAllDevices()" class="removeAllDevicesButton" title="Remove all devices">
-          <a style="color: #ff0000;">Remove All Devices</a>
+            <i class="pi pi-times" title="Remove all points"></i> <a>Remove all devices</a>
         </button>
 
-        <button @click="refreshReadListTree()" class="refreshReadListButton" title="Refresh tree">
-            <i class="pi pi-refresh" style="color: #00AEEF;"> </i>
+        <button @click="refreshReadListTree()" class="reloadButton bp-read-list-refresh-button" title="Refresh tree">
+            <i class="fa fa-refresh" style="color: #4D88B7;"> </i><span>Refresh tree</span>
         </button>
+
+
       </div>
 
       <p-tree :value="readDevices">
         <template #device="slotProps">
           <b class="deviceLabel">{{slotProps.node.label}} </b>
           <button @click="removeAllClicked(slotProps, this)" class="removeAllButton bacnetbutton">
-            <i class="pi pi-minus-circle "><a class="allFunctionsText">Remove all</a></i>
+            <i class="pi pi-times"><a class="allFunctionsText">Remove device</a></i>
           </button>
         </template>
 
@@ -1256,16 +1261,17 @@
             *
         -->
     <div id="read-properties-tab" style="display:none">
-      <div class="form-row" style="display: flex; width: fit-content; flex-wrap: nowrap; flex-direction: column;">
+      <div class="form-row bp-prop-row" style="display: flex; flex-wrap: nowrap; flex-direction: column;">
         <label
           for="node-input-object_properties_group"
-          style="display: flex; align-items: center; white-space: nowrap; text-decoration: underline;"
-          >Object Properties:</label
+          style="display: flex; align-items: center; white-space: nowrap;"
+          class="bp-prop-heading"
+          >Object Properties</label
         >
 
         <div
           id="node-input-object_properties_group"
-          style="display: flex; align-items: flex-start; flex-direction: column; padding-left: 50px;">
+          style="display: flex; align-items: flex-start; flex-direction: column;">
           <div class="objectPropertiesLabel">
             <label
               for="node-input-object_property_simplePayload"
@@ -1274,7 +1280,7 @@
               <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_simplePayload"></span>
               <input
                 style="margin-left: 5px;"
-                class=" objectProp"
+                class=" objectProp checkbox-round"
                 type="checkbox"
                 id="node-input-object_property_simplePayload" />
               <a style="white-space: nowrap; padding-left: 20px;">Simple Payload</a>
@@ -1289,7 +1295,7 @@
               <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_simpleWithStatus"></span>
               <input
                 style="margin-left: 5px;"
-                class=" objectProp"
+                class=" objectProp checkbox-round"
                 type="checkbox"
                 id="node-input-object_property_simpleWithStatus" />
               <a style="white-space: nowrap; padding-left: 20px;">Simple With Status</a>
@@ -1304,23 +1310,20 @@
               <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_fullObject"></span>
               <input
                 style="margin-left: 5px;"
-                class=" objectProp"
+                class=" objectProp checkbox-round"
                 type="checkbox"
                 id="node-input-object_property_fullObject" />
               <a style="white-space: nowrap; padding-left: 20px;">Full Object</a>
             </label>
           </div>
-
         </div>
       </div>
 
-      <hr />
-
-      <div class="form-row msgTypeDiv" style="display: flex;">
-        <label for="node-input-msgType" style="text-decoration: underline;"> Message type: </label>
+      <div class="form-row msgTypeDiv bp-prop-row" style="display: flex;">
+        <label for="node-input-msgType" class="bp-prop-heading"> Message type </label>
         <div
           id="node-input-msgType"
-          style="display: flex; align-items: flex-start; flex-direction: column; padding-left: 50px;">
+          style="display: flex; align-items: flex-start; flex-direction: column;">
           <!-- class= checkbox-round -->
           <div style="display: flex; flex-direction: row; align-items: flex-start;">
             <input
@@ -1358,24 +1361,23 @@
         </div>
       </div>
 
-      <hr />
-
-      <div class="objectPropertiesLabel" style="margin-top: 20px; margin-bottom: 20px;">
+      <div class="bp-checkbox-row bp-readnode-useDeviceName">
         <label
         for="node-input-useDeviceName"
-        style="width: auto; align-items: start;"
+        style="padding-left: 4px; align-items: start;"
         class="objectPropertiesLabel">
-        <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.useDeviceName"></span>
+        <span data-i18n="bitpool-bacnet.label.useDeviceName"></span>
+        <a style="white-space: nowrap;">Use device name in topic</a>
         <input
-            class=" objectProp"
+            style="margin-left: 10px; bottom: 3px;"
+            class=" objectProp bp-checkbox"
             type="checkbox"
             id="node-input-useDeviceName" />
-        <a style="white-space: nowrap; padding-left: 20px;">Use device name in topic</a>
         </label>
       </div>
 
-      <div class="form-row">
-        <label for="node-input-roundDecimal"> Decimal place precision </label>
+      <div class="form-row bp-row">
+        <label> Decimal place precision </label>
         <input type="number" id="node-input-roundDecimal" placeholder="None" />
       </div>
 
@@ -1385,10 +1387,11 @@
         <input style="display: none !important;" type="checkbox" id="node-input-hiddenDeployToggle" />
       </label>
 
-      <div class="form-row">
-        <label for="node-input-exportCsv"> Points List </label>
+      <hr>
+
+      <div class="form-row bp-import-buttons">
         <label for="points-export" class="export-points-button" @click="exportPointListCsv()">
-          <i class="fa fa-cloud-download" id="fileLabel"></i> <a id="points-export" style="padding-left: 10px;">Export</a>
+          <i class="fa fa-arrow-circle-down" id="fileLabel"></i> <a id="points-export" style="padding-left: 10px;">Export point list</a>
         </label>
       </div>
     </div>

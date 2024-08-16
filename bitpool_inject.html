@@ -20,9 +20,24 @@
 
 
 <script type="text/html" data-template-name="Bitpool-Inject">
-    <div class="form-row">
-        <label for="node-input-name"><i class="fa fa-tag"></i> <span data-i18n="common.label.name"></span></label>
+    <div class="form-row bp-row">
+        <label for="node-input-name"> <span data-i18n="common.label.name"></span></label>
         <input type="text" id="node-input-name" data-i18n="[placeholder]common.label.name">
+    </div>
+
+    <div class="bp-objectPropertiesLabel bp-checkbox-row">
+        <label
+        for="node-input-useDeviceName"
+        style="padding-left: 4px; align-items: start;"
+        class="objectPropertiesLabel">
+        <span data-i18n="bitpool-bacnet.label.useDeviceName"></span>
+        <a style="white-space: nowrap; padding-left: 20px;">Use device name in topic</a>
+        <input
+            style="margin-left: 10px; bottom: 3px;"
+            class=" objectProp bp-checkbox"
+            type="checkbox"
+            id="node-input-useDeviceName" />
+        </label>
     </div>
 
     <div class="form-row node-input-property-container-row bitpoolInjectList">
@@ -31,27 +46,22 @@
                 <a>Inject Type </a>
             </div>
 
-            <div class="optionParent">
-                <div class="msgOptions discoverOption">
-                    <input class="checkbox-round" type="checkbox" id="node-input-doDiscover" class="" style="margin: 0 50px 0 10px;"/>
+            <div class="bp-button-group">
+                <div id="node-input-doDiscover-button" class="msgOptions discoverOption">
+                    <input class="checkbox-round" type="checkbox" id="node-input-doDiscover" style="display: none;"/>
                     <label style="font-size: 16px; height: min-content; margin-bottom: 0px;" for="node-input-doDiscover">Discover</label> 
                 </div>
-                <div class="msgOptions pollOption">
-                    <input class="checkbox-round" type="checkbox" id="node-input-doPoll" class="" style="margin: 0 50px 0 10px;"/>
+                <div class="msgOptions pollOption" id="node-input-doPoll-button">
+                    <input class="checkbox-round" type="checkbox" id="node-input-doPoll" style="display: none;"/>
                     <label style="font-size: 16px; height: min-content; margin-bottom: 0px;" for="node-input-doPoll">Poll</label> 
                 </div>
             </div>
 
-            <div class="form-row" style="display: flex; width: fit-content; flex-wrap: nowrap; flex-direction: row; padding-top: 10px; margin-left: auto; margin-right: auto;">
+            <div class="form-row bp-msg-type-row">
 
-                <div
-                  id="node-input-object_properties_group"
-                  style="display: flex; align-items: flex-start; flex-direction: column;">
-                    <label
-                    for="node-input-object_properties_group"
-                    style="display: flex; align-items: center; white-space: nowrap; text-decoration: underline;"
-                    >
-                        Object Properties:
+                <div id="node-input-object_properties_group" class="bp-msg-type-column bp-object">
+                    <label for="node-input-object_properties_group" class="bp-msg-type-labels">
+                        Object Properties
                     </label>
                     
                     <div class="objectPropertiesLabel">
@@ -62,7 +72,7 @@
                         <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_simplePayload"></span>
                         <input
                             style="margin-left: 5px;"
-                            class=" objectProp"
+                            class=" objectProp checkbox-round"
                             type="checkbox"
                             id="node-input-object_property_simplePayload" />
                         <a style="white-space: nowrap; padding-left: 20px;">Simple Payload</a>
@@ -77,7 +87,7 @@
                         <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_simpleWithStatus"></span>
                         <input
                             style="margin-left: 5px;"
-                            class=" objectProp"
+                            class=" objectProp checkbox-round"
                             type="checkbox"
                             id="node-input-object_property_simpleWithStatus" />
                         <a style="white-space: nowrap; padding-left: 20px;">Simple With Status</a>
@@ -92,7 +102,7 @@
                         <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.object_property_fullObject"></span>
                         <input
                             style="margin-left: 5px;"
-                            class=" objectProp"
+                            class=" objectProp checkbox-round"
                             type="checkbox"
                             id="node-input-object_property_fullObject" />
                         <a style="white-space: nowrap; padding-left: 20px;">Full Object</a>
@@ -102,8 +112,8 @@
                 </div>
                 <div
                   id="node-input-msgType"
-                  style="display: flex; align-items: flex-start; flex-direction: column; padding-left: 50px;">
-                  <label for="node-input-msgType" style="text-decoration: underline;"> Message type: </label>
+                  class="bp-msg-type-column bp-msg">
+                  <label for="node-input-msgType" class="bp-msg-type-labels"> Message type </label>
                   <!-- class= checkbox-round -->
                   <div style="display: flex; flex-direction: row; align-items: flex-start;">
                     <input
@@ -142,31 +152,11 @@
             </div>
         </div>
 
-
-        <div class="injectHeading" style="margin-top: 20px;">
-            <a>Topic Properties</a>
-        </div>
-
-        <div class="objectPropertiesLabel" style="margin-top: 20px;">
-            <label
-            for="node-input-useDeviceName"
-            style="padding-left: 4px; width: auto; align-items: start;"
-            class="objectPropertiesLabel">
-            <i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.useDeviceName"></span>
-            <input
-                style="margin-left: 5px;"
-                class=" objectProp"
-                type="checkbox"
-                id="node-input-useDeviceName" />
-            <a style="white-space: nowrap; padding-left: 20px;">Use device name in topic</a>
-            </label>
-        </div>
-
         <div class="injectHeading" style="margin-top: 20px;">
             <a>Msg Properties</a>
         </div>
 
-        <ol id="node-input-property-container" class="nrEditableList" style="height: 400px !important;"></ol>
+        <ol id="node-input-property-container" class="nrEditableList bp-editable-list" style="height: 400px !important;"></ol>
 
     </div>
 
@@ -261,91 +251,6 @@
 
 </script>
 <style>
-    .optionParent {
-        display: flex;
-    }
-
-    .injectHeading>a {
-        margin: 0;
-        font-weight: 600;
-        font-size: 14px;
-    }
-
-    .injectHeading {
-        border-bottom: 1px solid #cbcbcb;
-        text-align: start;
-        height: 30px;
-    }
-
-    .checkbox-round {
-        width: 13px !important;
-        height: 13px !important;
-        background-color: white;
-        border-radius: 50%;
-        vertical-align: middle;
-        border: 1px solid #ddd;
-        appearance: none;
-        -webkit-appearance: none;
-        outline: none;
-        cursor: pointer;
-    }
-
-    .checkbox-round:checked {
-        background-color: #00AEEF;
-    }
-
-    .checkbox-round:focus {
-        outline: none !important;
-    }
-
-    .msgOptions {
-        border: 1px solid #cbcbcb;
-        border-radius: 4px;
-        height: 35px;
-        transition: 1s;
-        display: flex;
-        flex-direction: row;
-        justify-content: space-evenly;
-        align-items: center;
-        cursor: pointer;
-        width: 50%;
-    }
-
-    .msgOptions:hover {
-        border: 1px solid #00AEEF;
-        transition: 1s;
-        background-color: #f5fcff;
-    }
-
-    .discoverOption {
-        margin-top: 15px;
-        width: 180px;
-        margin-right: 20px;
-        margin-left: auto;
-    }
-
-    .pollOption {
-        margin-top: 15px;
-        width: 180px;
-        margin-right: auto;
-    }
-
-    .optionsSelector {
-        min-height: 90px !important;
-        max-height: none !important;
-        display: flex;
-        flex-direction: column;
-        flex-wrap: nowrap;
-        justify-content: space-around;
-    }
-
-    .bitpoolInjectList>.red-ui-editableList>.red-ui-editableList-container {
-        min-height: 120px !important;
-        max-height: none;
-        overflow-y: scroll;
-        height: 410px !important;
-    }
-
     /* node-red css */
 
     .inject-time-row {
@@ -799,13 +704,9 @@
                 document.getElementById("node-input-object_property_simpleWithStatus").onclick = handlePayloadCheckboxClick;
                 document.getElementById("node-input-object_property_fullObject").checked = node.object_property_fullObject;
                 document.getElementById("node-input-object_property_fullObject").onclick = handlePayloadCheckboxClick;
-
                 document.getElementById("node-input-useDeviceName").checked = node.useDeviceName;
-
-
-                document.getElementById("node-input-doDiscover").onclick = handleCheckboxClick;
-                document.getElementById("node-input-doPoll").onclick = handleCheckboxClick;
-
+                document.getElementById("node-input-doDiscover-button").onclick = handleCheckboxClick;
+                document.getElementById("node-input-doPoll-button").onclick = handleCheckboxClick;
                 document.getElementById("node-input-json").checked = node.json;
                 document.getElementById("node-input-json").onclick = handleMsgTypeClick;
                 document.getElementById("node-input-mqtt").checked = node.mqtt;
@@ -813,14 +714,26 @@
                 document.getElementById("node-input-pointJson").checked = node.pointJson;
                 document.getElementById("node-input-pointJson").onclick = handleMsgTypeClick;
 
-
+                if (document.getElementById("node-input-doPoll").checked) {
+                    document.getElementById("node-input-doPoll-button").classList.add("activeButton");
+                    document.getElementById("node-input-doDiscover-button").classList.remove("activeButton");
+                } else if (document.getElementById("node-input-doDiscover").checked) {
+                    document.getElementById("node-input-doDiscover-button").classList.add("activeButton");
+                    document.getElementById("node-input-doPoll-button").classList.remove("activeButton");
+                }
 
                 function handleCheckboxClick() {
-                    if (this.id == "node-input-doDiscover") {
+                    if (this.id == "node-input-doDiscover-button") {
+                        document.getElementById("node-input-doDiscover").checked = true;
                         document.getElementById("node-input-doPoll").checked = false;
+                        document.getElementById("node-input-doDiscover-button").classList.add("activeButton");
+                        document.getElementById("node-input-doPoll-button").classList.remove("activeButton");
                     }
-                    if (this.id == "node-input-doPoll") {
+                    if (this.id == "node-input-doPoll-button") {
+                        document.getElementById("node-input-doPoll").checked = true;
                         document.getElementById("node-input-doDiscover").checked = false;
+                        document.getElementById("node-input-doPoll-button").classList.add("activeButton");
+                        document.getElementById("node-input-doDiscover-button").classList.remove("activeButton");
                     }
                 }
 
