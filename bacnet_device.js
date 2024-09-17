@@ -35,6 +35,7 @@ class BacnetDevice {
             that.protocolServicesSupported = config.protocolServicesSupported;
             that.isProtocolServicesSet = config.isProtocolServicesSet;
             that.isInitialQuery = config.isInitialQuery;
+            that.isDumbMstpRouter = config.isDumbMstpRouter;
 
         } else if (fromImport == false) {
             if (config.net && config.adr) {
@@ -64,7 +65,16 @@ class BacnetDevice {
             that.protocolServicesSupported = [];
             that.isProtocolServicesSet = false;
             that.isInitialQuery = true;
+            that.isDumbMstpRouter = false;
         }
+    }
+
+    setIsDumbMstpRouter(isDumbMstp) {
+        this.isDumbMstpRouter = isDumbMstp;
+    }
+
+    getIsDumbMstpRouter() {
+        return this.isDumbMstpRouter;
     }
 
     setDisplayName(displayName) {

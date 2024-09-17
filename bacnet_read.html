@@ -59,6 +59,7 @@
                         showPointNameDialog: ref(false),
                         deviceDisplayNameValue: ref(),
                         pointDisplayNameValue: ref(),
+                        calculateProgressBarWidth: ref(),
                     };
                 },
                 setup() {
@@ -130,12 +131,22 @@
                             app.pointList = result.pointList;
                             app.pollFrequency = parseInt(result.pollFrequency);
                             app.deviceCount = result.deviceList.length;
+
                             //progress bar percentage
                             let progressVal = parseInt((result.renderListCount / result.deviceList.length) * 100);
                             if (typeof progressVal == "number" && !isNaN(progressVal)) {
                                 app.progressBarValue = progressVal;
                             } else {
                                 app.progressBarValue = 0;
+                            }
+
+                            //set progress bar width based on device count integer digit length
+                            if (app.deviceCount.toString().length >= 5) {
+                                app.calculateProgressBarWidth = "width: 200px;";
+                            } else if (app.deviceCount.toString().length == 4) {
+                                app.calculateProgressBarWidth = "width: 210px;";
+                            } else if (app.deviceCount.toString().length < 4) {
+                                app.calculateProgressBarWidth = "width: 220px;";
                             }
 
                             app.$forceUpdate();
@@ -434,6 +445,16 @@
                                         link.click();
                                     }
                                 }
+                            } else {
+                                if (parseInt(key) == keys.length - 1) {
+                                    // last iteration
+                                    var encodedUri = encodeURI(csvContent);
+                                    var link = document.createElement("a");
+                                    link.setAttribute("href", encodedUri);
+                                    link.setAttribute("download", "pointslist.csv");
+                                    document.body.appendChild(link);
+                                    link.click();
+                                }
                             }
                         }
                     },
@@ -450,6 +471,8 @@
                     isDeviceActive(slotProps) {
                         let app = this;
                         if ((Date.now() - slotProps.node.lastSeen) / 1000 < app.pollFrequency + 5) {
+                            return true;
+                        } else if (slotProps.node.isDumbMstpRouter == true || slotProps.node.isDumbMstpRouter == "true") {
                             return true;
                         }
                         return false;
@@ -530,7 +553,7 @@
                                 app.pointDisplayNameValue = app.rightClickedPoint.node.label;
                                 break;
                             case "updatePoint":
-                                app.updatePoint(app.rightClickedDevice);
+                                app.updatePoint(app.rightClickedPoint);
                                 break;
                             default:
                                 break;
@@ -1061,7 +1084,7 @@
                 *
                 *
             -->
-    <div id="read-networkTree-tab" style="display:none">
+    <div id="read-networkTree-tab" style="display:none" class="bp-networktree-tab">
       <div id="read-networkTree-tab-content" class="networkTreeContent" style="display:none">
         <p-dialog
           v-model:visible="showDeviceNameDialog"
@@ -1107,8 +1130,8 @@
 
         <div class="headerDiv">
           <a class="countStatus" style="margin-left: 15px;"> <span class="bp-deviceCount">{{deviceCount}}</span> Device(s)</a>
-          <p-progressbar :value="progressBarValue" :show-value="true" style="width: 220px; height: 20px;"></p-progressbar>
-          <div class="buttonGroup" style="padding-left: 15px;">
+          <p-progressbar class="bp-readNode-progressbar" :value="progressBarValue" :show-value="true" :style="calculateProgressBarWidth"></p-progressbar>
+          <div class="buttonGroup">
             <button @click="rebuildDataModel()" class="rebuildDataButton" title="Rebuild Data Model">
               <i class="pi pi-wrench" style="color: #969696;"></i>
             </button>
@@ -1136,7 +1159,7 @@
                 <div v-if="isDeviceActive(slotProps)" class="deviceLabelParent">
                   <b class="deviceLabel">
                     <span class="statusOnline deviceStatus dotOnline dot"></span>
-                    {{slotProps.node.label}}
+                    <span class="deviceLabelSpan">{{slotProps.node.label}}</span>
                     <span v-if="hasMstpDevices(slotProps)" class="mstpDeviceCount"
                       >&nbsp; {{calculateMstpCount(slotProps)}} &nbsp;</span
                     >
@@ -1146,7 +1169,7 @@
                 <div v-else>
                   <b class="deviceLabel">
                     <span class="statusOffline deviceStatus dotOffline dot"></span>
-                    {{slotProps.node.label}}
+                    <span class="deviceLabelSpan">{{slotProps.node.label}}</span>
                     <span v-if="hasMstpDevices(slotProps)" class="mstpDeviceCount"
                       >&nbsp; {{calculateMstpCount(slotProps)}} &nbsp;</span
                     >

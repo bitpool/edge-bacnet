@@ -27,6 +27,7 @@ class BacnetClient extends EventEmitter {
     that.mutex = new Mutex();
     that.manualMutex = new Mutex();
     that.pollInProgress = false;
+    that.buildJsonInProgress = false;
     that.scanMatrix = [];
     that.renderListCount = 0;
 
@@ -63,6 +64,7 @@ class BacnetClient extends EventEmitter {
       };
 
       try {
+
         that.client = new bacnet.Client({
           apduTimeout: config.apduTimeout,
           interface: config.localIpAdrress,
@@ -81,7 +83,13 @@ class BacnetClient extends EventEmitter {
 
         //query device task
         const queryDevices = new Task("simple task", () => {
-          if (!that.pollInProgress) that.queryDevices();
+          if (!that.pollInProgress) {
+            that.queryDevices();
+          }
+
+          if (!that.buildJsonInProgress) {
+            that.buildJsonTree();
+          }
         });
 
         const queryJob = new SimpleIntervalJob({ seconds: parseInt(that.device_read_schedule) }, queryDevices);
@@ -102,6 +110,7 @@ class BacnetClient extends EventEmitter {
 
         setTimeout(() => {
           that.queryDevices();
+          that.buildJsonTree();
         }, "5000");
       } catch (e) {
         that.logOut("Issue initializing client: ", e);
@@ -288,6 +297,7 @@ class BacnetClient extends EventEmitter {
         that.renderList = [];
         that.networkTree = {};
         that.pollInProgress = false;
+        that.buildJsonInProgress = false;
         that.renderListCount = 0;
         resolve(true);
       } catch (e) {
@@ -301,9 +311,7 @@ class BacnetClient extends EventEmitter {
     let that = this;
     return new Promise((resolve, reject) => {
       try {
-        let renderListIndex = that.renderList.findIndex(
-          (ele) => ele.deviceId == device.deviceId && ele.ipAddr == device.address
-        );
+        let renderListIndex = that.renderList.findIndex((ele) => ele.deviceId == device.deviceId && ele.ipAddr == device.address);
         let deviceListIndex = that.deviceList.findIndex((ele) => ele.getDeviceId() == device.deviceId);
         let deviceKey = device.address + "-" + device.deviceId;
         delete that.networkTree[deviceKey];
@@ -319,62 +327,46 @@ class BacnetClient extends EventEmitter {
     });
   }
 
-  updatePointsForDevice(deviceObject) {
-    let that = this;
-    return new Promise(async (resolve, reject) => {
-      try {
-        let device = that.deviceList.find((ele) => ele.getDeviceId() == deviceObject.deviceId);
-        await that.updateDeviceName(device);
+  async updatePointsForDevice(deviceObject) {
+    try {
+      let device = this.deviceList.find((ele) => ele.getDeviceId() === deviceObject.deviceId);
 
-        if (device.getIsProtocolServicesSet() == false) {
-          that
-            .getProtocolSupported(device)
-            .then(function (result) {
-              let decodedValues = decodeBitArray(8, result.values[0].originalBitString.value);
-              device.setProtocolServicesSupported(decodedValues);
-            })
-            .catch(function (error) {
-              that.logOut("getProtocolSupported error: ", error);
-            });
-        }
-
-        that
-          .getDevicePointList(device)
-          .then(function () {
-            that
-              .buildJsonObject(device)
-              .then(function () {
-                // do nothing for now
-                resolve(true);
-              })
-              .catch(function (e) {
-                that.logOut(`Update points list error 1: ${that.getDeviceAddress(device)}`, e);
-              });
-          })
-          .catch(function (e) {
-            that.logOut(`Update points list error 2: ${that.getDeviceAddress(device)}`, e);
-            device.setManualDiscoveryMode(true);
-            that
-              .getDevicePointListWithoutObjectList(device)
-              .then(function () {
-                that
-                  .buildJsonObject(device)
-                  .then(function () {
-                    // do nothing for now
-                    resolve(true);
-                  })
-                  .catch(function (e) {
-                    that.logOut(`Update points list error 3: ${that.getDeviceAddress(device)}`, e);
-                  });
-              })
-              .catch(function (e) {
-                that.logOut(`Update points list error 4: ${that.getDeviceAddress(device)}`, e);
-              });
-          });
-      } catch (e) {
-        reject(e);
+      if (!device) {
+        throw new Error(`Device with ID ${deviceObject.deviceId} not found`);
       }
-    });
+
+      await this.updateDeviceName(device);
+
+      if (!device.getIsProtocolServicesSet()) {
+        try {
+          const result = await this.getProtocolSupported(device);
+          const decodedValues = decodeBitArray(8, result.values[0].originalBitString.value);
+          device.setProtocolServicesSupported(decodedValues);
+        } catch (error) {
+          this.logOut("getProtocolSupported error: ", error);
+        }
+      }
+
+      try {
+        await this.getDevicePointList(device);
+        await this.buildJsonObject(device);
+      } catch (e) {
+        this.logOut(`Update points list error 2: ${this.getDeviceAddress(device)}`, e);
+        device.setManualDiscoveryMode(true);
+
+        try {
+          await this.getDevicePointListWithoutObjectList(device);
+          await this.buildJsonObject(device);
+        } catch (e) {
+          this.logOut(`Update points list error 4: ${this.getDeviceAddress(device)}`, e);
+        }
+      }
+
+      return true;
+    } catch (e) {
+      this.logOut(`Error in updatePointsForDevice: ${e.message}`, e);
+      throw e; // Re-throw the error to be handled by the caller
+    }
   }
 
   applyDisplayNames(pointsToRead) {
@@ -407,13 +399,21 @@ class BacnetClient extends EventEmitter {
     let that = this;
     return new Promise((resolve, reject) => {
       try {
-        let device = that.deviceList.find((ele) => ele.getDeviceId() == deviceObject.deviceId);
+        let address = "";
+        if (typeof deviceObject.address == "string") {
+          address = deviceObject.address;
+        } else if (typeof deviceObject.address == "object") {
+          address = deviceObject.address.address;
+        }
+
+        let device = that.deviceList.find(
+          (ele) => that.getDeviceAddress(ele) == address && ele.getDeviceId() == deviceObject.deviceId
+        );
         device.setDisplayName(displayName);
         that.buildTreeException = true;
         resolve(true);
       } catch (e) {
         that.logOut("setDeviceDisplayName error: ", e);
-
         reject(e);
       }
     });
@@ -457,108 +457,89 @@ class BacnetClient extends EventEmitter {
     });
   }
 
-  queryDevices() {
+  //test re write
+  async queryDevices() {
     let that = this;
+    try {
+      that.pollInProgress = true;
+      let index = 0;
+      await query(index);
 
-    that.pollInProgress = true;
-
-    let index = 0;
-
-    query(index);
-
-    function query(index) {
-      let device = that.deviceList[index];
-
-      if (index < that.deviceList.length) {
-        index++;
-
-        if (typeof device == "object") {
-          if (device.getIsProtocolServicesSet() == false) {
-            that
-              .getProtocolSupported(device)
-              .then(function (result) {
+      async function query(index) {
+        if (index < that.deviceList.length) {
+          let device = that.deviceList[index];
+          if (typeof device == "object" && (device.getIsDumbMstpRouter() == false || device.getIsDumbMstpRouter() == undefined)) {
+            if (device.getIsProtocolServicesSet() == false) {
+              try {
+                let result = await that.getProtocolSupported(device);
                 let decodedValues = decodeBitArray(8, result.values[0].originalBitString.value);
                 device.setProtocolServicesSupported(decodedValues);
-              })
-              .catch(function (error) {
+              } catch (error) {
                 that.logOut("getProtocolSupported error: ", error);
-              });
-          }
-          try {
-            if (device.getSegmentation() !== 3) {
-              that.updateDeviceName(device);
-              that
-                .getDevicePointList(device)
-                .then(function () {
-                  that
-                    .buildJsonObject(device)
-                    .then(function () {
-                      query(index);
-                    })
-                    .catch(function (e) {
-                      that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
-                      query(index);
-                    });
-                })
-                .catch(function (e) {
-                  that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
-                  that
-                    .getDevicePointListWithoutObjectList(device)
-                    .then(function () {
-                      that
-                        .buildJsonObject(device)
-                        .then(function () {
-                          query(index);
-                        })
-                        .catch(function (e) {
-                          that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
-                          query(index);
-                        });
-                    })
-                    .catch(function (e) {
-                      query(index);
-                    });
-                });
-            } else if (device.getSegmentation() == 3) {
-              that.updateDeviceName(device);
-              that
-                .getDevicePointListWithoutObjectList(device)
-                .then(function () {
-                  that
-                    .buildJsonObject(device)
-                    .then(function () {
-                      query(index);
-                    })
-                    .catch(function (e) {
-                      that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
-                      query(index);
-                    });
-                })
-                .catch(function (e) {
-                  query(index);
-                });
+                index++;
+                await query(index);
+              }
             }
-          } catch (e) {
-            that.logOut("Error while querying devices: ", e);
-            query(index);
+            try {
+              await that.updateDeviceName(device);
+              if (device.getSegmentation() !== 3) {
+                try {
+                  await that.getDevicePointList(device);
+
+                  index++;
+                  await query(index);
+                } catch (e) {
+                  that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
+
+                  index++;
+                  await query(index);
+                }
+              } else if (device.getSegmentation() == 3) {
+                try {
+                  await that.getDevicePointListWithoutObjectList(device);
+                  index++;
+                  await query(index);
+                } catch (e) {
+                  that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
+
+                  index++;
+                  await query(index);
+                }
+              }
+            } catch (e) {
+              that.logOut("Error while querying devices: ", e);
+
+              index++;
+              await query(index);
+            }
+          } else {
+            index++;
+            await query(index);
           }
-        } else {
-          that.logOut("queryDevices: invalid device found: ", device);
-          query(index);
+        } else if (index == that.deviceList.length) {
+          that.pollInProgress = false;
         }
-      } else if (index == that.deviceList.length) {
-        that.pollInProgress = false;
       }
+    } catch (e) {
+      that.logOut("Error while querying devices: ", e);
     }
   }
 
   updateDeviceName(device) {
     let that = this;
-    that._getDeviceName(device.getAddress(), device.getDeviceId()).then(function (deviceObject) {
-      if (typeof deviceObject.name == "string") {
-        device.setDeviceName(deviceObject.name + " " + device.getDeviceId());
-        device.setPointsList(deviceObject.devicePointEntry);
-      }
+    return new Promise((resolve, reject) => {
+      that
+        ._getDeviceName(device.getAddress(), device.getDeviceId())
+        .then(function (deviceObject) {
+          if (typeof deviceObject.name == "string") {
+            device.setDeviceName(deviceObject.name + " " + device.getDeviceId());
+            device.setPointsList(deviceObject.devicePointEntry);
+          }
+          resolve();
+        })
+        .catch(function (e) {
+          reject(e);
+        });
     });
   }
 
@@ -598,7 +579,13 @@ class BacnetClient extends EventEmitter {
 
       // //query device task
       const queryDevices = new Task("simple task", () => {
-        if (!that.pollInProgress) that.queryDevices();
+        if (!that.pollInProgress) {
+          that.queryDevices();
+        }
+
+        if (!that.buildJsonInProgress) {
+          that.buildJsonTree();
+        }
       });
 
       const queryJob = new SimpleIntervalJob({ seconds: parseInt(config.device_read_schedule) }, queryDevices);
@@ -780,11 +767,7 @@ class BacnetClient extends EventEmitter {
 
           if (isNumber(val)) {
             pointRef.presentValue = roundDecimalPlaces(val, roundDecimal);
-            if (
-              pointRef.meta.objectId.type == 19 ||
-              pointRef.meta.objectId.type == 13 ||
-              pointRef.meta.objectId.type == 14
-            ) {
+            if (pointRef.meta.objectId.type == 19 || pointRef.meta.objectId.type == 13 || pointRef.meta.objectId.type == 14) {
               if (pointRef.stateTextArray && typeof pointRef.stateTextArray[0].value !== "object") {
                 if (val != 0) {
                   pointRef.presentValue = pointRef.stateTextArray[val - 1].value;
@@ -941,7 +924,11 @@ class BacnetClient extends EventEmitter {
             }
           } catch (e) {
             that.logOut("Unable to get device name: ", e);
+            reject(e);
           }
+        }
+        if (err) {
+          reject(err);
         }
       });
     });
@@ -995,6 +982,7 @@ class BacnetClient extends EventEmitter {
         device.setManualDiscoveryMode(false);
         let result = await that.scanDevice(device);
         device.setPointsList(result);
+        device.setLastSeen(Date.now());
         resolve(result);
       } catch (e) {
         that.logOut(`Error getting point list for ${device.getAddress().toString()} - ${device.getDeviceId()}: `, e);
@@ -1011,6 +999,7 @@ class BacnetClient extends EventEmitter {
           .scanDeviceManually(device)
           .then(function (result) {
             device.setPointsList(result);
+            device.setLastSeen(Date.now());
             resolve(result);
           })
           .catch(function (error) {
@@ -1615,280 +1604,232 @@ class BacnetClient extends EventEmitter {
     }
   }
 
-  buildJsonObject(device) {
+  async buildJsonTree() {
     let that = this;
-    let address = device.address;
-    let pointList = device.getPointsList();
-    let requestMutex = new Mutex();
-
-    return new Promise(function (resolve, reject) {
-      let promiseArray = [];
-      if (typeof pointList !== "undefined" && pointList.length > 0) {
-        pointList.forEach(function (point, pointListIndex) {
-          requestMutex.acquire().then(function (release) {
-            if (device.getIsInitialQuery()) {
-              that
-                ._readObjectLite(device, address, point.value.type, point.value.instance)
-                .then(function (result) {
-                  if (!result.error) {
-                    if (result.length > 0 && Array.isArray(result)) {
-                      promiseArray = result;
-                    } else {
-                      promiseArray.push(result);
-                    }
-                  }
-
-                  release();
-
-                  if (pointListIndex == pointList.length - 1) {
-                    device.setIsInitialQuery(false);
-                    that
-                      .buildResponse(promiseArray, device)
-                      .then(function () {
-                        that.lastNetworkPoll = Date.now();
-                        resolve({ deviceList: that.deviceList, pointList: that.networkTree });
-                      })
-                      .catch(function (e) {
-                        that.logOut("Error while building json object: ", e);
-                        reject(e);
-                      });
-                  }
-                })
-                .catch(function (e) {
-                  release();
-                  that.logOut("_readObjectLite error: ", e);
-
-                  if (pointListIndex == pointList.length - 1) {
-                    device.setIsInitialQuery(false);
-                    that
-                      .buildResponse(promiseArray, device)
-                      .then(function () {
-                        that.lastNetworkPoll = Date.now();
-                        resolve({ deviceList: that.deviceList, pointList: that.networkTree });
-                      })
-                      .catch(function (e) {
-                        that.logOut("Error while building json object: ", e);
-                        reject(e);
-                      });
-                  }
-                });
-            } else {
-              that
-                ._readObjectFull(device, address, point.value.type, point.value.instance)
-                .then(function (result) {
-                  if (!result.error) {
-                    if (result.length > 0 && Array.isArray(result)) {
-                      promiseArray = result;
-                    } else {
-                      promiseArray.push(result);
-                    }
-                  }
-
-                  release();
-
-                  if (pointListIndex == pointList.length - 1) {
-                    that
-                      .buildResponse(promiseArray, device)
-                      .then(function () {
-                        that.lastNetworkPoll = Date.now();
-                        resolve({ deviceList: that.deviceList, pointList: that.networkTree });
-                      })
-                      .catch(function (e) {
-                        that.logOut("Error while building json object: ", e);
-                        reject(e);
-                      });
-                  }
-                })
-                .catch(function (e) {
-                  release();
-                  that.logOut("_readObjectFull error: ", e);
-
-                  if (pointListIndex == pointList.length - 1) {
-                    that
-                      .buildResponse(promiseArray, device)
-                      .then(function () {
-                        that.lastNetworkPoll = Date.now();
-                        resolve({ deviceList: that.deviceList, pointList: that.networkTree });
-                      })
-                      .catch(function (e) {
-                        that.logOut("Error while building json object: ", e);
-                        reject(e);
-                      });
-                  }
-                });
-            }
-          });
-        });
-      } else {
-        reject("Unable to build network tree, empty point list");
+    that.buildJsonInProgress = true;
+    for (let i = 0; i < that.deviceList.length; i++) {
+      try {
+        let device = that.deviceList[i];
+        await that.buildJsonObject(device);
+      } catch (e) {
+        that.logOut("buildJsonTree error: ", e);
       }
-    });
+    }
+
+    that.buildJsonInProgress = false;
+  }
+
+
+  async buildJsonObject(device) {
+    try {
+      const address = device.address;
+      const pointList = device.getPointsList();
+      const requestMutex = new Mutex();
+      const promiseArray = [];
+
+      if (typeof pointList === "undefined" || pointList.length === 0) {
+        throw new Error("Unable to build network tree, empty point list");
+      }
+
+      for (const point of pointList) {
+        await requestMutex.acquire();
+
+        let result;
+        if (device.getIsInitialQuery()) {
+          result = await this._readObjectLite(device, address, point.value.type, point.value.instance);
+        } else {
+          result = await this._readObjectFull(device, address, point.value.type, point.value.instance);
+        }
+
+        if (!result.error) {
+          device.setLastSeen(Date.now());
+          if (result.length > 0 && Array.isArray(result)) {
+            promiseArray.push(...result);
+          } else {
+            promiseArray.push(result);
+          }
+        }
+
+        requestMutex.release();
+      }
+
+      await this.buildResponse(promiseArray, device);
+      this.lastNetworkPoll = Date.now();
+
+      return { deviceList: this.deviceList, pointList: this.networkTree };
+    } catch (error) {
+      this.logOut("Error while building json object: ", error);
+      throw error;
+    }
   }
 
   // Builds response object for a fully qualified
   buildResponse(fullObjects, device) {
     let that = this;
-    const reg = /[$#\/\\+]/gi;
+    const reg = /[$#\/\\+,]/gi;
     return new Promise(function (resolve, reject) {
-      let deviceKey =
-        typeof device.getAddress() == "object"
-          ? device.getAddress().address + "-" + device.getDeviceId()
-          : device.getAddress() + "-" + device.getDeviceId();
-      let values = that.networkTree[deviceKey] ? that.networkTree[deviceKey] : {};
-      for (let i = 0; i < fullObjects.length; i++) {
-        let obj = fullObjects[i];
-        let successfulResult = !obj.error ? obj.value : null;
-        if (successfulResult) {
-          successfulResult.values.forEach(function (pointProperty, pointPropertyIndex) {
-            if (!pointProperty.objectId && successfulResult.objectId && !pointProperty.values && successfulResult.values) {
-              pointProperty = successfulResult;
-            }
+      try {
+        let deviceKey =
+          typeof device.getAddress() == "object"
+            ? device.getAddress().address + "-" + device.getDeviceId()
+            : device.getAddress() + "-" + device.getDeviceId();
+        let values = that.networkTree[deviceKey] ? that.networkTree[deviceKey] : {};
+        for (let i = 0; i < fullObjects.length; i++) {
+          let obj = fullObjects[i];
+          let successfulResult = !obj.error ? obj.value : null;
+          if (successfulResult) {
+            successfulResult.values.forEach(function (pointProperty, pointPropertyIndex) {
+              if (!pointProperty.objectId && successfulResult.objectId && !pointProperty.values && successfulResult.values) {
+                pointProperty = successfulResult;
+              }
 
-            let currobjectId = pointProperty.objectId.type;
-            let bac_obj = that.getObjectType(currobjectId);
-            let objectName = that._findValueById(pointProperty.values, baEnum.PropertyIdentifier.OBJECT_NAME);
-            let objectType = pointProperty.objectId.type;
+              let currobjectId = pointProperty.objectId.type;
+              let bac_obj = that.getObjectType(currobjectId);
+              let objectName = that._findValueById(pointProperty.values, baEnum.PropertyIdentifier.OBJECT_NAME);
+              let objectType = pointProperty.objectId.type;
 
-            let objectId;
-            if (objectName !== null && typeof objectName == "string") {
-              objectName = objectName.replace(reg, "");
-              objectId = objectName + "_" + bac_obj + "_" + pointProperty.objectId.instance;
+              let objectId;
+              if (objectName !== null && typeof objectName == "string") {
+                objectName = objectName.replace(reg, "");
+                objectId = objectName + "_" + bac_obj + "_" + pointProperty.objectId.instance;
 
-              try {
-                pointProperty.values.forEach(function (object, objectIndex) {
-                  //checks for error code json structure, returned for invalid bacnet requests
-                  if (object && object.value && !object.value.errorClass) {
-                    if (!values[objectId]) values[objectId] = {};
-                    values[objectId].meta = {
-                      objectId: pointProperty.objectId,
-                    };
+                try {
+                  pointProperty.values.forEach(function (object, objectIndex) {
+                    //checks for error code json structure, returned for invalid bacnet requests
+                    if (object && object.value && !object.value.errorClass) {
+                      if (!values[objectId]) values[objectId] = {};
+                      values[objectId].meta = {
+                        objectId: pointProperty.objectId,
+                      };
 
-                    switch (object.id) {
-                      case baEnum.PropertyIdentifier.PRESENT_VALUE:
-                        if (object.value[0] && object.value[0].value !== "undefined" && object.value[0].value !== null) {
-                          //check for binary object type
-                          if (objectType == 3 || objectType == 4 || objectType == 5) {
-                            if (object.value[0].value == 0) {
-                              values[objectId].presentValue = false;
-                            } else if (object.value[0].value == 1) {
-                              values[objectId].presentValue = true;
-                            }
-                          } else if (objectType == 40) {
-                            //character string
-                            values[objectId].presentValue = object.value[0].value;
-                          } else if (objectType == 13 || objectType == 14 || objectType == 19) {
-                            //check for MSV MSI MSO - for enum state text
-                            if (values[objectId].stateTextArray && values[objectId].stateTextArray.length > 0) {
+                      switch (object.id) {
+                        case baEnum.PropertyIdentifier.PRESENT_VALUE:
+                          if (object.value[0] && object.value[0].value !== "undefined" && object.value[0].value !== null) {
+                            //check for binary object type
+                            if (objectType == 3 || objectType == 4 || objectType == 5) {
                               if (object.value[0].value == 0) {
-                                values[objectId].presentValue = values[objectId].stateTextArray[object.value[0].value].value;
-                              } else if (object.value[0].value !== 0) {
-                                values[objectId].presentValue =
-                                  values[objectId].stateTextArray[object.value[0].value - 1].value;
+                                values[objectId].presentValue = false;
+                              } else if (object.value[0].value == 1) {
+                                values[objectId].presentValue = true;
+                              }
+                            } else if (objectType == 40) {
+                              //character string
+                              values[objectId].presentValue = object.value[0].value;
+                            } else if (objectType == 13 || objectType == 14 || objectType == 19) {
+                              //check for MSV MSI MSO - for enum state text
+                              if (values[objectId].stateTextArray && values[objectId].stateTextArray.length > 0) {
+                                if (object.value[0].value == 0) {
+                                  values[objectId].presentValue = values[objectId].stateTextArray[object.value[0].value].value;
+                                } else if (object.value[0].value !== 0) {
+                                  values[objectId].presentValue =
+                                    values[objectId].stateTextArray[object.value[0].value - 1].value;
+                                }
+                              }
+                            } else if (objectType !== 8) {
+                              values[objectId].presentValue = roundDecimalPlaces(object.value[0].value, 2);
+                            }
+                          }
+                          values[objectId].meta.arrayIndex = object.index;
+                          break;
+                        case baEnum.PropertyIdentifier.DESCRIPTION:
+                          if (object.value[0]) values[objectId].description = object.value[0].value;
+                          break;
+                        case baEnum.PropertyIdentifier.UNITS:
+                          if (object.value[0] && object.value[0].value) values[objectId].units = getUnit(object.value[0].value);
+                          break;
+                        case baEnum.PropertyIdentifier.OBJECT_NAME:
+                          if (object.value[0] && object.value[0].value) {
+                            values[objectId].objectName = object.value[0].value.replace(reg, "");
+                            if (!values[objectId].displayName) {
+                              values[objectId].displayName = object.value[0].value.replace(reg, "");
+                            }
+                          }
+                          break;
+                        case baEnum.PropertyIdentifier.OBJECT_TYPE:
+                          if (object.value[0] && object.value[0].value) values[objectId].objectType = object.value[0].value;
+                          break;
+                        case baEnum.PropertyIdentifier.PROPERTY_LIST:
+                          if (object.value) values[objectId].propertyList = that.mapPropsToArray(object.value);
+                          break;
+                        case baEnum.PropertyIdentifier.SYSTEM_STATUS:
+                          if (object.value[0]) {
+                            values[objectId].systemStatus = that.getPROP_SYSTEM_STATUS(object.value[0].value);
+                          }
+                          break;
+                        case baEnum.PropertyIdentifier.MODIFICATION_DATE:
+                          if (object.value[0]) {
+                            values[objectId].modificationDate = object.value[0].value;
+                          }
+                          break;
+                        case baEnum.PropertyIdentifier.PROGRAM_STATE:
+                          if (object.value[0]) {
+                            values[objectId].programState = that.getPROP_PROGRAM_STATE(object.value[0].value);
+                          }
+                          break;
+                        case baEnum.PropertyIdentifier.RECORD_COUNT:
+                          if (object.value[0]) {
+                            values[objectId].recordCount = object.value[0].value;
+                          }
+                          break;
+                        case baEnum.PropertyIdentifier.PRIORITY_ARRAY:
+                          if (object.value.length > 0) {
+                            values[objectId].hasPriorityArray = true;
+                          }
+                          break;
+                        case baEnum.PropertyIdentifier.STATE_TEXT:
+                          if (object.value) {
+                            values[objectId].stateTextArray = object.value;
+                            if (
+                              typeof values[objectId].presentValue == "number" &&
+                              values[objectId].presentValue !== null &&
+                              values[objectId].presentValue !== undefined
+                            ) {
+                              const tempIndex = values[objectId].presentValue;
+                              if (tempIndex == 0) {
+                                values[objectId].presentValue = values[objectId].stateTextArray[tempIndex].value;
+                              } else if (tempIndex !== 0) {
+                                values[objectId].presentValue = values[objectId].stateTextArray[tempIndex - 1].value;
                               }
                             }
-                          } else if (objectType !== 8) {
-                            values[objectId].presentValue = roundDecimalPlaces(object.value[0].value, 2);
                           }
-                        }
-                        values[objectId].meta.arrayIndex = object.index;
-                        break;
-                      case baEnum.PropertyIdentifier.DESCRIPTION:
-                        if (object.value[0]) values[objectId].description = object.value[0].value;
-                        break;
-                      case baEnum.PropertyIdentifier.UNITS:
-                        if (object.value[0] && object.value[0].value)
-                          values[objectId].units = getUnit(object.value[0].value);
-                        break;
-                      case baEnum.PropertyIdentifier.OBJECT_NAME:
-                        if (object.value[0] && object.value[0].value) {
-                          values[objectId].objectName = object.value[0].value.replace(reg, "");
-                          if (!values[objectId].displayName) {
-                            values[objectId].displayName = object.value[0].value.replace(reg, "");
-                          }
-                        }
-                        break;
-                      case baEnum.PropertyIdentifier.OBJECT_TYPE:
-                        if (object.value[0] && object.value[0].value) values[objectId].objectType = object.value[0].value;
-                        break;
-                      case baEnum.PropertyIdentifier.PROPERTY_LIST:
-                        if (object.value) values[objectId].propertyList = that.mapPropsToArray(object.value);
-                        break;
-                      case baEnum.PropertyIdentifier.SYSTEM_STATUS:
-                        if (object.value[0]) {
-                          values[objectId].systemStatus = that.getPROP_SYSTEM_STATUS(object.value[0].value);
-                        }
-                        break;
-                      case baEnum.PropertyIdentifier.MODIFICATION_DATE:
-                        if (object.value[0]) {
-                          values[objectId].modificationDate = object.value[0].value;
-                        }
-                        break;
-                      case baEnum.PropertyIdentifier.PROGRAM_STATE:
-                        if (object.value[0]) {
-                          values[objectId].programState = that.getPROP_PROGRAM_STATE(object.value[0].value);
-                        }
-                        break;
-                      case baEnum.PropertyIdentifier.RECORD_COUNT:
-                        if (object.value[0]) {
-                          values[objectId].recordCount = object.value[0].value;
-                        }
-                        break;
-                      case baEnum.PropertyIdentifier.PRIORITY_ARRAY:
-                        if (object.value.length > 0) {
-                          values[objectId].hasPriorityArray = true;
-                        }
-                        break;
-                      case baEnum.PropertyIdentifier.STATE_TEXT:
-                        if (object.value) {
-                          values[objectId].stateTextArray = object.value;
-                          if (
-                            typeof values[objectId].presentValue == "number" &&
-                            values[objectId].presentValue !== null &&
-                            values[objectId].presentValue !== undefined
-                          ) {
-                            const tempIndex = values[objectId].presentValue;
-                            if (tempIndex == 0) {
-                              values[objectId].presentValue = values[objectId].stateTextArray[tempIndex].value;
-                            } else if (tempIndex !== 0) {
-                              values[objectId].presentValue = values[objectId].stateTextArray[tempIndex - 1].value;
+                          break;
+                        case baEnum.PropertyIdentifier.VENDOR_NAME:
+                          if (object.value) {
+                            if (object.value[0].value && typeof object.value[0].value == "string") {
+                              values[objectId].vendorName = object.value[0].value;
                             }
                           }
-                        }
-                        break;
-                      case baEnum.PropertyIdentifier.VENDOR_NAME:
-                        if (object.value) {
-                          if (object.value[0].value && typeof object.value[0].value == "string") {
-                            values[objectId].vendorName = object.value[0].value;
-                          }
-                        }
-                        break;
+                          break;
+                      }
                     }
-                  }
-                  if (
-                    pointPropertyIndex == successfulResult.values.length - 1 &&
-                    objectIndex == pointProperty.values.length - 1 &&
-                    i == fullObjects.length - 1
-                  ) {
-                    that.networkTree[deviceKey] = values;
-                    resolve(that.networkTree);
-                  }
-                });
-              } catch (e) {
-                that.logOut("issue resolving bacnet payload, see error:  ", e);
-                reject(e);
+                    if (
+                      pointPropertyIndex == successfulResult.values.length - 1 &&
+                      objectIndex == pointProperty.values.length - 1 &&
+                      i == fullObjects.length - 1
+                    ) {
+                      that.networkTree[deviceKey] = values;
+                      resolve(that.networkTree);
+                    }
+                  });
+                } catch (e) {
+                  that.logOut("issue resolving bacnet payload, see error:  ", e);
+                  reject(e);
+                }
               }
+            });
+          } else {
+            //error found in point property
+            if (i == fullObjects.length - 1) {
+              that.networkTree[deviceKey] = values;
+              resolve(that.networkTree);
             }
-          });
-        } else {
-          //error found in point property
-          if (i == fullObjects.length - 1) {
-            that.networkTree[deviceKey] = values;
-            resolve(that.networkTree);
           }
         }
+        that.networkTree[deviceKey] = values;
+        resolve(that.networkTree);
+      } catch (e) {
+        reject(e);
       }
-      that.networkTree[deviceKey] = values;
-      resolve(that.networkTree);
     });
   }
 

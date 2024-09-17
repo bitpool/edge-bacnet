@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.4.6] - 17-09-2024
+### Summary
+
+Minor fixes.
+
+Wrapped updateDeviceName function with promise to avoid network conflict for clients. 
+
+Fixed UI styling bugs, primarily with long names and numbers wrapping.
+
+Added ability to set device name of dummy MSTP routers. 
+
+Improved error handling for querying devices and building point json structures.
+
+Fixed read node point export bug.
+
+Excluded commas via point name conditioning 
+
+Fixed gateway port assignment bug - ability to communicate on different ports working now.
+
+More async / await refactoring.
+
+
 ## [1.4.5] - 16-08-2024
 ### Summary
 

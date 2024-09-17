@@ -7,11 +7,16 @@ const DEFAULT_BACNET_PORT = 47808;
 class Transport extends events_1.EventEmitter {
     constructor(settings) {
         super();
-        this._lastSendMessages = {};
-        this._settings = settings;
-        this._server = (0, dgram_1.createSocket)({ type: 'udp4', reuseAddr: true });
-        this._server.on('message', (msg, rinfo) => this.emit('message', msg, rinfo.address));
-        this._server.on('error', (err) => this.emit('message', err));
+        try {
+            this._lastSendMessages = {};
+            this._settings = settings;
+            this._server = (0, dgram_1.createSocket)({ type: 'udp4', reuseAddr: true });
+            this._server.on('message', (msg, rinfo) => this.emit('message', msg, rinfo.address));
+            this._server.on('error', (err) => this.emit('message', err));
+
+        } catch (e) {
+            //console.log("Transport constructor error: ", e);
+        }
     }
     getBroadcastAddress() {
         return this._settings.broadcastAddress;
@@ -33,9 +38,9 @@ class Transport extends events_1.EventEmitter {
                 delete this._lastSendMessages[messageKey];
             }, 10000); // delete after 10s, hopefully all cases are handled by that
         }
-        const [address, port] = receiver.split(':');
-        this._server.send(buffer, 0, offset, port || DEFAULT_BACNET_PORT, address);
 
+        const [address, port] = receiver.split(':');
+        this._server.send(buffer, 0, offset, this._settings.port || DEFAULT_BACNET_PORT, address);
     }
     open() {
         this._server.bind(this._settings.port, this._settings.interface, () => {

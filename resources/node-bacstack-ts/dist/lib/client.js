@@ -41,6 +41,7 @@ class Client extends events_1.EventEmitter {
         this._lastSequenceNumber = 0;
         this._segmentStore = [];
         options = options || {};
+
         this._settings = {
             port: options.port || 47808,
             interface: options.interface,
@@ -48,11 +49,13 @@ class Client extends events_1.EventEmitter {
             broadcastAddress: options.broadcastAddress || '255.255.255.255',
             apduTimeout: options.apduTimeout || 3000
         };
+
         this._transport = this._settings.transport || new transport_1.Transport({
             port: this._settings.port,
             interface: this._settings.interface,
             broadcastAddress: this._settings.broadcastAddress
         });
+
         // Setup code
         this._transport.on('message', this._receiveData.bind(this));
         this._transport.on('error', this._receiveError.bind(this));

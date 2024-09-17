@@ -46,10 +46,17 @@
 }
 .pointLabel {
   font-weight: 400;
+  text-wrap: pretty;
+  display: inline-block;
+  max-width: 85%;
 }
 .deviceLabel {
   color: #1F2731;
   font-weight: 400;
+  text-wrap: pretty;
+}
+.deviceLabelSpan {
+  vertical-align: bottom;
 }
 .removeAllButton {
   float: right;
@@ -248,6 +255,7 @@
   flex-wrap: nowrap;
   justify-content: space-between;
   height: 20px;
+  min-width: max-content;
 }
 .msgTypeDiv {
   display: flex;
@@ -262,8 +270,11 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.buttonGroup {
-  padding-left: 7px;
+.bp-readNode-progressbar {
+  height: 20px !important;
+}
+.bp-networktree-tab {
+  /* min-width: 590px; */
 }
 #read-readList-tab {
   display: flex;
@@ -296,6 +307,7 @@
   border-radius: 50%;
   display: inline-block;
   margin-right: 5px;
+  vertical-align: middle;
 }
 .dotOnline {
   background-color: #63B686;
@@ -405,7 +417,7 @@
     font-size: 1rem !important;
   }
   .p-dialog-content {
-    padding: 0.5em 0.75rem 0.5rem 0.75rem;
+    padding: 0.5em 0.75rem 0.5rem 0.75rem !important;
 
     & label {
       font-size: 0.9rem !important;
@@ -500,14 +512,11 @@
   input[type=checkbox]:focus {
     outline: none;
   }
-
 }
-
 .bp-checkbox {
     accent-color: white;
     bottom: -3px;
 }
-
 .bp-import-buttons {
   margin-top: 25px;
   label {
@@ -527,10 +536,10 @@
   }
 }
 
-.red-ui-tab {
+/* .red-ui-tab {
   border-top-left-radius: 5px;
   border-top-right-radius: 5px;
-}
+} */
 
 .node-input-deviceIdRangeMatrix-container-row {
   border-radius: 10px;

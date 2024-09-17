@@ -63,9 +63,43 @@ class treeBuilder {
         // Check if the device object exists and the device name is valid
         if (deviceObject) {
             await this.processDevicePoints(device, deviceObject, deviceName, ipAddress, deviceId, index);
+
+            //delete dummy object if all conditions satisfied
+            if (deviceName !== null) {
+                if (deviceId !== null) {
+                    let lastIndex = deviceName.lastIndexOf(deviceId);
+                    if (lastIndex) {
+                        let formattedName = deviceName.substring(0, lastIndex);
+                        formattedName = `${formattedName.trim()}_Device_${deviceId}`;
+                        if (
+                            this.networkTree[deviceKey][formattedName] &&
+                            Object.keys(this.networkTree[deviceKey][formattedName]).length > 0 &&
+                            this.networkTree[deviceKey]["device"]
+                        ) {
+                            delete this.networkTree[deviceKey]["device"];
+                        }
+                    }
+                }
+            }
+
         } else {
-            //console.log("Unable to find device object");
+            //invalid ip object, likely dumb mstp router
+            if (device.getIsDumbMstpRouter()) {
+                //update dumb mstp router name
+                await this.updateDumbMstpRouterName(deviceName, ipAddress, deviceId);
+            }
         }
+    }
+
+    async updateDumbMstpRouterName(deviceName, ipAddress, deviceId) {
+        return new Promise((resolve, reject) => {
+            let listDeviceIndex = this.renderList.findIndex(item => item.deviceId == deviceId && item.ipAddr == ipAddress && item.isDumbMstpRouter == true);
+            if (listDeviceIndex !== -1) {
+                this.renderList[listDeviceIndex].label = deviceName;
+                this.renderList[listDeviceIndex].data = deviceName;
+            }
+            resolve();
+        });
     }
 
     /**
@@ -88,8 +122,9 @@ class treeBuilder {
 
             // Check if the device already exists in the renderList
             const existingDeviceIndex = this.renderList.findIndex(item => item.deviceId === deviceId && item.ipAddr === ipAddress);
-
             if (existingDeviceIndex === -1) { // Device not found, add new entry
+                let isDumbMstpRouter = false;
+                if (device.getIsDumbMstpRouter() && deviceId == null) isDumbMstpRouter = true;
                 const rootFolder = {
                     key: index,
                     label: displayName,
@@ -103,6 +138,7 @@ class treeBuilder {
                     deviceId,
                     isMstpDevice: device.getIsMstpDevice(),
                     initialName: device.getDeviceName(),
+                    isDumbMstpRouter: isDumbMstpRouter,
                 };
 
                 // Add the root folder to the render list
@@ -112,10 +148,10 @@ class treeBuilder {
     }
 
     addEmptyIpRootDevice(childDevice) {
-
         const ipAddress = this.getDeviceIpAddress(childDevice);
 
-        let deviceIndex = this.deviceList.findIndex(ele => ele.address === ipAddress && ele.deviceId === null && ele.deviceName === ipAddress && ele.displayName === ipAddress);
+        //let deviceIndex = this.deviceList.findIndex(ele => ele.address === ipAddress && ele.deviceId === null && ele.deviceName === ipAddress && ele.displayName === ipAddress);
+        let deviceIndex = this.deviceList.findIndex(ele => ele.address === ipAddress && ele.deviceId === null);
 
         if (deviceIndex === -1) {
             let newDevice = {
@@ -140,6 +176,7 @@ class treeBuilder {
                 protocolServicesSupported: [],
                 isProtocolServicesSet: false,
                 isInitialQuery: true,
+                isDumbMstpRouter: true,
             };
 
             let newBacnetDevice = new BacnetDevice(true, newDevice);
@@ -287,7 +324,6 @@ class treeBuilder {
     updateRenderList(children, device, deviceName, index, ipAddress, deviceId) {
         // Create the folder structure for the device
         const folderJson = this.createFolderJson(children, device.hasChildDevices(), deviceId);
-
         if (!this.renderList) {
             this.renderList = [];
         }
