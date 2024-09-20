@@ -1637,6 +1637,7 @@ class BacnetClient extends EventEmitter {
         let result;
         if (device.getIsInitialQuery()) {
           result = await this._readObjectLite(device, address, point.value.type, point.value.instance);
+          device.setIsInitialQuery(false);
         } else {
           result = await this._readObjectFull(device, address, point.value.type, point.value.instance);
         }

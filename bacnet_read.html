@@ -405,7 +405,7 @@
                     },
                     exportPointListCsv() {
                         let app = this;
-                        let csvContent = "data:text/csv;charset=utf-8,ipAddress,deviceId,deviceName,pointName,objectType" + "\r\n";
+                        let csvContent = "ipAddress,deviceId,deviceName,pointName,objectType" + "\r\n";
                         const keys = Object.keys(app.pointList);
                         for (key in keys) {
                             const guid = keys[key];
@@ -437,9 +437,10 @@
 
                                     if (parseInt(point) == points.length - 1 && parseInt(key) == keys.length - 1) {
                                         // last iteration
-                                        var encodedUri = encodeURI(csvContent);
+                                        var csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
                                         var link = document.createElement("a");
-                                        link.setAttribute("href", encodedUri);
+                                        var url = URL.createObjectURL(csvBlob);
+                                        link.setAttribute("href", url);
                                         link.setAttribute("download", "pointslist.csv");
                                         document.body.appendChild(link);
                                         link.click();
@@ -448,9 +449,10 @@
                             } else {
                                 if (parseInt(key) == keys.length - 1) {
                                     // last iteration
-                                    var encodedUri = encodeURI(csvContent);
+                                    var csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
                                     var link = document.createElement("a");
-                                    link.setAttribute("href", encodedUri);
+                                    var url = URL.createObjectURL(csvBlob);
+                                    link.setAttribute("href", url);
                                     link.setAttribute("download", "pointslist.csv");
                                     document.body.appendChild(link);
                                     link.click();
