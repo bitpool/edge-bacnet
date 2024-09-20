@@ -1,4 +1,10 @@
 # Changelog
+## [1.4.7] - 20-09-2024
+### Summary
+
+Bug hot fixes:
+- Full data model was not getting built, only lite (presentValue and objectName). 2nd iteration now builds complete model
+- Export CSV pointlist was hitting a file limit due to URL string size limit. Moved to blob object.
 
 ## [1.4.6] - 17-09-2024
 ### Summary
