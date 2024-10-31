@@ -536,12 +536,7 @@
   }
 }
 
-/* .red-ui-tab {
-  border-top-left-radius: 5px;
-  border-top-right-radius: 5px;
-} */
-
-.node-input-deviceIdRangeMatrix-container-row {
+.node-input-deviceIdRangeMatrix-container-row, .node-input-portRangeMatrix-container-row {
   border-radius: 10px;
 
   .red-ui-editableList-header {

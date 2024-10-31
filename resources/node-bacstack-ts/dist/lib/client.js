@@ -42,8 +42,11 @@ class Client extends events_1.EventEmitter {
         this._segmentStore = [];
         options = options || {};
 
+        this.portRangeMatrix = options.portRangeMatrix;
+
         this._settings = {
             port: options.port || 47808,
+            portRangeMatrix: this.portRangeMatrix || [47808],
             interface: options.interface,
             transport: options.transport,
             broadcastAddress: options.broadcastAddress || '255.255.255.255',
@@ -53,7 +56,8 @@ class Client extends events_1.EventEmitter {
         this._transport = this._settings.transport || new transport_1.Transport({
             port: this._settings.port,
             interface: this._settings.interface,
-            broadcastAddress: this._settings.broadcastAddress
+            broadcastAddress: this._settings.broadcastAddress,
+            portRangeMatrix: this._settings.portRangeMatrix
         });
 
         // Setup code
@@ -104,15 +108,15 @@ class Client extends events_1.EventEmitter {
     _processAbort(invokeId, reason) {
         this._invokeCallback(invokeId, new Error('BacnetAbort - Reason:' + reason));
     }
-    _segmentAckResponse(receiver, negative, server, originalInvokeId, sequencenumber, actualWindowSize) {
+    _segmentAckResponse(receiver, port, negative, server, originalInvokeId, sequencenumber, actualWindowSize) {
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE, receiver, null, DEFAULT_HOP_COUNT, baEnum.NetworkLayerMessageType.WHO_IS_ROUTER_TO_NETWORK, 0);
         baApdu.encodeSegmentAck(buffer, baEnum.PduTypes.SEGMENT_ACK | (negative ? baEnum.PduSegAckBits.NEGATIVE_ACK : 0) | (server ? baEnum.PduSegAckBits.SERVER : 0), originalInvokeId, sequencenumber, actualWindowSize);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         var sendAddress = typeof (receiver) != 'string' ? receiver.ip : receiver;
-        this.sendBvlc(sendAddress, buffer);
+        this.sendBvlc(sendAddress, port, buffer);
     }
-    _performDefaultSegmentHandling(sender, adr, type, service, invokeId, maxSegments, maxApdu, sequencenumber, first, moreFollows, buffer, offset, length) {
+    _performDefaultSegmentHandling(sender, adr, type, service, invokeId, maxSegments, maxApdu, sequencenumber, first, moreFollows, buffer, offset, length, port) {
         if (first) {
             this._segmentStore = [];
             type &= ~baEnum.PduConReqBits.SEGMENTED_MESSAGE;
@@ -138,7 +142,7 @@ class Client extends events_1.EventEmitter {
             const apduBuffer = Buffer.concat(this._segmentStore);
             this._segmentStore = [];
             type &= ~baEnum.PduConReqBits.SEGMENTED_MESSAGE;
-            this._handlePdu(adr, type, apduBuffer, 0, apduBuffer.length);
+            this._handlePdu(adr, type, apduBuffer, 0, apduBuffer.length, port);
         }
     }
     _handleSequenceTimeout(invokeId) {
@@ -148,13 +152,13 @@ class Client extends events_1.EventEmitter {
         this._sequenceTimeout = setTimeout(() => { this._lastSequenceNumber = 0 }, this._settings.apduTimeout);
     }
 
-    _processSegment(receiver, type, service, invokeId, maxSegments, maxApdu, server, sequencenumber, proposedWindowNumber, buffer, offset, length) {
+    _processSegment(receiver, type, service, invokeId, maxSegments, maxApdu, server, sequencenumber, proposedWindowNumber, buffer, offset, length, port) {
         let first = false;
         if (sequencenumber === 0 && this._lastSequenceNumber === 0) {
             first = true;
         } else {
             if (sequencenumber !== this._lastSequenceNumber + 1) {
-                return this._segmentAckResponse(receiver, true, server, invokeId, this._lastSequenceNumber, proposedWindowNumber);
+                return this._segmentAckResponse(receiver, port, true, server, invokeId, this._lastSequenceNumber, proposedWindowNumber);
             }
         }
         this._lastSequenceNumber = sequencenumber;
@@ -164,9 +168,9 @@ class Client extends events_1.EventEmitter {
             this._lastSequenceNumber = 0;
         }
         if ((sequencenumber % proposedWindowNumber) === 0 || !moreFollows) {
-            this._segmentAckResponse(receiver, false, server, invokeId, sequencenumber, proposedWindowNumber);
+            this._segmentAckResponse(receiver, port, false, server, invokeId, sequencenumber, proposedWindowNumber);
         }
-        this._performDefaultSegmentHandling(this, receiver, type, service, invokeId, maxSegments, maxApdu, sequencenumber, first, moreFollows, buffer, offset, length);
+        this._performDefaultSegmentHandling(this, receiver, type, service, invokeId, maxSegments, maxApdu, sequencenumber, first, moreFollows, buffer, offset, length, port);
     }
 
     _processConfirmedServiceRequest(address, type, service, maxSegments, maxApdu, invokeId, buffer, offset, length, srcAddress, destAddress) {
@@ -267,7 +271,7 @@ class Client extends events_1.EventEmitter {
         }
     }
 
-    _processUnconfirmedServiceRequest(address, type, service, buffer, offset, length, addressObject) {
+    _processUnconfirmedServiceRequest(address, type, service, buffer, offset, length, addressObject, port) {
         let result;
         debug('Handle this._processUnconfirmedServiceRequest');
         if (service === baEnum.UnconfirmedServiceChoice.I_AM) {
@@ -291,9 +295,10 @@ class Client extends events_1.EventEmitter {
              *   console.log('address: ', device.address, ' - deviceId: ', device.deviceId, ' - maxApdu: ', device.maxApdu, ' - segmentation: ', device.segmentation, ' - vendorId: ', device.vendorId);
              * });
              */
+
             var net = typeof (addressObject) == 'object' ? addressObject.net : undefined;
             var adr = typeof (addressObject) == 'object' ? addressObject.adr : undefined;
-            this.emit('iAm', { address: address, deviceId: result.deviceId, maxApdu: result.maxApdu, segmentation: result.segmentation, vendorId: result.vendorId, 'net': net, 'adr': adr });
+            this.emit('iAm', { address: address, port: port, deviceId: result.deviceId, maxApdu: result.maxApdu, segmentation: result.segmentation, vendorId: result.vendorId, 'net': net, 'adr': adr });
         } else if (service === baEnum.UnconfirmedServiceChoice.WHO_IS) {
             result = baServices.whoIs.decode(buffer, offset, length);
             if (!result) return debug('Received invalid WhoIs message');
@@ -377,13 +382,13 @@ class Client extends events_1.EventEmitter {
         }
     }
 
-    _handlePdu(address, type, buffer, offset, length, addressObject, destAddressObject) {
+    _handlePdu(address, type, buffer, offset, length, addressObject, destAddressObject, port) {
         let result;
         // Handle different PDU types
         switch (type & baEnum.PDU_TYPE_MASK) {
             case baEnum.PduTypes.UNCONFIRMED_REQUEST:
                 result = baApdu.decodeUnconfirmedServiceRequest(buffer, offset);
-                this._processUnconfirmedServiceRequest(address, result.type, result.service, buffer, offset + result.len, length - result.len, addressObject);
+                this._processUnconfirmedServiceRequest(address, result.type, result.service, buffer, offset + result.len, length - result.len, addressObject, port);
                 break;
             case baEnum.PduTypes.SIMPLE_ACK:
                 result = baApdu.decodeSimpleAck(buffer, offset);
@@ -396,7 +401,7 @@ class Client extends events_1.EventEmitter {
                 if ((type & baEnum.PduConReqBits.SEGMENTED_MESSAGE) === 0) {
                     this._invokeCallback(result.invokeId, null, { result: result, buffer: buffer, offset: offset + result.len, length: length - result.len });
                 } else {
-                    this._processSegment(addressObject, result.type, result.service, result.invokeId, baEnum.MaxSegmentsAccepted.SEGMENTS_0, baEnum.MaxApduLengthAccepted.OCTETS_50, false, result.sequencenumber, result.proposedWindowNumber, buffer, offset + result.len, length - result.len);
+                    this._processSegment(addressObject, result.type, result.service, result.invokeId, baEnum.MaxSegmentsAccepted.SEGMENTS_0, baEnum.MaxApduLengthAccepted.OCTETS_50, false, result.sequencenumber, result.proposedWindowNumber, buffer, offset + result.len, length - result.len, port);
                 }
                 break;
             case baEnum.PduTypes.SEGMENT_ACK:
@@ -418,7 +423,7 @@ class Client extends events_1.EventEmitter {
                 if ((type & baEnum.PduConReqBits.SEGMENTED_MESSAGE) === 0) {
                     this._processConfirmedServiceRequest(address, result.type, result.service, result.maxSegments, result.maxApdu, result.invokeId, buffer, offset + result.len, length - result.len, addressObject, destAddressObject);
                 } else {
-                    this._processSegment(address, result.type, result.service, result.invokeId, result.maxSegments, result.maxApdu, true, result.sequencenumber, result.proposedWindowNumber, buffer, offset + result.len, length - result.len);
+                    this._processSegment(address, result.type, result.service, result.invokeId, result.maxSegments, result.maxApdu, true, result.sequencenumber, result.proposedWindowNumber, buffer, offset + result.len, length - result.len, port);
                 }
                 break;
             default:
@@ -426,7 +431,7 @@ class Client extends events_1.EventEmitter {
                 break;
         }
     }
-    _handleNpdu(buffer, offset, msgLength, remoteAddress) {
+    _handleNpdu(buffer, offset, msgLength, remoteAddress, port) {
         // Check data length
         if (msgLength <= 0) return debug('No NPDU data -> Drop package');
         // Parse baNpdu header
@@ -455,9 +460,9 @@ class Client extends events_1.EventEmitter {
         msgLength -= result.len;
         if (msgLength <= 0) return debug('No APDU data -> Drop package');
         const apduType = baApdu.getDecodedType(buffer, offset);
-        this._handlePdu(remoteAddress, apduType, buffer, offset, msgLength, addressObject, destAddress);
+        this._handlePdu(remoteAddress, apduType, buffer, offset, msgLength, addressObject, destAddress, port);
     }
-    _receiveData(buffer, remoteAddress) {
+    _receiveData(buffer, remoteAddress, port) {
         // Check data length
         if (buffer.length < baEnum.BVLC_HEADER_LENGTH)
             return debug('Received invalid data -> Drop package');
@@ -467,7 +472,7 @@ class Client extends events_1.EventEmitter {
             return debug('Received invalid BVLC header -> Drop package');
         // Check BVLC function
         if (result.func === baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU || result.func === baEnum.BvlcResultPurpose.ORIGINAL_BROADCAST_NPDU || result.func === baEnum.BvlcResultPurpose.FORWARDED_NPDU) {
-            this._handleNpdu(buffer, result.len, buffer.length - result.len, remoteAddress);
+            this._handleNpdu(buffer, result.len, buffer.length - result.len, remoteAddress, port);
         }
         else {
             debug('Received unknown BVLC function -> Drop package');
@@ -542,7 +547,7 @@ class Client extends events_1.EventEmitter {
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE, receiver, null, DEFAULT_HOP_COUNT, baEnum.NetworkLayerMessageType.WHO_IS_ROUTER_TO_NETWORK, 0);
         baApdu.encodeUnconfirmedServiceRequest(buffer, baEnum.PduTypes.UNCONFIRMED_REQUEST, baEnum.UnconfirmedServiceChoice.WHO_IS);
         baServices.whoIs.encode(buffer, settings.lowLimit, settings.highLimit);
-        this.sendBvlc(receiver, buffer);
+        this.sendBvlc(receiver, this._settings.portRangeMatrix, buffer);
     }
     /**
      * The timeSync command sets the time of a target device.
@@ -555,14 +560,17 @@ class Client extends events_1.EventEmitter {
      *
      * client.timeSync('192.168.1.43', new Date());
      */
-    timeSync(address, dateTime) {
+    timeSync(addressObject, dateTime) {
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
+
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE, address);
         baApdu.encodeUnconfirmedServiceRequest(buffer, baEnum.PduTypes.UNCONFIRMED_REQUEST, baEnum.UnconfirmedServiceChoice.TIME_SYNCHRONIZATION);
         baServices.timeSync.encode(buffer, dateTime);
         const npduType = (address !== this._transport.getBroadcastAddress()) ? baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU : baEnum.BvlcResultPurpose.ORIGINAL_BROADCAST_NPDU;
         //baBvlc.encode(buffer.buffer, npduType, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
     }
     /**
      * The timeSyncUTC command sets the UTC time of a target device.
@@ -575,14 +583,16 @@ class Client extends events_1.EventEmitter {
      *
      * client.timeSyncUTC('192.168.1.43', new Date());
      */
-    timeSyncUTC(address, dateTime) {
+    timeSyncUTC(addressObject, dateTime) {
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE, address);
         baApdu.encodeUnconfirmedServiceRequest(buffer, baEnum.PduTypes.UNCONFIRMED_REQUEST, baEnum.UnconfirmedServiceChoice.UTC_TIME_SYNCHRONIZATION);
         baServices.timeSync.encode(buffer, dateTime);
         const npduType = (address !== this._transport.getBroadcastAddress()) ? baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU : baEnum.BvlcResultPurpose.ORIGINAL_BROADCAST_NPDU;
         //baBvlc.encode(buffer.buffer, npduType, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
     }
     /**
      * The readProperty command reads a single property of an object from a device.
@@ -606,8 +616,12 @@ class Client extends events_1.EventEmitter {
      *   console.log('value: ', value);
      * });
      */
-    readProperty(address, objectId, propertyId, options, next) {
+    readProperty(addressObject, objectId, propertyId, options, next) {
         next = next || options;
+
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
+
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -620,7 +634,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, type, baEnum.ConfirmedServiceChoice.READ_PROPERTY, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.readProperty.encode(buffer, objectId.type, objectId.instance, propertyId, settings.arrayIndex);
         baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err, data) => {
             try {
                 if (err)
@@ -662,8 +676,12 @@ class Client extends events_1.EventEmitter {
      *   console.log('error: ', err);
      * });
      */
-    writeProperty(address, objectId, propertyId, values, options, next) {
+    writeProperty(addressObject, objectId, propertyId, values, options, next) {
         next = next || options;
+
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
+
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -676,7 +694,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.WRITE_PROPERTY, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.writeProperty.encode(buffer, objectId.type, objectId.instance, propertyId, settings.arrayIndex, settings.priority, values);
         baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err) => next(err));
     }
     /**
@@ -705,8 +723,12 @@ class Client extends events_1.EventEmitter {
      *   console.log('value: ', value);
      * });
      */
-    readPropertyMultiple(address, propertiesArray, options, next) {
+    readPropertyMultiple(addressObject, propertiesArray, options, next) {
         next = next || options;
+
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
+
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -718,7 +740,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, type, baEnum.ConfirmedServiceChoice.READ_PROPERTY_MULTIPLE, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.readPropertyMultiple.encode(buffer, propertiesArray);
         baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err, data) => {
             try {
                 if (err)
@@ -766,8 +788,12 @@ class Client extends events_1.EventEmitter {
      *   console.log('error: ', err);
      * });
      */
-    writePropertyMultiple(address, values, options, next) {
+    writePropertyMultiple(addressObject, values, options, next) {
         next = next || options;
+
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
+
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -778,7 +804,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.WRITE_PROPERTY_MULTIPLE, settings.maxSegments, settings.maxApdu, settings.invokeId);
         baServices.writePropertyMultiple.encodeObject(buffer, values);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err) => next(err));
     }
     /**
@@ -801,8 +827,10 @@ class Client extends events_1.EventEmitter {
      *   console.log('error: ', err);
      * });
      */
-    deviceCommunicationControl(address, timeDuration, enableDisable, options, next) {
+    deviceCommunicationControl(addressObject, timeDuration, enableDisable, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -814,7 +842,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.DEVICE_COMMUNICATION_CONTROL, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.deviceCommunicationControl.encode(buffer, timeDuration, enableDisable, settings.password);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err) => next(err));
     }
     /**
@@ -836,8 +864,10 @@ class Client extends events_1.EventEmitter {
      *   console.log('error: ', err);
      * });
      */
-    reinitializeDevice(address, state, options, next) {
+    reinitializeDevice(addressObject, state, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -849,7 +879,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.REINITIALIZE_DEVICE, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.reinitializeDevice.encode(buffer, state, settings.password);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err) => next(err));
     }
     /**
@@ -874,8 +904,10 @@ class Client extends events_1.EventEmitter {
      *   console.log('value: ', value);
      * });
      */
-    writeFile(address, objectId, position, fileBuffer, options, next) {
+    writeFile(addressObject, objectId, position, fileBuffer, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -886,7 +918,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.ATOMIC_WRITE_FILE, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.atomicWriteFile.encode(buffer, false, objectId, position, fileBuffer);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err, data) => {
             if (err)
                 return next(err);
@@ -918,8 +950,10 @@ class Client extends events_1.EventEmitter {
      *   console.log('value: ', value);
      * });
      */
-    readFile(address, objectId, position, count, options, next) {
+    readFile(addressObject, objectId, position, count, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -930,7 +964,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.ATOMIC_READ_FILE, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.atomicReadFile.encode(buffer, true, objectId, position, count);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err, data) => {
             if (err)
                 return next(err);
@@ -962,8 +996,10 @@ class Client extends events_1.EventEmitter {
      *   console.log('value: ', value);
      * });
      */
-    readRange(address, objectId, idxBegin, quantity, options, next) {
+    readRange(addressObject, objectId, idxBegin, quantity, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -974,7 +1010,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.READ_RANGE, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.readRange.encode(buffer, objectId, baEnum.PropertyIdentifier.LOG_BUFFER, baEnum.ASN1_ARRAY_ALL, baEnum.ReadRangeType.BY_POSITION, idxBegin, new Date(), quantity);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err, data) => {
             if (err)
                 return next(err);
@@ -1008,8 +1044,10 @@ class Client extends events_1.EventEmitter {
      *   console.log('error: ', err);
      * });
      */
-    subscribeCOV(address, objectId, subscribeId, cancel, issueConfirmedNotifications, lifetime, options, next) {
+    subscribeCOV(addressObject, objectId, subscribeId, cancel, issueConfirmedNotifications, lifetime, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -1020,7 +1058,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.SUBSCRIBE_COV, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.subscribeCov.encode(buffer, subscribeId, objectId, cancel, issueConfirmedNotifications, lifetime);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err) => next(err));
     }
     /**
@@ -1049,8 +1087,10 @@ class Client extends events_1.EventEmitter {
      *   console.log('error: ', err);
      * });
      */
-    subscribeProperty(address, objectId, monitoredProperty, subscribeId, cancel, issueConfirmedNotifications, options, next) {
+    subscribeProperty(addressObject, objectId, monitoredProperty, subscribeId, cancel, issueConfirmedNotifications, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -1061,11 +1101,13 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.SUBSCRIBE_COV_PROPERTY, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.subscribeProperty.encode(buffer, subscribeId, objectId, cancel, issueConfirmedNotifications, 0, monitoredProperty, false, 0x0f);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err) => next(err));
     }
-    createObject(address, objectId, values, options, next) {
+    createObject(addressObject, objectId, values, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -1076,7 +1118,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.CREATE_OBJECT, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.createObject.encode(buffer, objectId, values);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err) => next(err));
     }
     /**
@@ -1099,8 +1141,10 @@ class Client extends events_1.EventEmitter {
      *   console.log('error: ', err);
      * });
      */
-    deleteObject(address, objectId, options, next) {
+    deleteObject(addressObject, objectId, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -1111,11 +1155,13 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.DELETE_OBJECT, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.deleteObject.encode(buffer, objectId);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err) => next(err));
     }
-    removeListElement(address, objectId, reference, values, options, next) {
+    removeListElement(addressObject, objectId, reference, values, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -1126,11 +1172,13 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.REMOVE_LIST_ELEMENT, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.addListElement.encode(buffer, objectId, reference.id, reference.index, values);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err) => next(err));
     }
-    addListElement(address, objectId, reference, values, options, next) {
+    addListElement(addressObject, objectId, reference, values, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -1141,7 +1189,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.ADD_LIST_ELEMENT, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.addListElement.encode(buffer, objectId, reference.id, reference.index, values);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err) => next(err));
     }
     /**
@@ -1161,8 +1209,10 @@ class Client extends events_1.EventEmitter {
      *   console.log('value: ', value);
      * });
      */
-    getAlarmSummary(address, options, next) {
+    getAlarmSummary(addressObject, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -1172,7 +1222,7 @@ class Client extends events_1.EventEmitter {
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.GET_ALARM_SUMMARY, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err, data) => {
             if (err)
                 return next(err);
@@ -1202,8 +1252,10 @@ class Client extends events_1.EventEmitter {
      *   console.log('value: ', value);
      * });
      */
-    getEventInformation(address, objectId, options, next) {
+    getEventInformation(addressObject, objectId, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -1214,7 +1266,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.GET_EVENT_INFORMATION, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baAsn1.encodeContextObjectId(buffer, 0, objectId.type, objectId.instance);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err, data) => {
             if (err)
                 return next(err);
@@ -1224,8 +1276,10 @@ class Client extends events_1.EventEmitter {
             next(null, result);
         });
     }
-    acknowledgeAlarm(address, objectId, eventState, ackText, evTimeStamp, ackTimeStamp, options, next) {
+    acknowledgeAlarm(addressObject, objectId, eventState, ackText, evTimeStamp, ackTimeStamp, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -1236,7 +1290,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.ACKNOWLEDGE_ALARM, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.alarmAcknowledge.encode(buffer, 57, objectId, eventState, ackText, evTimeStamp, ackTimeStamp);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err) => next(err));
     }
     /**
@@ -1259,8 +1313,10 @@ class Client extends events_1.EventEmitter {
      *   console.log('error: ', err);
      * });
      */
-    confirmedPrivateTransfer(address, vendorId, serviceNumber, data, options, next) {
+    confirmedPrivateTransfer(addressObject, vendorId, serviceNumber, data, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -1271,7 +1327,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.CONFIRMED_PRIVATE_TRANSFER, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.privateTransfer.encode(buffer, vendorId, serviceNumber, data);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err) => next(err));
     }
     /**
@@ -1287,13 +1343,15 @@ class Client extends events_1.EventEmitter {
      *
      * client.unconfirmedPrivateTransfer('192.168.1.43', 0, 7, [0x00, 0xaa, 0xfa, 0xb1, 0x00]);
      */
-    unconfirmedPrivateTransfer(address, vendorId, serviceNumber, data) {
+    unconfirmedPrivateTransfer(addressObject, vendorId, serviceNumber, data) {
         const buffer = this._getBuffer();
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE, address);
         baApdu.encodeUnconfirmedServiceRequest(buffer, baEnum.PduTypes.UNCONFIRMED_REQUEST, baEnum.UnconfirmedServiceChoice.UNCONFIRMED_PRIVATE_TRANSFER);
         baServices.privateTransfer.encode(buffer, vendorId, serviceNumber, data);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
     }
     /**
      * DEPRECATED The getEnrollmentSummary command returns a list of event-initiating objects on the target device.
@@ -1320,8 +1378,10 @@ class Client extends events_1.EventEmitter {
      *   console.log('value: ', value);
      * });
      */
-    getEnrollmentSummary(address, acknowledgmentFilter, options, next) {
+    getEnrollmentSummary(addressObject, acknowledgmentFilter, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -1332,7 +1392,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.GET_ENROLLMENT_SUMMARY, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.getEnrollmentSummary.encode(buffer, acknowledgmentFilter, options.enrollmentFilter, options.eventStateFilter, options.eventTypeFilter, options.priorityFilter, options.notificationClassFilter);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err, data) => {
             if (err)
                 return next(err);
@@ -1342,16 +1402,20 @@ class Client extends events_1.EventEmitter {
             next(null, result);
         });
     }
-    unconfirmedEventNotification(address, eventNotification) {
+    unconfirmedEventNotification(addressObject, eventNotification) {
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE, address);
         baApdu.encodeUnconfirmedServiceRequest(buffer, baEnum.PduTypes.UNCONFIRMED_REQUEST, baEnum.UnconfirmedServiceChoice.UNCONFIRMED_EVENT_NOTIFICATION);
         baServices.eventNotifyData.encode(buffer, eventNotification);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
     }
-    confirmedEventNotification(address, eventNotification, options, next) {
+    confirmedEventNotification(addressObject, eventNotification, options, next) {
         next = next || options;
+        let address = addressObject.address ? addressObject.address : addressObject;
+        let port = addressObject.port ? addressObject.port : this._settings.port;
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
@@ -1362,7 +1426,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.CONFIRMED_EVENT_NOTIFICATION, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         baServices.eventNotifyData.encode(buffer, eventNotification);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(address, buffer);
+        this.sendBvlc(address, port, buffer);
         this._addCallback(settings.invokeId, (err) => next(err));
     }
     // Public Device Functions
@@ -1372,7 +1436,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeComplexAck(buffer, baEnum.PduTypes.COMPLEX_ACK, baEnum.ConfirmedServiceChoice.READ_PROPERTY, invokeId);
         baServices.readProperty.encodeAcknowledge(buffer, objectId, property.id, property.index, value);
         baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(receiver, buffer);
+        this.sendBvlc(receiver, this._settings.port, buffer);
     }
     readPropertyMultipleResponse(receiver, invokeId, values) {
         const buffer = this._getBuffer();
@@ -1380,7 +1444,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeComplexAck(buffer, baEnum.PduTypes.COMPLEX_ACK, baEnum.ConfirmedServiceChoice.READ_PROPERTY_MULTIPLE, invokeId);
         baServices.readPropertyMultiple.encodeAcknowledge(buffer, values);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(receiver, buffer);
+        this.sendBvlc(receiver, this._settings.port, buffer);
     }
     iAmResponse(deviceId, segmentation, vendorId) {
         const buffer = this._getBuffer();
@@ -1388,7 +1452,7 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeUnconfirmedServiceRequest(buffer, baEnum.PduTypes.UNCONFIRMED_REQUEST, baEnum.UnconfirmedServiceChoice.I_AM);
         baServices.iAmBroadcast.encode(buffer, deviceId, this._transport.getMaxPayload(), segmentation, vendorId);
         baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_BROADCAST_NPDU, buffer.offset);
-        this._transport.send(buffer.buffer, buffer.offset, this._transport.getBroadcastAddress());
+        this._transport.send(buffer.buffer, buffer.offset, this._transport.getBroadcastAddress(), this._settings.port);
     }
     iHaveResponse(deviceId, objectId, objectName) {
         const buffer = this._getBuffer();
@@ -1396,14 +1460,14 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeUnconfirmedServiceRequest(buffer, baEnum.PduTypes.UNCONFIRMED_REQUEST, baEnum.UnconfirmedServiceChoice.I_HAVE);
         baServices.iHaveBroadcast.encode(buffer, deviceId, objectId, objectName);
         baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_BROADCAST_NPDU, buffer.offset);
-        this._transport.send(buffer.buffer, buffer.offset, this._transport.getBroadcastAddress());
+        this._transport.send(buffer.buffer, buffer.offset, this._transport.getBroadcastAddress(), this._settings.port);
     }
     simpleAckResponse(receiver, service, invokeId) {
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE, receiver);
         baApdu.encodeSimpleAck(buffer, baEnum.PduTypes.SIMPLE_ACK, service, invokeId);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(receiver, buffer);
+        this.sendBvlc(receiver, this._settings.port, buffer);
     }
     errorResponse(receiver, service, invokeId, errorClass, errorCode) {
         const buffer = this._getBuffer();
@@ -1411,14 +1475,15 @@ class Client extends events_1.EventEmitter {
         baApdu.encodeError(buffer, baEnum.PduTypes.ERROR, service, invokeId);
         baServices.error.encode(buffer, errorClass, errorCode);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
-        this.sendBvlc(receiver, buffer);
+        this.sendBvlc(receiver, this._settings.port, buffer);
     }
     /**
      *
      * @param receiver
      * @param buffer
      */
-    sendBvlc(receiver, buffer) {
+    sendBvlc(receiver, port, buffer) {
+        let that = this;
         if (typeof receiver === 'string') {
             receiver = {
                 address: receiver
@@ -1434,11 +1499,25 @@ class Client extends events_1.EventEmitter {
             // No address, broadcast
             baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_BROADCAST_NPDU, buffer.offset);
         }
-        this._transport.send(
-            buffer.buffer,
-            buffer.offset,
-            (receiver && receiver.address) || null
-        );
+
+        //check if port is array, send on all specified ports if true
+        if (Array.isArray(port) && port.length > 0) {
+            port.forEach(function (p) {
+                that._transport.send(
+                    buffer.buffer,
+                    buffer.offset,
+                    (receiver && receiver.address) || null,
+                    p
+                );
+            });
+        } else {
+            this._transport.send(
+                buffer.buffer,
+                buffer.offset,
+                (receiver && receiver.address) || null,
+                port
+            );
+        }
     }
     /**
      * Unloads the current BACstack instance and closes the underlying UDP socket.

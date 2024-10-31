@@ -161,6 +161,7 @@
       device_read_schedule_value: { value: "15", required: true },
       device_read_schedule_options: { value: "Minutes", required: true },
       deviceRangeRegisters: { value: [] },
+      portRangeRegisters: { value: [] },
       cacheFileEnabled: { value: false, required: true },
       sanitise_device_schedule: { value: "60", required: false },
       sanitise_device_schedule_value: { value: "1", required: false },
@@ -347,7 +348,7 @@
             contentType: "application/json",
             data: JSON.stringify(jsonPayload),
             success: function (result) { },
-            timeout: 10000,
+            timeout: 15000,
           });
         };
 
@@ -368,7 +369,8 @@
         });
       });
 
-      //device scan range matrix
+      //start device scan range matrix
+
       $("#node-input-deviceIdRangeMatrix-container")
         .css("min-width", "350px")
         .editableList({
@@ -402,12 +404,13 @@
 
             $(htmlRow).appendTo(fragment);
             row[0].appendChild(fragment);
-            document.getElementById("node-input-reg-block-count").innerHTML = $(
+
+            document.getElementById("node-input-reg-block-count-deviceIdRangeMatrix").innerHTML = $(
               "#node-input-deviceIdRangeMatrix-container"
             ).editableList("length");
           },
           removeItem: function (data) {
-            document.getElementById("node-input-reg-block-count").innerHTML = $(
+            document.getElementById("node-input-reg-block-count-deviceIdRangeMatrix").innerHTML = $(
               "#node-input-deviceIdRangeMatrix-container"
             ).editableList("length");
           },
@@ -415,7 +418,7 @@
           scrollOnAdd: false,
           header: $("<div style='display:flex; padding:10px 10px 0px 5px; column-gap: 10px'>").append(
             $.parseHTML(
-              "<div><span class='bp-matrix-heading'>Device ID Range(s)</span> </div><div class='bp-matrix-count' style='color: gray'><label id='node-input-reg-block-count' >0</label>  </div>"
+              "<div><span class='bp-matrix-heading'>Device ID Range(s)</span> </div><div class='bp-matrix-count' style='color: gray'><label id='node-input-reg-block-count-deviceIdRangeMatrix' >0</label>  </div>"
             )
           ),
           buttons: [
@@ -454,7 +457,7 @@
               title: "Delete all registers",
               click: function (evt) {
                 $("#node-input-deviceIdRangeMatrix-container").editableList("empty");
-                document.getElementById("node-input-reg-block-count").innerHTML = 0;
+                document.getElementById("node-input-reg-block-count-deviceIdRangeMatrix").innerHTML = 0;
               },
             },
           ],
@@ -472,7 +475,119 @@
         });
       }
 
-      document.getElementById("node-input-reg-block-count").innerHTML = node.deviceRangeRegisters.length;
+      document.getElementById("node-input-reg-block-count-deviceIdRangeMatrix").innerHTML = node.deviceRangeRegisters.length;
+
+      //end device id range matrix
+
+      //start port range matrix
+
+      $("#node-input-portRangeMatrix-container")
+        .css("min-width", "350px")
+        .editableList({
+          addItem: function (row, index, data) {
+            row.css({ overflow: "none", whiteSpace: "nowrap" });
+            let rowData = {};
+            if (data && typeof data.enabled == "boolean" && typeof data.start == "string" && typeof data.end == "string") {
+              if (data.enabled === true) {
+                rowData.enabled = "checked";
+              } else if (data.enabled === false) {
+                rowData.enabled = "";
+              }
+              rowData.start = data.start;
+              rowData.end = data.end;
+            } else {
+              rowData.enabled = "";
+              rowData.start = "";
+              rowData.end = "";
+            }
+
+            let itemNumber = index + 1;
+            let fragment = document.createDocumentFragment();
+            let htmlRow = `
+                <div class="form-row" id="node-input-port_range">
+                    <span class='bp-matrix-itemIndex'> ${itemNumber} </span>
+                    <a style="padding-left: 60px;">Start: </a><input type="number" id="node-input-port_range_entry_start" style="width: 125px;" min="0" max="64738" value="${rowData.start}" />
+                    <a style="padding-left: 35px;">End: </a><input type="number" id="node-input-port_range_entry_end" style="width: 125px;" min="1" max="64738" value="${rowData.end}" />
+                    <label class='bp-matrix-enable' for="node-input-port_range_entry"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.port_range_entry"></span>
+                    <input type="checkbox" id="node-input-port_range_entry_enabled" style="width: auto;" ${rowData.enabled} /> </label>
+                </div>`;
+
+            $(htmlRow).appendTo(fragment);
+            row[0].appendChild(fragment);
+            document.getElementById("node-input-reg-block-count-portRangeMatrix").innerHTML = $(
+              "#node-input-portRangeMatrix-container"
+            ).editableList("length");
+
+          },
+          removeItem: function (data) {
+            document.getElementById("node-input-reg-block-count-portRangeMatrix").innerHTML = $(
+              "#node-input-portRangeMatrix-container"
+            ).editableList("length");
+          },
+          removable: true,
+          scrollOnAdd: false,
+          header: $("<div style='display:flex; padding:10px 10px 0px 5px; column-gap: 10px'>").append(
+            $.parseHTML(
+              "<div><span class='bp-matrix-heading'>Port Range(s)</span> </div><div class='bp-matrix-count' style='color: gray'><label id='node-input-reg-block-count-portRangeMatrix' >0</label>  </div>"
+            )
+          ),
+          buttons: [
+            {
+              label: "json",
+              icon: "fa fa-share",
+              title: "Export tags as JSON to browser",
+              click: function (evt) {
+                var portRangeRegisters = $("#node-input-portRangeMatrix-container").editableList("items");
+                var mapItems = [];
+                portRangeRegisters.each(function (i) {
+                  var registerMap = $(this);
+                  var mapItem = {
+                    enabled: registerMap.find("#node-input-port_range_entry_enabled").val(),
+                    start: registerMap.find("#node-input-port_range_entry_start").val(),
+                    end: registerMap.find("#node-input-port_range_entry_end").val(),
+                  };
+                  mapItems.push(mapItem);
+                });
+                var oMyBlob = new Blob(
+                  [
+                    JSON.stringify(mapItems, null, 0)
+                      .replaceAll(/\[{/gi, "[\n{")
+                      .replaceAll(/}\]/gi, "}\n]")
+                      .replaceAll(/},/gi, "},\n")
+                      .replaceAll(/{/gi, "  {"),
+                  ],
+                  { type: "text/json" }
+                );
+                window.open(URL.createObjectURL(oMyBlob));
+              },
+            },
+            {
+              label: "delete",
+              icon: "fa-regular fa-trash-can",
+              title: "Delete all registers",
+              click: function (evt) {
+                $("#node-input-portRangeMatrix-container").editableList("empty");
+                document.getElementById("node-input-reg-block-count-portRangeMatrix").innerHTML = 0;
+              },
+            },
+          ],
+        });
+
+      if (node.portRangeRegisters.length > 0) {
+        for (var i = 0; i < node.portRangeRegisters.length; i++) {
+          $("#node-input-portRangeMatrix-container").editableList("addItem", node.portRangeRegisters[i]);
+        }
+      } else {
+        $("#node-input-portRangeMatrix-container").editableList("addItem", {
+          enabled: true,
+          start: "47808",
+          end: "47808",
+        });
+      }
+
+      document.getElementById("node-input-reg-block-count-portRangeMatrix").innerHTML = node.portRangeRegisters.length;
+      //end port range matrix
+
     },
     oneditsave: function () {
       let node = this;
@@ -503,6 +618,20 @@
         };
         node.deviceRangeRegisters.push(mapItem);
       });
+
+
+      node.portRangeRegisters = [];
+      let portRanges = $("#node-input-portRangeMatrix-container").editableList("items");
+      portRanges.each(function (i) {
+        let map = $(this);
+        let mapItem = {
+          enabled: map.find("#node-input-port_range_entry_enabled").is(":checked"),
+          start: map.find("#node-input-port_range_entry_start").val(),
+          end: map.find("#node-input-port_range_entry_end").val(),
+        };
+        node.portRangeRegisters.push(mapItem);
+      });
+
     },
   });
 
@@ -652,6 +781,10 @@
         <input type="text" id="node-input-local_device_port" placeholder="47808" />
       </div>
 
+      <div class="form-row node-input-portRangeMatrix-container-row bp-row">
+        <ol id="node-input-portRangeMatrix-container"></ol>
+      </div>
+
       <div class="form-row bp-row">
         <label for="node-input-deviceId"
           ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.deviceId"></span> Device ID
@@ -662,6 +795,7 @@
       <div class="form-row node-input-deviceIdRangeMatrix-container-row bp-row">
         <ol id="node-input-deviceIdRangeMatrix-container"></ol>
       </div>
+
     </div>
 
     <div id="read-discover-tab" style="display:none">

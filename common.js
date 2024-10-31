@@ -65,7 +65,8 @@ class BacnetClientConfig {
     device_read_schedule,
     retries,
     cacheFileEnabled,
-    sanitise_device_schedule
+    sanitise_device_schedule,
+    portRangeMatrix
   ) {
     this.apduTimeout = apduTimeout;
     this.localIpAdrress = localIpAdrress;
@@ -83,8 +84,25 @@ class BacnetClientConfig {
     this.retries = retries;
     this.cacheFileEnabled = cacheFileEnabled;
     this.sanitise_device_schedule = sanitise_device_schedule;
+    this.portRangeMatrix = this.generatePortRangeArray(portRangeMatrix);
+  }
+
+  generatePortRangeArray(rangeMatrix) {
+    let portArray = [];
+    for (let x = 0; x < rangeMatrix.length; x++) {
+      let rangeEntry = rangeMatrix[x];
+      let start = parseInt(rangeEntry.start);
+      let end = parseInt(rangeEntry.end);
+      for (let i = start; i <= end; i++) {
+        portArray.push(i);
+      }
+    }
+
+    return portArray;
   }
 }
+
+
 
 class ReadCommandConfig {
   constructor(pointsToRead, objectProperties, decimalPrecision) {
@@ -273,6 +291,26 @@ function decodeBitArray(size, bits) {
   };
 }
 
+function getBacnetErrorString(classInt, codeInt) {
+  const classString = Object.keys(baEnum.ErrorClass).find(key => baEnum.ErrorClass[key] === classInt);
+  const codeString = Object.keys(baEnum.ErrorCode).find(key => baEnum.ErrorCode[key] === codeInt);
+  return `BacnetError - Class:${classString} - Code:${codeString}`;
+}
+
+function parseBacnetError(error) {
+  let err = error.message;
+  if (err.includes("Class") && err.includes("Code")) {
+    const match = err.match(/Class:(\d+) - Code:(\d+)/);
+    if (match) {
+      err = getBacnetErrorString(parseInt(match[1], 10), parseInt(match[2], 10));
+    }
+  } else if (err.includes("ERR_TIMEOUT")) {
+    err = "Request TIMEOUT";
+  }
+
+  return err;
+};
+
 module.exports = {
   BacnetConfig,
   BacnetClientConfig,
@@ -289,4 +327,6 @@ module.exports = {
   Read_Config_Sync_Server,
   isNumber,
   decodeBitArray,
+  parseBacnetError,
+  getBacnetErrorString,
 };

@@ -33,6 +33,7 @@ module.exports = function (RED) {
     this.retries = config.retries;
     this.bacnetServer = nodeContext.get("bacnetServer") || null;
     this.deviceRangeRegisters = config.deviceRangeRegisters;
+    this.portRangeRegisters = config.portRangeRegisters;
     this.cacheFileEnabled = config.cacheFileEnabled;
     this.sanitise_device_schedule = config.sanitise_device_schedule;
 
@@ -61,7 +62,8 @@ module.exports = function (RED) {
       node.device_read_schedule,
       node.retries,
       node.cacheFileEnabled,
-      node.sanitise_device_schedule
+      node.sanitise_device_schedule,
+      node.portRangeRegisters.filter((ele) => ele.enabled === true)
     );
 
     nodeContext.set("bacnetConfig", node.bacnetConfig);
@@ -225,11 +227,9 @@ module.exports = function (RED) {
             logOut("Error updating priorityQueue: ", error);
           });
       } else if (msg.testFunc == true) {
-        node.bacnetClient.testFunction(msg.address, msg.type, msg.instance, msg.property);
+        node.bacnetClient.testFunction(msg.address, msg.port, msg.type, msg.instance, msg.property);
       } else if (msg.applyDisplayNames) {
-
         node.status({ fill: "blue", shape: "dot", text: "Updating display names" });
-
         setTimeout(() => {
           node.status({});
         }, 2000);
@@ -240,7 +240,6 @@ module.exports = function (RED) {
           }).catch(function (error) {
             logOut("Error in applyDisplayNames: ", error);
           });
-
       }
     });
 

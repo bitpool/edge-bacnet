@@ -1,10 +1,26 @@
 # Changelog
-## [1.4.7] - 20-09-2024
+
+## [1.5.0] - 31-10-2024
 ### Summary
 
-Bug hot fixes:
-- Full data model was not getting built, only lite (presentValue and objectName). 2nd iteration now builds complete model
-- Export CSV pointlist was hitting a file limit due to URL string size limit. Moved to blob object.
+Major feature release - Port range binding  
+
+Large amount of bug fixes
+
+Added error string to Full Object payload. Contains a BACnet string where an error is found for point, otherwise contains "none".
+
+Proceed with caution as a correct port range has to be established in data model in order to continue uptime on existing sites. Doing a device discovery will update device model with port number. 
+
+Best method to update this version on existing installs: 
+
+- Install v1.5.0
+- Restart node-red / docker container
+- Add new port range entry to port range matrix in gateway node - Start: 47808 to End: 47808. Or any range that meets your requirements
+- Deploy changes
+- Restart node-red / docker container again.
+- Inject manual discovery to gateway node a couple times
+
+It is recommended you back up: your node-red flows and gateway Discovery tab device list, incase something goes wrong. 
 
 ## [1.4.6] - 17-09-2024
 ### Summary

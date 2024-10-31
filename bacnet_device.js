@@ -36,6 +36,7 @@ class BacnetDevice {
             that.isProtocolServicesSet = config.isProtocolServicesSet;
             that.isInitialQuery = config.isInitialQuery;
             that.isDumbMstpRouter = config.isDumbMstpRouter;
+            that.port = config.port;
 
         } else if (fromImport == false) {
             if (config.net && config.adr) {
@@ -66,7 +67,16 @@ class BacnetDevice {
             that.isProtocolServicesSet = false;
             that.isInitialQuery = true;
             that.isDumbMstpRouter = false;
+            that.port = config.port;
         }
+    }
+
+    setPort(port) {
+        this.port = port;
+    }
+
+    getPort() {
+        return this.port;
     }
 
     setIsDumbMstpRouter(isDumbMstp) {
@@ -190,6 +200,10 @@ class BacnetDevice {
         if (Number.isInteger(config.maxApdu)) this.maxApdu = config.maxApdu;
         if (Number.isInteger(config.segmentation)) this.segmentation = config.segmentation;
         if (Number.isInteger(config.vendorId)) this.vendorId = config.vendorId;
+        if (config.pointsList && config.pointsList.length > 0) {
+            this.setPointsList(config.pointsList);
+        }
+        if (config.port) this.port = config.port;
     }
 
     getPointListRetryCount() {
@@ -244,9 +258,10 @@ class BacnetDevice {
             point.value.type == 3 ||  //BI
             point.value.type == 4 ||  //BV
             point.value.type == 5 ||  //BO
-            point.value.type == 13 ||  //MSI
-            point.value.type == 14 ||  //MSO
-            point.value.type == 19     //MSV
+            point.value.type == 13 || //MSI
+            point.value.type == 14 || //MSO
+            point.value.type == 19 || //MSV
+            point.value.type == 40    //CS 
         );
     }
 

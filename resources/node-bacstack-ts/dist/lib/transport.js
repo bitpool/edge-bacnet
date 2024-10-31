@@ -10,12 +10,16 @@ class Transport extends events_1.EventEmitter {
         try {
             this._lastSendMessages = {};
             this._settings = settings;
-            this._server = (0, dgram_1.createSocket)({ type: 'udp4', reuseAddr: true });
-            this._server.on('message', (msg, rinfo) => this.emit('message', msg, rinfo.address));
-            this._server.on('error', (err) => this.emit('message', err));
-
+            this._portRange = settings.portRangeMatrix;
+            this.serverList = {};
+            for (let i = 0; i < this._portRange.length; i++) {
+                let port = this._portRange[i];
+                this.serverList[port] = (0, dgram_1.createSocket)({ type: 'udp4', reuseAddr: true });
+                this.serverList[port].on('message', (msg, rinfo) => this.emit('message', msg, rinfo.address, rinfo.port));
+                this.serverList[port].on('error', (err) => this.emit('message', err));
+            };
         } catch (e) {
-            //console.log("Transport constructor error: ", e);
+            console.log("Transport constructor error: ", e);
         }
     }
     getBroadcastAddress() {
@@ -24,31 +28,59 @@ class Transport extends events_1.EventEmitter {
     getMaxPayload() {
         return 1482;
     }
-    send(buffer, offset, receiver) {
-        if (!receiver) {
-            receiver = this.getBroadcastAddress();
-            const dataToSend = Buffer.alloc(offset);
-            // Sort out broadcasted messages that we also receive
-            // TODO Find a better way?
-            const hrTime = process.hrtime();
-            const messageKey = hrTime[0] * 1000000000 + hrTime[1];
-            buffer.copy(dataToSend, 0, 0, offset);
-            this._lastSendMessages[messageKey] = dataToSend;
-            setTimeout(() => {
-                delete this._lastSendMessages[messageKey];
-            }, 10000); // delete after 10s, hopefully all cases are handled by that
-        }
+    send(buffer, offset, receiver, port) {
+        try {
+            if (!receiver) {
+                receiver = this.getBroadcastAddress();
+                const dataToSend = Buffer.alloc(offset);
+                // Sort out broadcasted messages that we also receive
+                // TODO Find a better way?
+                const hrTime = process.hrtime();
+                const messageKey = hrTime[0] * 1000000000 + hrTime[1];
+                buffer.copy(dataToSend, 0, 0, offset);
+                this._lastSendMessages[messageKey] = dataToSend;
+                setTimeout(() => {
+                    delete this._lastSendMessages[messageKey];
+                }, 10000); // delete after 10s, hopefully all cases are handled by that
+            }
 
-        const [address, port] = receiver.split(':');
-        this._server.send(buffer, 0, offset, this._settings.port || DEFAULT_BACNET_PORT, address);
+            const [address] = receiver.split(':');
+
+            if (port == null || port == undefined || port == '' || port == 'null' || port == 'undefined') port = DEFAULT_BACNET_PORT;
+
+            let serverExists = Object.keys(this.serverList).findIndex((existingPort) => port.toString() == existingPort);
+
+            if (serverExists !== -1) {
+                let server = this.serverList[port];
+                server.send(buffer, 0, offset, port, address);
+            }
+        } catch (e) {
+            console.log("Transport send error: ", e);
+        }
     }
     open() {
-        this._server.bind(this._settings.port, this._settings.interface, () => {
-            this._server.setBroadcast(true);
-        });
+        try {
+            for (let port in this.serverList) {
+                let server = this.serverList[port];
+                if (server) {
+                    server.bind(port, this._settings.interface, () => {
+                        server.setBroadcast(true);
+                    });
+                }
+            }
+        } catch (e) {
+            console.log("Transport open error: ", e);
+        }
     }
     close() {
-        this._server.close();
+        try {
+            for (let port in this.serverList) {
+                let server = this.serverList[port];
+                if (server) server.close();
+            }
+        } catch (e) {
+            console.log("Transport close error: ", e);
+        }
     }
 }
 exports.Transport = Transport;
