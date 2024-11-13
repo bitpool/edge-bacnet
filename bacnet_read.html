@@ -3,1025 +3,1049 @@
 -->
 
 <script type="text/javascript">
-    RED.nodes.registerType("Bacnet-Discovery", {
-        category: "Bitpool BACnet",
-        color: "#00aeef",
-        defaults: {
-            name: { value: "" },
-            events: { value: true },
-            json: { value: true },
-            mqtt: { value: false },
-            pointJson: { value: false },
-            hiddenDeployToggle: { value: false },
-            prevHiddenToggleState: { value: false },
-            roundDecimal: { value: 2 },
-            deviceList: [],
-            pointList: [],
-            pointsToRead: { value: {} },
-            readDevices: { value: [] },
-            object_property_simplePayload: { value: false },
-            object_property_simpleWithStatus: { value: false },
-            object_property_fullObject: { value: true },
-            useDeviceName: { value: true },
-        },
-        inputs: 1,
-        outputs: 1,
-        icon: "bitpool.svg",
-        label: function () {
-            return this.name || "read";
-        },
-        paletteLabel: function () {
-            return "read";
-        },
-        oneditprepare: function () {
-            let node = this;
+  RED.nodes.registerType("Bacnet-Discovery", {
+    category: "Bitpool BACnet",
+    color: "#00aeef",
+    defaults: {
+      name: { value: "" },
+      events: { value: true },
+      json: { value: true },
+      mqtt: { value: false },
+      pointJson: { value: false },
+      hiddenDeployToggle: { value: false },
+      prevHiddenToggleState: { value: false },
+      roundDecimal: { value: 2 },
+      deviceList: [],
+      pointList: [],
+      pointsToRead: { value: {} },
+      readDevices: { value: [] },
+      object_property_simplePayload: { value: false },
+      object_property_simpleWithStatus: { value: false },
+      object_property_fullObject: { value: true },
+      useDeviceName: { value: true },
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: "bitpool.svg",
+    label: function () {
+      return this.name || "read";
+    },
+    paletteLabel: function () {
+      return "read";
+    },
+    oneditprepare: function () {
+      let node = this;
 
-            node.prevHiddenToggleState = node.hiddenDeployToggle;
+      node.prevHiddenToggleState = node.hiddenDeployToggle;
 
-            const { createApp, ref, onMounted } = Vue;
+      const { createApp, ref, onMounted } = Vue;
 
-            //prime vue app
-            const App = {
-                data() {
-                    return {
-                        devices: ref(),
-                        readDevices: ref(),
-                        deviceList: ref(),
-                        pointList: ref(),
-                        pointsToRead: ref(),
-                        nodeService: ref(new NodeService()),
-                        pollFrequency: ref(),
-                        deviceCount: ref(),
-                        progressBarValue: ref(),
-                        rightClickedDevice: ref(),
-                        rightClickedPoint: ref(),
-                        showDeviceNameDialog: ref(false),
-                        showPointNameDialog: ref(false),
-                        deviceDisplayNameValue: ref(),
-                        pointDisplayNameValue: ref(),
-                        calculateProgressBarWidth: ref(),
-                    };
-                },
-                setup() {
-                    let pointList;
-                    let deviceList;
-                    const selectedKeys = ref(null);
-                    const nodes = ref();
-                    const expandedKeys = ref({});
-                    const expandAll = () => {
-                        for (let node of devices.value) {
-                            expandNode(node);
+      window.confirmDialogExists = window.confirmDialogExists || false;
+      if (node.vm == undefined && !window.confirmDialogExists) {
+        let confirmDialog = document.createElement("p-confirm-dialog");
+        document.getElementById("node-input-tabs-content").appendChild(confirmDialog);
+        window.confirmDialogExists = true;
+      }
+
+      //prime vue app
+      const App = {
+        data() {
+          return {
+            devices: ref(),
+            readDevices: ref(),
+            deviceList: ref(),
+            pointList: ref(),
+            pointsToRead: ref(),
+            nodeService: ref(new NodeService()),
+            pollFrequency: ref(),
+            deviceCount: ref(),
+            progressBarValue: ref(),
+            rightClickedDevice: ref(),
+            rightClickedPoint: ref(),
+            showDeviceNameDialog: ref(false),
+            showPointNameDialog: ref(false),
+            deviceDisplayNameValue: ref(),
+            pointDisplayNameValue: ref(),
+            calculateProgressBarWidth: ref(),
+          };
+        },
+        setup() {
+          let pointList;
+          let deviceList;
+          const selectedKeys = ref(null);
+          const nodes = ref();
+          const expandedKeys = ref({});
+          const expandAll = () => {
+            for (let node of devices.value) {
+              expandNode(node);
+            }
+
+            expandedKeys.value = { ...expandedKeys.value };
+          };
+          const collapseAll = () => {
+            expandedKeys.value = {};
+          };
+          const expandNode = (node) => {
+            if (node.children && node.children.length) {
+              expandedKeys.value[node.key] = true;
+
+              for (let child of node.children) {
+                expandNode(child);
+              }
+            }
+          };
+
+          return {
+            nodes,
+            expandedKeys,
+            expandAll,
+            collapseAll,
+            expandNode,
+          };
+        },
+        mounted() {
+          let app = this;
+          this.getData(true);
+
+          $("#readlist-file-upload").on("change", function (event) {
+            const input = event.target.files[0];
+            const reader = new FileReader();
+
+            reader.readAsText(input);
+
+            reader.onload = function (e) {
+              const text = e.target.result;
+              let jsonPayload = JSON.parse(text);
+
+              app.nodeService.importReadList(jsonPayload).then(function (result) {
+                if (result) {
+                  app.pointsToRead = jsonPayload;
+                  app.addToReadDevices(jsonPayload);
+                }
+              });
+            };
+          });
+        },
+        methods: {
+          getData(initial) {
+            let app = this;
+            this.nodeService.getNetworkData().then(function (result) {
+              //remove after below fixed
+              app.devices = result.renderList;
+              //end remove
+
+              app.deviceList = result.deviceList;
+              app.pointList = result.pointList;
+              app.pollFrequency = parseInt(result.pollFrequency);
+              app.deviceCount = result.deviceList.length;
+
+              //progress bar percentage
+              let progressVal = parseInt((result.renderListCount / result.deviceList.length) * 100);
+              if (typeof progressVal == "number" && !isNaN(progressVal)) {
+                app.progressBarValue = progressVal;
+              } else {
+                app.progressBarValue = 0;
+              }
+
+              //set progress bar width based on device count integer digit length
+              if (app.deviceCount.toString().length >= 5) {
+                app.calculateProgressBarWidth = "width: 200px;";
+              } else if (app.deviceCount.toString().length == 4) {
+                app.calculateProgressBarWidth = "width: 210px;";
+              } else if (app.deviceCount.toString().length < 4) {
+                app.calculateProgressBarWidth = "width: 220px;";
+              }
+
+              app.$forceUpdate();
+            });
+
+            app.$forceUpdate();
+          },
+          rebuildConfirm() {
+            let app = this;
+            this.$confirm.require({
+              message: "Do you want to delete the data model and UI tree? This action is not reversible",
+              header: "Delete Confirmation",
+              icon: "pi pi-info-circle",
+              acceptClass: "p-button-danger",
+              accept: () => {
+                //handle accept
+                app.rebuildDataModel();
+              },
+              reject: () => {
+                //handle reject
+              },
+            });
+          },
+          rebuildDataModel() {
+            let app = this;
+            app.nodeService.rebuildDataModel().then(function (result) {
+              if (result == true) {
+                app.progressBarValue = 0;
+              }
+            });
+            app.$forceUpdate();
+          },
+          addAllDevices() {
+            let app = this;
+            app.devices.forEach(function (device) {
+              app.addAllClicked({ node: device });
+            });
+            app.$forceUpdate();
+          },
+          addAllClicked(slotProps) {
+            //update UI
+            let app = this;
+            let clone = JSON.parse(JSON.stringify(slotProps.node));
+
+            while (clone.children.length > 1) {
+              let child = clone.children[1];
+              if (child.label.includes("MSTP")) {
+                child.children.forEach(function (mstpDevice) {
+                  app.addAllClicked({ node: mstpDevice });
+                });
+                clone.children.splice(1, 1);
+              }
+            }
+
+            if (this.readDevices) {
+              let foundIndex = this.readDevices.findIndex((ele) => ele.initialName == slotProps.node.initialName);
+              if (foundIndex == -1) {
+                this.readDevices.push(clone);
+              } else if (foundIndex !== -1) {
+                this.readDevices[foundIndex] = clone;
+              }
+            } else {
+              this.readDevices = [clone];
+            }
+            let deviceSlot = this.devices.find((ele) => ele.initialName == slotProps.node.initialName);
+            if (deviceSlot) {
+              deviceSlot.showAdded = true;
+              deviceSlot.children[0].children.forEach(function (child) {
+                child.showAdded = true;
+              });
+            }
+            slotProps.node.showAdded = true;
+            this.$forceUpdate();
+            //update node-red data structure to forward to gateway
+            let device = this.deviceList.find((ele) => {
+              if (ele.address.address) {
+                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              } else {
+                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              }
+            });
+            let deviceAddress = app.getDeviceAddress(device.address);
+            let key = `${deviceAddress}-${device.deviceId}`;
+            let points = this.pointList[key];
+            if (!this.pointsToRead[key]) {
+              this.pointsToRead[key] = {};
+            }
+            for (let pointName in points) {
+              let point = this.pointList[key][pointName];
+              this.pointsToRead[key][point.objectName] = point;
+            }
+            //force a deploy state
+            node.hiddenDeployToggle = !node.prevHiddenToggleState;
+          },
+          addPointClicked(slotProps) {
+            let app = this;
+            //update UI
+            const parentDeviceName = slotProps.node.parentDevice;
+            const slotDeviceId = slotProps.node.parentDeviceId;
+            let device = this.deviceList.find((ele) => ele.deviceId == slotDeviceId);
+            let foundDeviceIndex = this.readDevices ? this.readDevices.findIndex((ele) => ele.deviceId == device.deviceId) : -1;
+            let deviceAddress = app.getDeviceAddress(device.address);
+            let key = `${deviceAddress}-${device.deviceId}`;
+            let parentDevice = this.devices.find((ele) => ele.ipAddr == deviceAddress);
+            let childDevice;
+            if (device.isMstp) {
+              let indexMap = {
+                deviceIndex: -1,
+                mstpNetorkIndex: -1,
+              };
+              parentDevice.children.forEach(function (child, index) {
+                if (child.label.includes("MSTP")) {
+                  const tempIndex = child.children.findIndex((ele) => ele.deviceId == slotDeviceId);
+                  if (tempIndex !== -1) {
+                    indexMap.deviceIndex = tempIndex;
+                    indexMap.mstpNetorkIndex = index;
+                  }
+                }
+              });
+
+              if (indexMap.deviceIndex !== -1 && indexMap.mstpNetorkIndex !== -1) {
+                childDevice = parentDevice.children[indexMap.mstpNetorkIndex].children[indexMap.deviceIndex];
+              }
+            }
+
+            if (foundDeviceIndex == -1) {
+              //no read devices present, add new
+              let newReadParent;
+              if (childDevice) {
+                newReadParent = JSON.parse(JSON.stringify(childDevice));
+              } else {
+                newReadParent = JSON.parse(JSON.stringify(parentDevice));
+              }
+              newReadParent.children[0].children = [];
+              newReadParent.children[0].children.push(slotProps.node);
+              while (newReadParent.children.length > 1) {
+                newReadParent.children.forEach(function (child, index) {
+                  if (child.label.includes("MSTP")) {
+                    newReadParent.children.splice(index, 1);
+                  }
+                });
+              }
+              if (this.readDevices) {
+                this.readDevices.push(newReadParent);
+              } else {
+                this.readDevices = [newReadParent];
+              }
+            } else {
+              // read device found, add point to existing
+              let pointIndex = this.readDevices[foundDeviceIndex].children[0].children.findIndex(
+                (ele) => ele.pointName == slotProps.node.pointName
+              );
+              if (pointIndex == -1) {
+                this.readDevices[foundDeviceIndex].children[0].children.push(slotProps.node);
+              }
+            }
+
+            //set show added to true
+            slotProps.node.showAdded = true;
+            this.$forceUpdate();
+
+            //update node-red data structure
+            if (!this.pointsToRead[key]) {
+              this.pointsToRead[key] = {};
+            }
+
+            let point = this.pointList[key][slotProps.node.pointName];
+            this.pointsToRead[key][point.objectName] = point;
+
+            //force a deploy state
+            node.hiddenDeployToggle = !node.prevHiddenToggleState;
+
+            app.$forceUpdate();
+          },
+          removeAllDevices() {
+            let app = this;
+            let clone = JSON.parse(JSON.stringify(app.readDevices));
+            clone.forEach(function (device) {
+              app.removeAllClicked({ node: device });
+            });
+
+            app.pointsToRead = {};
+
+            app.$forceUpdate();
+          },
+          removeAllClicked(slotProps) {
+            let app = this;
+
+            try {
+              //update UI
+              if (app.readDevices.length > 0) {
+                let foundIndex = app.readDevices.findIndex(
+                  (ele) => ele.key == slotProps.node.key && ele.label == slotProps.node.label
+                );
+                if (foundIndex !== -1) app.readDevices.splice(foundIndex, 1);
+              }
+
+              let deviceSlot = app.devices.find((ele) => ele.label == slotProps.node.label);
+              if (deviceSlot) {
+                deviceSlot.showAdded = false;
+                deviceSlot.children.forEach(function (child) {
+                  child.showAdded = false;
+                });
+              }
+              slotProps.node.showAdded = false;
+              app.$forceUpdate();
+
+              //update node-red data structure
+              let device = app.deviceList.find((ele) => {
+                if (ele.address.address) {
+                  return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+                } else {
+                  return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+                }
+              });
+              let deviceAddress = app.getDeviceAddress(device.address);
+              let key = `${deviceAddress}-${device.deviceId}`;
+              if (app.pointsToRead[key]) {
+                delete app.pointsToRead[key];
+              }
+
+              //force a deploy state
+              node.hiddenDeployToggle = !node.prevHiddenToggleState;
+            } catch (e) {
+              //do nothing
+            }
+
+            app.$forceUpdate();
+          },
+          removePointClicked(slotProps) {
+            let app = this;
+
+            //update UI
+            let parentDeviceName = slotProps.node.parentDevice;
+            let parentDevice = this.devices.find((ele) => ele.label == parentDeviceName);
+            const slotDeviceId = slotProps.node.parentDeviceId;
+            let device = this.deviceList.find((ele) => ele.deviceId == slotDeviceId);
+            let foundDeviceIndex = this.readDevices ? this.readDevices.findIndex((ele) => ele.deviceId == device.deviceId) : -1;
+            let deviceAddress = app.getDeviceAddress(device.address);
+            let key = `${deviceAddress}-${device.deviceId}`;
+
+            if (foundDeviceIndex !== -1) {
+              let foundIndex = this.readDevices[foundDeviceIndex].children[0].children.findIndex(
+                (ele) => ele.pointName == slotProps.node.pointName
+              );
+              if (foundIndex !== -1) this.readDevices[foundDeviceIndex].children[0].children.splice(foundIndex, 1);
+              if (this.readDevices[foundDeviceIndex].children[0].children.length == 0) {
+                this.readDevices.splice(foundDeviceIndex, 1);
+              }
+            }
+
+            //set show added to true
+            slotProps.node.showAdded = false;
+            this.$forceUpdate();
+
+            //update node-red data stucture
+            let point = this.pointList[key][slotProps.node.pointName];
+            if (this.pointsToRead[key][point.objectName]) delete this.pointsToRead[key][point.objectName];
+            //if last point is removed, deleted whole entry
+            if (Object.keys(this.pointsToRead[key]).length == 0) delete this.pointsToRead[key];
+
+            //force a deploy state
+            node.hiddenDeployToggle = !node.prevHiddenToggleState;
+
+            app.$forceUpdate();
+          },
+          exportPointListCsv() {
+            let app = this;
+            let csvContent = "ipAddress,deviceId,deviceName,pointName,objectType" + "\r\n";
+            const keys = Object.keys(app.pointList);
+            for (key in keys) {
+              const guid = keys[key];
+              const ipAddress = guid.split("-")[0];
+              const deviceId = guid.split("-")[1];
+              const deviceObject = app.pointList[keys[key]];
+              const device = app.deviceList.find((ele) => {
+                if (ele.address.address) {
+                  return ele.address.address == ipAddress && ele.deviceId == deviceId;
+                } else {
+                  return ele.address == ipAddress && ele.deviceId == deviceId;
+                }
+              });
+              if (device) {
+                const deviceName = device.deviceName;
+                const points = Object.keys(deviceObject);
+                if (points.length > 0) {
+                  for (point in points) {
+                    csvContent +=
+                      ipAddress +
+                      "," +
+                      deviceId +
+                      "," +
+                      deviceName +
+                      "," +
+                      points[point] +
+                      "," +
+                      deviceObject[points[point]].meta.objectId.type +
+                      "\r\n";
+
+                    if (parseInt(point) == points.length - 1 && parseInt(key) == keys.length - 1) {
+                      // last iteration
+                      var csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                      var link = document.createElement("a");
+                      var url = URL.createObjectURL(csvBlob);
+                      link.setAttribute("href", url);
+                      link.setAttribute("download", "pointslist.csv");
+                      document.body.appendChild(link);
+                      link.click();
+                    }
+                  }
+                } else {
+                  if (parseInt(key) == keys.length - 1) {
+                    // last iteration
+                    var csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                    var link = document.createElement("a");
+                    var url = URL.createObjectURL(csvBlob);
+                    link.setAttribute("href", url);
+                    link.setAttribute("download", "pointslist.csv");
+                    document.body.appendChild(link);
+                    link.click();
+                  }
+                }
+              } else {
+                if (parseInt(key) == keys.length - 1) {
+                  // last iteration
+                  var csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                  var link = document.createElement("a");
+                  var url = URL.createObjectURL(csvBlob);
+                  link.setAttribute("href", url);
+                  link.setAttribute("download", "pointslist.csv");
+                  document.body.appendChild(link);
+                  link.click();
+                }
+              }
+            }
+          },
+          getDeviceAddress(addr) {
+            switch (typeof addr) {
+              case "object":
+                return addr.address;
+              case "string":
+                return addr;
+              default:
+                return addr;
+            }
+          },
+          isDeviceActive(slotProps) {
+            let app = this;
+            if ((Date.now() - slotProps.node.lastSeen) / 1000 < app.pollFrequency + 5) {
+              return true;
+            } else if (slotProps.node.isDumbMstpRouter == true || slotProps.node.isDumbMstpRouter == "true") {
+              return true;
+            }
+            return false;
+          },
+          isDeviceAdded(slotProps) {
+            if (slotProps.node.showAdded == true) {
+              return true;
+            } else {
+              return false;
+            }
+          },
+          hasMstpDevices(slotProps) {
+            if (slotProps.node.children[1] && slotProps.node.children[1].children.length > 0) {
+              return true;
+            }
+            return false;
+          },
+          isSlotAdded(slotProps) {
+            return slotProps.node.showAdded;
+          },
+          hasData() {
+            if (this.devices && this.devices.length > 0) {
+              return true;
+            } else {
+              return false;
+            }
+          },
+          emptyTree() {
+            if (this.devices.length > 0) {
+              return true;
+            }
+            return false;
+          },
+          onDeviceRightClick(slotProps, event) {
+            let app = this;
+            app.rightClickedDevice = slotProps;
+            event.preventDefault();
+            menu.style.setProperty("--mouse-x", event.clientX + "px");
+            menu.style.setProperty("--mouse-y", event.clientY + "px");
+            menu.style.display = "block";
+          },
+          onPointRightClick(slotProps, event) {
+            let app = this;
+            app.rightClickedPoint = slotProps;
+            event.preventDefault();
+            pointMenu.style.setProperty("--mouse-x", event.clientX + "px");
+            pointMenu.style.setProperty("--mouse-y", event.clientY + "px");
+            pointMenu.style.display = "block";
+          },
+          handleContextMenuClick(type) {
+            let app = this;
+            switch (type) {
+              case "purgeDevice":
+                app.purgeDevice(app.rightClickedDevice);
+                break;
+              case "updatePoints":
+                app.updatePointsForDevice(app.rightClickedDevice);
+                break;
+              case "addAllPoints":
+                app.addAllClicked(app.rightClickedDevice);
+                break;
+              case "removeAllPoints":
+                app.removeAllClicked(app.rightClickedDevice);
+                break;
+              case "setDeviceName":
+                app.showDeviceNameDialog = true;
+                app.deviceDisplayNameValue = app.rightClickedDevice.node.label;
+                break;
+              default:
+                break;
+            }
+          },
+          handlePointContextMenuClick(type) {
+            let app = this;
+            switch (type) {
+              case "setPointName":
+                app.showPointNameDialog = true;
+                app.pointDisplayNameValue = app.rightClickedPoint.node.label;
+                break;
+              case "updatePoint":
+                app.updatePoint(app.rightClickedPoint);
+                break;
+              default:
+                break;
+            }
+          },
+          purgeDevice(slotProps) {
+            let app = this;
+            let device = app.deviceList.find((ele) => {
+              if (ele.address.address) {
+                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              } else {
+                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              }
+            });
+            if (device) {
+              app.nodeService.purgeDevice(device).then(function (result) { });
+            }
+          },
+          updatePointsForDevice(slotProps) {
+            let app = this;
+            let device = app.deviceList.find((ele) => {
+              if (ele.address.address) {
+                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              } else {
+                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              }
+            });
+            if (device) {
+              app.nodeService.updatePointsForDevice(device).then(function (result) { });
+            }
+          },
+          updatePoint(slotProps) {
+            let app = this;
+            let device = app.deviceList.find((ele) => {
+              if (ele.address.address) {
+                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              } else {
+                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              }
+            });
+            if (device) {
+              app.nodeService.updatePoint(device).then(function (result) { });
+            }
+          },
+          setDeviceName() {
+            let app = this;
+            const slotProps = app.rightClickedDevice;
+            const displayName = app.deviceDisplayNameValue;
+            let device = app.deviceList.find((ele) => {
+              if (ele.address.address) {
+                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              } else {
+                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
+              }
+            });
+
+            if (device) {
+              app.nodeService.setDeviceDisplayName(device, displayName).then(function (result) {
+                if (result) {
+                  slotProps.node.label = displayName;
+                }
+              });
+            }
+
+            app.showDeviceNameDialog = false;
+          },
+          setPointName() {
+            let app = this;
+
+            const slotProps = app.rightClickedPoint;
+            const pointDisplayName = app.pointDisplayNameValue;
+            const pointName = slotProps.node.pointName;
+
+            let device = app.deviceList.find((ele) => {
+              return ele.deviceName == slotProps.node.parentDevice;
+            });
+
+            if (device) {
+              let deviceAddress = app.getDeviceAddress(device.address);
+              let deviceKey = `${deviceAddress}-${device.deviceId}`;
+
+              app.nodeService.setPointDisplayName(deviceKey, pointName, pointDisplayName).then(function (result) {
+                if (result) {
+                  slotProps.node.label = pointDisplayName;
+                }
+              });
+            }
+
+            app.showPointNameDialog = false;
+          },
+          settingDeviceName(slotProps) {
+            let app = this;
+            if (slotProps.node.settingDisplayName) {
+              return true;
+            }
+            return false;
+          },
+          cancelDisplayNameDialog() {
+            let app = this;
+            app.deviceDisplayNameValue = "";
+            app.showDeviceNameDialog = false;
+          },
+          cancelPointNameDialog() {
+            let app = this;
+            app.pointDisplayNameValue = "";
+            app.showPointNameDialog = false;
+          },
+          exportReadList() {
+            let app = this;
+            let exportJson = {};
+            let deviceIndex = 0;
+            const devicesToExport = Object.keys(app.pointsToRead);
+
+            doDevice(deviceIndex);
+
+            function doDevice(deviceIndex) {
+              const key = devicesToExport[deviceIndex];
+              const device = app.pointsToRead[key];
+
+              let readDevice = app.readDevices.find(
+                (ele) => ele.ipAddr == key.split("-")[0] && ele.deviceId == key.split("-")[1]
+              );
+              let deviceName;
+
+              if (readDevice) {
+                deviceName = readDevice.label;
+              }
+
+              exportJson[key] = {};
+              if (deviceName) {
+                exportJson[key]["deviceName"] = deviceName;
+              }
+
+              const devicePoints = Object.keys(device);
+
+              for (let pointIndex = 0; pointIndex <= devicePoints.length; pointIndex++) {
+                let pointName = devicePoints[pointIndex];
+                let pointObject = device[pointName];
+
+                //formatting json payload, still in progress
+
+                if (pointObject) {
+                  exportJson[key][pointName] = {
+                    meta: pointObject.meta,
+                    objectName: pointObject.objectName,
+                    displayName: pointObject.displayName,
+                  };
+                }
+
+                if (pointIndex == devicePoints.length - 1) {
+                  //all points have been iterated
+
+                  if (deviceIndex < devicesToExport.length - 1) {
+                    //more work to do
+                    deviceIndex++;
+                    doDevice(deviceIndex);
+                  } else if (deviceIndex == devicesToExport.length - 1) {
+                    //all read devices complete
+                    let data = "text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportJson));
+                    let aEle = document.getElementById("exportJSON");
+                    aEle.setAttribute("href", "data:" + data);
+                    aEle.setAttribute("download", "bacnet-read-list.json");
+                    aEle.click();
+                  }
+                }
+              }
+            }
+          },
+          importReadList() {
+            let app = this;
+            $("#readlist-file-upload").click();
+          },
+          addToReadDevices(pointsToRead) {
+            let app = this;
+
+            for (let key in pointsToRead) {
+              let ip = key.split("-")[0];
+              let id = key.split("-")[1];
+              const importedDevice = pointsToRead[key];
+              let foundIndex = app.devices.findIndex((ele) => ele.ipAddr == ip);
+
+              if (foundIndex !== -1) {
+                // match ip, check id
+                if (app.devices[foundIndex].deviceId == id) {
+                  //found device
+                  let treeDevice = app.devices[foundIndex];
+                  let device = app.deviceList.find((ele) => {
+                    if (ele.address.address) {
+                      return ele.address.address == ip && ele.deviceId == id;
+                    } else {
+                      return ele.address == ip && ele.deviceId == id;
+                    }
+                  });
+
+                  for (let pointName in importedDevice) {
+                    let point = importedDevice[pointName];
+                    if (pointName == "deviceName") {
+                      app.nodeService.setDeviceDisplayName(device, point);
+                      treeDevice.label = point;
+                    } else {
+                      let pointInTree = treeDevice.children[0].children.find(
+                        (ele) => ele.bacnetInstance == point.meta.objectId.instance && ele.bacnetType == point.meta.objectId.type
+                      );
+
+                      if (pointInTree) {
+                        pointInTree.label = point.displayName;
+
+                        const isDeviceInReadList = app.readDevices
+                          ? app.readDevices.findIndex((ele) => ele.deviceId == treeDevice.deviceId)
+                          : -1;
+
+                        if (isDeviceInReadList == -1) {
+                          //no read devices present, add new
+                          let newReadParent = JSON.parse(JSON.stringify(treeDevice));
+                          newReadParent.children[0].children = [];
+                          newReadParent.children[0].children.push(pointInTree);
+                          if (app.readDevices) {
+                            app.readDevices.push(newReadParent);
+                          } else {
+                            app.readDevices = [newReadParent];
+                          }
+                        } else {
+                          // read device found, add point to existing
+                          let pointIndex = app.readDevices[isDeviceInReadList].children[0].children.findIndex(
+                            (ele) => ele.data == point.objectName
+                          );
+                          if (pointIndex == -1) {
+                            app.readDevices[isDeviceInReadList].children[0].children.push(pointInTree);
+                          } else {
+                            app.readDevices[isDeviceInReadList].children[0].children[pointIndex] = pointInTree;
+                          }
                         }
+                      }
+                    }
+                  }
+                } else {
+                  //search mstp devices
+                  let mstpIndex = -1;
+                  let folderIndex = -1;
 
-                        expandedKeys.value = { ...expandedKeys.value };
-                    };
-                    const collapseAll = () => {
-                        expandedKeys.value = {};
-                    };
-                    const expandNode = (node) => {
-                        if (node.children && node.children.length) {
-                            expandedKeys.value[node.key] = true;
+                  app.devices[foundIndex].children.forEach(function (child, index) {
+                    let temporaryIndex = -1;
+                    if (child.label.includes("MSTP")) {
+                      temporaryIndex = child.children.findIndex((ele) => ele.deviceId == id);
+                    }
+                    if (temporaryIndex !== -1) {
+                      mstpIndex = temporaryIndex;
+                      folderIndex = index;
+                    }
+                  });
 
-                            for (let child of node.children) {
-                                expandNode(child);
-                            }
-                        }
-                    };
-
-                    return {
-                        nodes,
-                        expandedKeys,
-                        expandAll,
-                        collapseAll,
-                        expandNode,
-                    };
-                },
-                mounted() {
-                    let app = this;
-                    this.getData(true);
-
-                    $("#readlist-file-upload").on("change", function (event) {
-                        const input = event.target.files[0];
-                        const reader = new FileReader();
-
-                        reader.readAsText(input);
-
-                        reader.onload = function (e) {
-                            const text = e.target.result;
-                            let jsonPayload = JSON.parse(text);
-
-                            app.nodeService.importReadList(jsonPayload).then(function (result) {
-                                if (result) {
-                                    app.pointsToRead = jsonPayload;
-                                    app.addToReadDevices(jsonPayload);
-                                }
-                            });
-                        };
+                  if (mstpIndex !== -1 && folderIndex !== -1) {
+                    let mstpDevice = app.devices[foundIndex].children[folderIndex].children[mstpIndex];
+                    let device = app.deviceList.find((ele) => {
+                      if (ele.address.address) {
+                        return ele.address.address == ip && ele.deviceId == id;
+                      } else {
+                        return ele.address == ip && ele.deviceId == id;
+                      }
                     });
-                },
-                methods: {
-                    getData(initial) {
-                        let app = this;
-                        this.nodeService.getNetworkData().then(function (result) {
-                            //remove after below fixed
-                            app.devices = result.renderList;
-                            //end remove
 
-                            app.deviceList = result.deviceList;
-                            app.pointList = result.pointList;
-                            app.pollFrequency = parseInt(result.pollFrequency);
-                            app.deviceCount = result.deviceList.length;
+                    for (let pointName in importedDevice) {
+                      let point = importedDevice[pointName];
+                      if (pointName == "deviceName") {
+                        app.nodeService.setDeviceDisplayName(device, point);
+                        mstpDevice.label = point;
+                      } else {
+                        let pointInTree = mstpDevice.children[0].children.find(
+                          (ele) =>
+                            ele.bacnetInstance == point.meta.objectId.instance && ele.bacnetType == point.meta.objectId.type
+                        );
 
-                            //progress bar percentage
-                            let progressVal = parseInt((result.renderListCount / result.deviceList.length) * 100);
-                            if (typeof progressVal == "number" && !isNaN(progressVal)) {
-                                app.progressBarValue = progressVal;
-                            } else {
-                                app.progressBarValue = 0;
-                            }
+                        if (pointInTree) {
+                          pointInTree.label = point.displayName;
 
-                            //set progress bar width based on device count integer digit length
-                            if (app.deviceCount.toString().length >= 5) {
-                                app.calculateProgressBarWidth = "width: 200px;";
-                            } else if (app.deviceCount.toString().length == 4) {
-                                app.calculateProgressBarWidth = "width: 210px;";
-                            } else if (app.deviceCount.toString().length < 4) {
-                                app.calculateProgressBarWidth = "width: 220px;";
-                            }
-
-                            app.$forceUpdate();
-                        });
-
-                        app.$forceUpdate();
-                    },
-                    rebuildDataModel() {
-                        let app = this;
-                        app.nodeService.rebuildDataModel().then(function (result) {
-                            if (result == true) {
-                                app.progressBarValue = 0;
-                            }
-                        });
-                        app.$forceUpdate();
-                    },
-                    addAllDevices() {
-                        let app = this;
-                        app.devices.forEach(function (device) {
-                            app.addAllClicked({ node: device });
-                        });
-                        app.$forceUpdate();
-                    },
-                    addAllClicked(slotProps) {
-                        //update UI
-                        let app = this;
-                        let clone = JSON.parse(JSON.stringify(slotProps.node));
-
-                        while (clone.children.length > 1) {
-                            let child = clone.children[1];
-                            if (child.label.includes('MSTP')) {
-                                child.children.forEach(function (mstpDevice) {
-                                    app.addAllClicked({ node: mstpDevice });
-                                });
-                                clone.children.splice(1, 1);
-                            }
-                        }
-
-                        if (this.readDevices) {
-                            let foundIndex = this.readDevices.findIndex((ele) => ele.initialName == slotProps.node.initialName);
-                            if (foundIndex == -1) {
-                                this.readDevices.push(clone);
-                            } else if (foundIndex !== -1) {
-                                this.readDevices[foundIndex] = clone;
-                            }
-                        } else {
-                            this.readDevices = [clone];
-                        }
-                        let deviceSlot = this.devices.find((ele) => ele.initialName == slotProps.node.initialName);
-                        if (deviceSlot) {
-                            deviceSlot.showAdded = true;
-                            deviceSlot.children[0].children.forEach(function (child) {
-                                child.showAdded = true;
-                            });
-                        }
-                        slotProps.node.showAdded = true;
-                        this.$forceUpdate();
-                        //update node-red data structure to forward to gateway
-                        let device = this.deviceList.find((ele) => {
-                            if (ele.address.address) {
-                                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-                            } else {
-                                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-                            }
-                        });
-                        let deviceAddress = app.getDeviceAddress(device.address);
-                        let key = `${deviceAddress}-${device.deviceId}`;
-                        let points = this.pointList[key];
-                        if (!this.pointsToRead[key]) {
-                            this.pointsToRead[key] = {};
-                        }
-                        for (let pointName in points) {
-                            let point = this.pointList[key][pointName];
-                            this.pointsToRead[key][point.objectName] = point;
-                        }
-                        //force a deploy state
-                        node.hiddenDeployToggle = !node.prevHiddenToggleState;
-                    },
-                    addPointClicked(slotProps) {
-                        let app = this;
-                        //update UI
-                        const parentDeviceName = slotProps.node.parentDevice;
-                        const slotDeviceId = slotProps.node.parentDeviceId;
-                        let device = this.deviceList.find((ele) => ele.deviceId == slotDeviceId);
-                        let foundDeviceIndex = this.readDevices
-                            ? this.readDevices.findIndex((ele) => ele.deviceId == device.deviceId)
+                          const isDeviceInReadList = app.readDevices
+                            ? app.readDevices.findIndex((ele) => ele.deviceId == mstpDevice.deviceId)
                             : -1;
-                        let deviceAddress = app.getDeviceAddress(device.address);
-                        let key = `${deviceAddress}-${device.deviceId}`;
-                        let parentDevice = this.devices.find((ele) => ele.ipAddr == deviceAddress);
-                        let childDevice;
-                        if (device.isMstp) {
-                            let indexMap = {
-                                deviceIndex: -1,
-                                mstpNetorkIndex: -1
-                            };
-                            parentDevice.children.forEach(function (child, index) {
-                                if (child.label.includes("MSTP")) {
-                                    const tempIndex = child.children.findIndex(
-                                        (ele) => ele.deviceId == slotDeviceId
-                                    );
-                                    if (tempIndex !== -1) {
-                                        indexMap.deviceIndex = tempIndex;
-                                        indexMap.mstpNetorkIndex = index;
-                                    }
-                                }
-                            });
 
-                            if (indexMap.deviceIndex !== -1 && indexMap.mstpNetorkIndex !== -1) {
-                                childDevice = parentDevice.children[indexMap.mstpNetorkIndex].children[indexMap.deviceIndex];
-                            }
-                        }
-
-                        if (foundDeviceIndex == -1) {
+                          if (isDeviceInReadList == -1) {
                             //no read devices present, add new
-                            let newReadParent;
-                            if (childDevice) {
-                                newReadParent = JSON.parse(JSON.stringify(childDevice));
-                            } else {
-                                newReadParent = JSON.parse(JSON.stringify(parentDevice));
-                            }
+                            let newReadParent = JSON.parse(JSON.stringify(mstpDevice));
                             newReadParent.children[0].children = [];
-                            newReadParent.children[0].children.push(slotProps.node);
-                            while (newReadParent.children.length > 1) {
-                                newReadParent.children.forEach(function (child, index) {
-                                    if (child.label.includes("MSTP")) {
-                                        newReadParent.children.splice(index, 1);
-                                    }
-                                });
-                            }
-                            if (this.readDevices) {
-                                this.readDevices.push(newReadParent);
+                            newReadParent.children[0].children.push(pointInTree);
+                            if (app.readDevices) {
+                              app.readDevices.push(newReadParent);
                             } else {
-                                this.readDevices = [newReadParent];
+                              app.readDevices = [newReadParent];
                             }
-                        } else {
+                          } else {
                             // read device found, add point to existing
-                            let pointIndex = this.readDevices[foundDeviceIndex].children[0].children.findIndex(
-                                (ele) => ele.pointName == slotProps.node.pointName
+                            let pointIndex = app.readDevices[isDeviceInReadList].children[0].children.findIndex(
+                              (ele) => ele.data == point.objectName
                             );
                             if (pointIndex == -1) {
-                                this.readDevices[foundDeviceIndex].children[0].children.push(slotProps.node);
-                            }
-                        }
-
-                        //set show added to true
-                        slotProps.node.showAdded = true;
-                        this.$forceUpdate();
-
-                        //update node-red data structure
-                        if (!this.pointsToRead[key]) {
-                            this.pointsToRead[key] = {};
-                        }
-
-                        let point = this.pointList[key][slotProps.node.pointName];
-                        this.pointsToRead[key][point.objectName] = point;
-
-                        //force a deploy state
-                        node.hiddenDeployToggle = !node.prevHiddenToggleState;
-
-                        app.$forceUpdate();
-                    },
-                    removeAllDevices() {
-                        let app = this;
-                        let clone = JSON.parse(JSON.stringify(app.readDevices));
-                        clone.forEach(function (device) {
-                            app.removeAllClicked({ node: device });
-                        });
-
-                        app.pointsToRead = {};
-
-                        app.$forceUpdate();
-                    },
-                    removeAllClicked(slotProps) {
-                        let app = this;
-
-                        try {
-                            //update UI
-                            if (app.readDevices.length > 0) {
-                                let foundIndex = app.readDevices.findIndex(
-                                    (ele) => ele.key == slotProps.node.key && ele.label == slotProps.node.label
-                                );
-                                if (foundIndex !== -1) app.readDevices.splice(foundIndex, 1);
-                            }
-
-                            let deviceSlot = app.devices.find((ele) => ele.label == slotProps.node.label);
-                            if (deviceSlot) {
-                                deviceSlot.showAdded = false;
-                                deviceSlot.children.forEach(function (child) {
-                                    child.showAdded = false;
-                                });
-                            }
-                            slotProps.node.showAdded = false;
-                            app.$forceUpdate();
-
-                            //update node-red data structure
-                            let device = app.deviceList.find((ele) => {
-                                if (ele.address.address) {
-                                    return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-                                } else {
-                                    return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-                                }
-                            });
-                            let deviceAddress = app.getDeviceAddress(device.address);
-                            let key = `${deviceAddress}-${device.deviceId}`;
-                            if (app.pointsToRead[key]) {
-                                delete app.pointsToRead[key];
-                            }
-
-                            //force a deploy state
-                            node.hiddenDeployToggle = !node.prevHiddenToggleState;
-                        } catch (e) {
-                            //do nothing
-                        }
-
-                        app.$forceUpdate();
-                    },
-                    removePointClicked(slotProps) {
-                        let app = this;
-
-                        //update UI
-                        let parentDeviceName = slotProps.node.parentDevice;
-                        let parentDevice = this.devices.find((ele) => ele.label == parentDeviceName);
-                        const slotDeviceId = slotProps.node.parentDeviceId;
-                        let device = this.deviceList.find((ele) => ele.deviceId == slotDeviceId);
-                        let foundDeviceIndex = this.readDevices
-                            ? this.readDevices.findIndex((ele) => ele.deviceId == device.deviceId)
-                            : -1;
-                        let deviceAddress = app.getDeviceAddress(device.address);
-                        let key = `${deviceAddress}-${device.deviceId}`;
-
-                        if (foundDeviceIndex !== -1) {
-                            let foundIndex = this.readDevices[foundDeviceIndex].children[0].children.findIndex(
-                                (ele) => ele.pointName == slotProps.node.pointName
-                            );
-                            if (foundIndex !== -1) this.readDevices[foundDeviceIndex].children[0].children.splice(foundIndex, 1);
-                            if (this.readDevices[foundDeviceIndex].children[0].children.length == 0) {
-                                this.readDevices.splice(foundDeviceIndex, 1);
-                            }
-                        }
-
-                        //set show added to true
-                        slotProps.node.showAdded = false;
-                        this.$forceUpdate();
-
-                        //update node-red data stucture
-                        let point = this.pointList[key][slotProps.node.pointName];
-                        if (this.pointsToRead[key][point.objectName]) delete this.pointsToRead[key][point.objectName];
-                        //if last point is removed, deleted whole entry
-                        if (Object.keys(this.pointsToRead[key]).length == 0) delete this.pointsToRead[key];
-
-                        //force a deploy state
-                        node.hiddenDeployToggle = !node.prevHiddenToggleState;
-
-                        app.$forceUpdate();
-                    },
-                    exportPointListCsv() {
-                        let app = this;
-                        let csvContent = "ipAddress,deviceId,deviceName,pointName,objectType" + "\r\n";
-                        const keys = Object.keys(app.pointList);
-                        for (key in keys) {
-                            const guid = keys[key];
-                            const ipAddress = guid.split("-")[0];
-                            const deviceId = guid.split("-")[1];
-                            const deviceObject = app.pointList[keys[key]];
-                            const device = app.deviceList.find((ele) => {
-                                if (ele.address.address) {
-                                    return ele.address.address == ipAddress && ele.deviceId == deviceId;
-                                } else {
-                                    return ele.address == ipAddress && ele.deviceId == deviceId;
-                                }
-                            });
-                            if (device) {
-                                const deviceName = device.deviceName;
-                                const points = Object.keys(deviceObject);
-                                if (points.length > 0) {
-                                    for (point in points) {
-                                        csvContent +=
-                                            ipAddress +
-                                            "," +
-                                            deviceId +
-                                            "," +
-                                            deviceName +
-                                            "," +
-                                            points[point] +
-                                            "," +
-                                            deviceObject[points[point]].meta.objectId.type +
-                                            "\r\n";
-
-                                        if (parseInt(point) == points.length - 1 && parseInt(key) == keys.length - 1) {
-                                            // last iteration
-                                            var csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-                                            var link = document.createElement("a");
-                                            var url = URL.createObjectURL(csvBlob);
-                                            link.setAttribute("href", url);
-                                            link.setAttribute("download", "pointslist.csv");
-                                            document.body.appendChild(link);
-                                            link.click();
-                                        }
-                                    }
-                                } else {
-                                    if (parseInt(key) == keys.length - 1) {
-                                        // last iteration
-                                        var csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-                                        var link = document.createElement("a");
-                                        var url = URL.createObjectURL(csvBlob);
-                                        link.setAttribute("href", url);
-                                        link.setAttribute("download", "pointslist.csv");
-                                        document.body.appendChild(link);
-                                        link.click();
-                                    }
-                                }
+                              app.readDevices[isDeviceInReadList].children[0].children.push(pointInTree);
                             } else {
-                                if (parseInt(key) == keys.length - 1) {
-                                    // last iteration
-                                    var csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-                                    var link = document.createElement("a");
-                                    var url = URL.createObjectURL(csvBlob);
-                                    link.setAttribute("href", url);
-                                    link.setAttribute("download", "pointslist.csv");
-                                    document.body.appendChild(link);
-                                    link.click();
-                                }
+                              app.readDevices[isDeviceInReadList].children[0].children[pointIndex] = pointInTree;
                             }
+                          }
                         }
-                    },
-                    getDeviceAddress(addr) {
-                        switch (typeof addr) {
-                            case "object":
-                                return addr.address;
-                            case "string":
-                                return addr;
-                            default:
-                                return addr;
-                        }
-                    },
-                    isDeviceActive(slotProps) {
-                        let app = this;
-                        if ((Date.now() - slotProps.node.lastSeen) / 1000 < app.pollFrequency + 5) {
-                            return true;
-                        } else if (slotProps.node.isDumbMstpRouter == true || slotProps.node.isDumbMstpRouter == "true") {
-                            return true;
-                        }
-                        return false;
-                    },
-                    isDeviceAdded(slotProps) {
-                        if (slotProps.node.showAdded == true) {
-                            return true;
-                        } else {
-                            return false;
-                        }
-                    },
-                    hasMstpDevices(slotProps) {
-                        if (slotProps.node.children[1] && slotProps.node.children[1].children.length > 0) {
-                            return true;
-                        }
-                        return false;
-                    },
-                    isSlotAdded(slotProps) {
-                        return slotProps.node.showAdded;
-                    },
-                    hasData() {
-                        if (this.devices && this.devices.length > 0) {
-                            return true;
-                        } else {
-                            return false;
-                        }
-                    },
-                    emptyTree() {
-                        if (this.devices.length > 0) {
-                            return true;
-                        }
-                        return false;
-                    },
-                    onDeviceRightClick(slotProps, event) {
-                        let app = this;
-                        app.rightClickedDevice = slotProps;
-                        event.preventDefault();
-                        menu.style.setProperty("--mouse-x", event.clientX + "px");
-                        menu.style.setProperty("--mouse-y", event.clientY + "px");
-                        menu.style.display = "block";
-                    },
-                    onPointRightClick(slotProps, event) {
-                        let app = this;
-                        app.rightClickedPoint = slotProps;
-                        event.preventDefault();
-                        pointMenu.style.setProperty("--mouse-x", event.clientX + "px");
-                        pointMenu.style.setProperty("--mouse-y", event.clientY + "px");
-                        pointMenu.style.display = "block";
-                    },
-                    handleContextMenuClick(type) {
-                        let app = this;
-                        switch (type) {
-                            case "purgeDevice":
-                                app.purgeDevice(app.rightClickedDevice);
-                                break;
-                            case "updatePoints":
-                                app.updatePointsForDevice(app.rightClickedDevice);
-                                break;
-                            case "addAllPoints":
-                                app.addAllClicked(app.rightClickedDevice);
-                                break;
-                            case "removeAllPoints":
-                                app.removeAllClicked(app.rightClickedDevice);
-                                break;
-                            case "setDeviceName":
-                                app.showDeviceNameDialog = true;
-                                app.deviceDisplayNameValue = app.rightClickedDevice.node.label;
-                                break;
-                            default:
-                                break;
-                        }
-                    },
-                    handlePointContextMenuClick(type) {
-                        let app = this;
-                        switch (type) {
-                            case "setPointName":
-                                app.showPointNameDialog = true;
-                                app.pointDisplayNameValue = app.rightClickedPoint.node.label;
-                                break;
-                            case "updatePoint":
-                                app.updatePoint(app.rightClickedPoint);
-                                break;
-                            default:
-                                break;
-                        }
-                    },
-                    purgeDevice(slotProps) {
-                        let app = this;
-                        let device = app.deviceList.find((ele) => {
-                            if (ele.address.address) {
-                                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-                            } else {
-                                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-                            }
-                        });
-                        if (device) {
-                            app.nodeService.purgeDevice(device).then(function (result) { });
-                        }
-                    },
-                    updatePointsForDevice(slotProps) {
-                        let app = this;
-                        let device = app.deviceList.find((ele) => {
-                            if (ele.address.address) {
-                                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-                            } else {
-                                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-                            }
-                        });
-                        if (device) {
-                            app.nodeService.updatePointsForDevice(device).then(function (result) { });
-                        }
-                    },
-                    updatePoint(slotProps) {
-                        let app = this;
-                        let device = app.deviceList.find((ele) => {
-                            if (ele.address.address) {
-                                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-                            } else {
-                                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-                            }
-                        });
-                        if (device) {
-                            app.nodeService.updatePoint(device).then(function (result) { });
-                        }
-                    },
-                    setDeviceName() {
-                        let app = this;
-                        const slotProps = app.rightClickedDevice;
-                        const displayName = app.deviceDisplayNameValue;
-                        let device = app.deviceList.find((ele) => {
-                            if (ele.address.address) {
-                                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-                            } else {
-                                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-                            }
-                        });
-
-                        if (device) {
-                            app.nodeService.setDeviceDisplayName(device, displayName).then(function (result) {
-                                if (result) {
-                                    slotProps.node.label = displayName;
-                                }
-                            });
-                        }
-
-                        app.showDeviceNameDialog = false;
-                    },
-                    setPointName() {
-                        let app = this;
-
-                        const slotProps = app.rightClickedPoint;
-                        const pointDisplayName = app.pointDisplayNameValue;
-                        const pointName = slotProps.node.pointName;
-
-                        let device = app.deviceList.find((ele) => {
-                            return ele.deviceName == slotProps.node.parentDevice;
-                        });
-
-                        if (device) {
-                            let deviceAddress = app.getDeviceAddress(device.address);
-                            let deviceKey = `${deviceAddress}-${device.deviceId}`;
-
-                            app.nodeService.setPointDisplayName(deviceKey, pointName, pointDisplayName).then(function (result) {
-                                if (result) {
-                                    slotProps.node.label = pointDisplayName;
-                                }
-                            });
-                        }
-
-                        app.showPointNameDialog = false;
-                    },
-                    settingDeviceName(slotProps) {
-                        let app = this;
-                        if (slotProps.node.settingDisplayName) {
-                            return true;
-                        }
-                        return false;
-                    },
-                    cancelDisplayNameDialog() {
-                        let app = this;
-                        app.deviceDisplayNameValue = "";
-                        app.showDeviceNameDialog = false;
-                    },
-                    cancelPointNameDialog() {
-                        let app = this;
-                        app.pointDisplayNameValue = "";
-                        app.showPointNameDialog = false;
-                    },
-                    exportReadList() {
-                        let app = this;
-                        let exportJson = {};
-                        let deviceIndex = 0;
-                        const devicesToExport = Object.keys(app.pointsToRead);
-
-                        doDevice(deviceIndex);
-
-                        function doDevice(deviceIndex) {
-                            const key = devicesToExport[deviceIndex];
-                            const device = app.pointsToRead[key];
-
-                            let readDevice = app.readDevices.find(ele => ele.ipAddr == key.split("-")[0] && ele.deviceId == key.split("-")[1]);
-                            let deviceName;
-
-                            if (readDevice) {
-                                deviceName = readDevice.label
-                            }
-
-                            exportJson[key] = {};
-                            if (deviceName) {
-                                exportJson[key]["deviceName"] = deviceName;
-                            }
-
-                            const devicePoints = Object.keys(device);
-
-                            for (let pointIndex = 0; pointIndex <= devicePoints.length; pointIndex++) {
-                                let pointName = devicePoints[pointIndex];
-                                let pointObject = device[pointName];
-
-                                //formatting json payload, still in progress
-
-                                if (pointObject) {
-                                    exportJson[key][pointName] = {
-                                        meta: pointObject.meta,
-                                        objectName: pointObject.objectName,
-                                        displayName: pointObject.displayName,
-                                    };
-                                }
-
-                                if (pointIndex == devicePoints.length - 1) {
-                                    //all points have been iterated
-
-                                    if (deviceIndex < devicesToExport.length - 1) {
-                                        //more work to do
-                                        deviceIndex++;
-                                        doDevice(deviceIndex);
-                                    } else if (deviceIndex == devicesToExport.length - 1) {
-                                        //all read devices complete
-                                        let data = "text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportJson));
-                                        let aEle = document.getElementById("exportJSON");
-                                        aEle.setAttribute("href", "data:" + data);
-                                        aEle.setAttribute("download", "bacnet-read-list.json");
-                                        aEle.click();
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    importReadList() {
-                        let app = this;
-                        $("#readlist-file-upload").click();
-                    },
-                    addToReadDevices(pointsToRead) {
-                        let app = this;
-
-                        for (let key in pointsToRead) {
-                            let ip = key.split("-")[0];
-                            let id = key.split("-")[1];
-                            const importedDevice = pointsToRead[key];
-                            let foundIndex = app.devices.findIndex((ele) => ele.ipAddr == ip);
-
-                            if (foundIndex !== -1) {
-                                // match ip, check id
-                                if (app.devices[foundIndex].deviceId == id) {
-                                    //found device
-                                    let treeDevice = app.devices[foundIndex];
-                                    let device = app.deviceList.find((ele) => {
-                                        if (ele.address.address) {
-                                            return ele.address.address == ip && ele.deviceId == id;
-                                        } else {
-                                            return ele.address == ip && ele.deviceId == id;
-                                        }
-                                    });
-
-                                    for (let pointName in importedDevice) {
-                                        let point = importedDevice[pointName];
-                                        if (pointName == "deviceName") {
-                                            app.nodeService.setDeviceDisplayName(device, point);
-                                            treeDevice.label = point;
-                                        } else {
-                                            let pointInTree = treeDevice.children[0].children.find(
-                                                (ele) => ele.bacnetInstance == point.meta.objectId.instance && ele.bacnetType == point.meta.objectId.type
-                                            );
-
-                                            if (pointInTree) {
-                                                pointInTree.label = point.displayName;
-
-                                                const isDeviceInReadList = app.readDevices
-                                                    ? app.readDevices.findIndex((ele) => ele.deviceId == treeDevice.deviceId)
-                                                    : -1;
-
-                                                if (isDeviceInReadList == -1) {
-                                                    //no read devices present, add new
-                                                    let newReadParent = JSON.parse(JSON.stringify(treeDevice));
-                                                    newReadParent.children[0].children = [];
-                                                    newReadParent.children[0].children.push(pointInTree);
-                                                    if (app.readDevices) {
-                                                        app.readDevices.push(newReadParent);
-                                                    } else {
-                                                        app.readDevices = [newReadParent];
-                                                    }
-                                                } else {
-                                                    // read device found, add point to existing
-                                                    let pointIndex = app.readDevices[isDeviceInReadList].children[0].children.findIndex(
-                                                        (ele) => ele.data == point.objectName
-                                                    );
-                                                    if (pointIndex == -1) {
-                                                        app.readDevices[isDeviceInReadList].children[0].children.push(pointInTree);
-                                                    } else {
-                                                        app.readDevices[isDeviceInReadList].children[0].children[pointIndex] = pointInTree;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    //search mstp devices
-                                    let mstpIndex = -1;
-                                    let folderIndex = -1;
-
-                                    app.devices[foundIndex].children.forEach(function (child, index) {
-                                        let temporaryIndex = -1;
-                                        if (child.label.includes("MSTP")) {
-                                            temporaryIndex = child.children.findIndex((ele) => ele.deviceId == id);
-                                        }
-                                        if (temporaryIndex !== -1) {
-                                            mstpIndex = temporaryIndex;
-                                            folderIndex = index;
-                                        }
-                                    });
-
-                                    if (mstpIndex !== -1 && folderIndex !== -1) {
-                                        let mstpDevice = app.devices[foundIndex].children[folderIndex].children[mstpIndex];
-                                        let device = app.deviceList.find((ele) => {
-                                            if (ele.address.address) {
-                                                return ele.address.address == ip && ele.deviceId == id;
-                                            } else {
-                                                return ele.address == ip && ele.deviceId == id;
-                                            }
-                                        });
-
-                                        for (let pointName in importedDevice) {
-                                            let point = importedDevice[pointName];
-                                            if (pointName == "deviceName") {
-                                                app.nodeService.setDeviceDisplayName(device, point);
-                                                mstpDevice.label = point;
-                                            } else {
-                                                let pointInTree = mstpDevice.children[0].children.find(
-                                                    (ele) => ele.bacnetInstance == point.meta.objectId.instance && ele.bacnetType == point.meta.objectId.type
-                                                );
-
-                                                if (pointInTree) {
-                                                    pointInTree.label = point.displayName;
-
-                                                    const isDeviceInReadList = app.readDevices
-                                                        ? app.readDevices.findIndex((ele) => ele.deviceId == mstpDevice.deviceId)
-                                                        : -1;
-
-                                                    if (isDeviceInReadList == -1) {
-                                                        //no read devices present, add new
-                                                        let newReadParent = JSON.parse(JSON.stringify(mstpDevice));
-                                                        newReadParent.children[0].children = [];
-                                                        newReadParent.children[0].children.push(pointInTree);
-                                                        if (app.readDevices) {
-                                                            app.readDevices.push(newReadParent);
-                                                        } else {
-                                                            app.readDevices = [newReadParent];
-                                                        }
-                                                    } else {
-                                                        // read device found, add point to existing
-                                                        let pointIndex = app.readDevices[isDeviceInReadList].children[0].children.findIndex(
-                                                            (ele) => ele.data == point.objectName
-                                                        );
-                                                        if (pointIndex == -1) {
-                                                            app.readDevices[isDeviceInReadList].children[0].children.push(pointInTree);
-                                                        } else {
-                                                            app.readDevices[isDeviceInReadList].children[0].children[pointIndex] = pointInTree;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        // not part of device list at all, notify user
-                                    }
-                                }
-                            }
-                        }
-
-                        app.$forceUpdate();
-                    },
-                    refreshReadListTree() {
-                        this.addToReadDevices(this.pointsToRead);
-                    },
-                    calculateMstpCount(slotProps) {
-                        let count = 0;
-                        slotProps.node.children.forEach(function (child) {
-                            if (child.label.includes("MSTP")) {
-                                count += child.children.length;
-                            }
-                        });
-
-                        return count;
-                    },
-                    calculatePointCount(slotProps) {
-                        let count = 0;
-                        return count;
-                    },
-                },
-                components: {
-                    "p-tree": primevue.tree,
-                    "p-button": primevue.button,
-                    "p-timeline": primevue.timeline,
-                    "p-progressbar": primevue.progressbar,
-                    "p-dialog": primevue.dialog,
-                    "p-input-text": primevue.inputtext,
-                },
-            };
-
-            let vueapp = createApp(App);
-            vueapp.use(primevue.config.default);
-            vueapp.use(primevue.confirmationservice);
-            node.vm = vueapp.mount("#node-input-tabs-content");
-
-            //reinstate device data
-            if (node.readDevices) {
-                node.vm.$data.readDevices = node.readDevices;
+                      }
+                    }
+                  } else {
+                    // not part of device list at all, notify user
+                  }
+                }
+              }
             }
 
-            if (node.pointsToRead) {
-                node.vm.$data.pointsToRead = node.pointsToRead;
-            }
-
-            //set checkboxes to config values stored in backend
-
-            document.getElementById("node-input-object_property_simplePayload").checked = node.object_property_simplePayload;
-            document.getElementById("node-input-object_property_simplePayload").onclick = handleCheckboxClick;
-            document.getElementById("node-input-object_property_simpleWithStatus").checked = node.object_property_simpleWithStatus;
-            document.getElementById("node-input-object_property_simpleWithStatus").onclick = handleCheckboxClick;
-            document.getElementById("node-input-object_property_fullObject").checked = node.object_property_fullObject;
-            document.getElementById("node-input-object_property_fullObject").onclick = handleCheckboxClick;
-
-            document.getElementById("node-input-roundDecimal").value = node.roundDecimal;
-            document.getElementById("node-input-json").checked = node.json;
-            document.getElementById("node-input-json").onclick = handleMsgTypeClick;
-            document.getElementById("node-input-mqtt").checked = node.mqtt;
-            document.getElementById("node-input-mqtt").onclick = handleMsgTypeClick;
-            document.getElementById("node-input-pointJson").checked = node.pointJson;
-            document.getElementById("node-input-pointJson").onclick = handleMsgTypeClick;
-
-            document.getElementById("node-input-useDeviceName").checked = node.useDeviceName;
-
-            var menu = document.querySelector(".context-menu");
-            window.addEventListener("click", (event) => {
-                menu.style.display = "none";
+            app.$forceUpdate();
+          },
+          refreshReadListTree() {
+            this.addToReadDevices(this.pointsToRead);
+          },
+          calculateMstpCount(slotProps) {
+            let count = 0;
+            slotProps.node.children.forEach(function (child) {
+              if (child.label.includes("MSTP")) {
+                count += child.children.length;
+              }
             });
 
-            var pointMenu = document.querySelector(".point-context-menu");
-            window.addEventListener("click", (event) => {
-                pointMenu.style.display = "none";
-            });
-
-            function handleCheckboxClick() {
-                if (this.id == "node-input-object_property_simplePayload") {
-                    document.getElementById("node-input-object_property_fullObject").checked = false;
-                    document.getElementById("node-input-object_property_simpleWithStatus").checked = false;
-                }
-                if (this.id == "node-input-object_property_simpleWithStatus") {
-                    document.getElementById("node-input-object_property_fullObject").checked = false;
-                    document.getElementById("node-input-object_property_simplePayload").checked = false;
-                }
-                if (this.id == "node-input-object_property_fullObject") {
-                    document.getElementById("node-input-object_property_simplePayload").checked = false;
-                    document.getElementById("node-input-object_property_simpleWithStatus").checked = false;
-                }
-            }
-
-            function handleMsgTypeClick() {
-                if (this.id == "node-input-json") {
-                    document.getElementById("node-input-mqtt").checked = false;
-                    document.getElementById("node-input-pointJson").checked = false;
-                }
-                if (this.id == "node-input-mqtt") {
-                    document.getElementById("node-input-json").checked = false;
-                    document.getElementById("node-input-pointJson").checked = false;
-                }
-                if (this.id == "node-input-pointJson") {
-                    document.getElementById("node-input-json").checked = false;
-                    document.getElementById("node-input-mqtt").checked = false;
-                }
-            }
-
-            //create tabs
-            let tabs = RED.tabs.create({
-                id: "node-input-read-tabs",
-                onchange: function (tab) {
-                    $("#node-input-tabs-content").children().hide();
-                    $("#" + tab.id).show();
-                },
-            });
-
-            tabs.addTab({
-                id: "read-networkTree-tab",
-                label: "Device List",
-            });
-
-            tabs.addTab({
-                id: "read-readList-tab",
-                label: "Read List",
-            });
-
-            tabs.addTab({
-                id: "read-properties-tab",
-                label: "Properties",
-            });
-
-            //remove loading animation
-            let loadingGif = document.getElementById("loadingGif");
-            let loadingText = document.getElementById("loadingText");
-            let table = document.getElementById("read-networkTree-tab-content");
-            loadingGif.style.display = "none";
-            loadingText.style.display = "none";
-            table.style.display = "inherit";
+            return count;
+          },
+          calculatePointCount(slotProps) {
+            let count = 0;
+            return count;
+          },
         },
-        oneditsave: function () {
-            let node = this;
-            if (node.vm.$data.readDevices) node.readDevices = node.vm.$data.readDevices;
-            if (node.vm.$data.pointsToRead) node.pointsToRead = node.vm.$data.pointsToRead;
+        components: {
+          "p-tree": primevue.tree,
+          "p-button": primevue.button,
+          "p-timeline": primevue.timeline,
+          "p-progressbar": primevue.progressbar,
+          "p-dialog": primevue.dialog,
+          "p-input-text": primevue.inputtext,
+          "p-confirm-dialog": primevue.confirmdialog,
+          "p-confirm-popup": primevue.confirmpopup,
         },
-        oneditcancel: function () {
-            let node = this;
-            if (node.vm.$data.readDevices) node.readDevices = node.vm.$data.readDevices;
-            if (node.vm.$data.pointsToRead) node.pointsToRead = node.vm.$data.pointsToRead;
+      };
+
+      let vueapp = createApp(App);
+      vueapp.use(primevue.config.default);
+      vueapp.use(primevue.confirmationservice);
+      vueapp.use(primevue.confirmpopup);
+
+      node.vm = vueapp.mount("#node-input-tabs-content");
+
+      //reinstate device data
+      if (node.readDevices) {
+        node.vm.$data.readDevices = node.readDevices;
+      }
+
+      if (node.pointsToRead) {
+        node.vm.$data.pointsToRead = node.pointsToRead;
+      }
+
+      //set checkboxes to config values stored in backend
+
+      document.getElementById("node-input-object_property_simplePayload").checked = node.object_property_simplePayload;
+      document.getElementById("node-input-object_property_simplePayload").onclick = handleCheckboxClick;
+      document.getElementById("node-input-object_property_simpleWithStatus").checked = node.object_property_simpleWithStatus;
+      document.getElementById("node-input-object_property_simpleWithStatus").onclick = handleCheckboxClick;
+      document.getElementById("node-input-object_property_fullObject").checked = node.object_property_fullObject;
+      document.getElementById("node-input-object_property_fullObject").onclick = handleCheckboxClick;
+
+      document.getElementById("node-input-roundDecimal").value = node.roundDecimal;
+      document.getElementById("node-input-json").checked = node.json;
+      document.getElementById("node-input-json").onclick = handleMsgTypeClick;
+      document.getElementById("node-input-mqtt").checked = node.mqtt;
+      document.getElementById("node-input-mqtt").onclick = handleMsgTypeClick;
+      document.getElementById("node-input-pointJson").checked = node.pointJson;
+      document.getElementById("node-input-pointJson").onclick = handleMsgTypeClick;
+
+      document.getElementById("node-input-useDeviceName").checked = node.useDeviceName;
+
+      var menu = document.querySelector(".context-menu");
+      window.addEventListener("click", (event) => {
+        menu.style.display = "none";
+      });
+
+      var pointMenu = document.querySelector(".point-context-menu");
+      window.addEventListener("click", (event) => {
+        pointMenu.style.display = "none";
+      });
+
+      function handleCheckboxClick() {
+        if (this.id == "node-input-object_property_simplePayload") {
+          document.getElementById("node-input-object_property_fullObject").checked = false;
+          document.getElementById("node-input-object_property_simpleWithStatus").checked = false;
+        }
+        if (this.id == "node-input-object_property_simpleWithStatus") {
+          document.getElementById("node-input-object_property_fullObject").checked = false;
+          document.getElementById("node-input-object_property_simplePayload").checked = false;
+        }
+        if (this.id == "node-input-object_property_fullObject") {
+          document.getElementById("node-input-object_property_simplePayload").checked = false;
+          document.getElementById("node-input-object_property_simpleWithStatus").checked = false;
+        }
+      }
+
+      function handleMsgTypeClick() {
+        if (this.id == "node-input-json") {
+          document.getElementById("node-input-mqtt").checked = false;
+          document.getElementById("node-input-pointJson").checked = false;
+        }
+        if (this.id == "node-input-mqtt") {
+          document.getElementById("node-input-json").checked = false;
+          document.getElementById("node-input-pointJson").checked = false;
+        }
+        if (this.id == "node-input-pointJson") {
+          document.getElementById("node-input-json").checked = false;
+          document.getElementById("node-input-mqtt").checked = false;
+        }
+      }
+
+      //create tabs
+      let tabs = RED.tabs.create({
+        id: "node-input-read-tabs",
+        onchange: function (tab) {
+          $("#node-input-tabs-content").children().hide();
+          $("#" + tab.id).show();
         },
-    });
+      });
+
+      tabs.addTab({
+        id: "read-networkTree-tab",
+        label: "Device List",
+      });
+
+      tabs.addTab({
+        id: "read-readList-tab",
+        label: "Read List",
+      });
+
+      tabs.addTab({
+        id: "read-properties-tab",
+        label: "Properties",
+      });
+
+      //remove loading animation
+      let loadingGif = document.getElementById("loadingGif");
+      let loadingText = document.getElementById("loadingText");
+      let table = document.getElementById("read-networkTree-tab-content");
+      loadingGif.style.display = "none";
+      loadingText.style.display = "none";
+      table.style.display = "inherit";
+    },
+    oneditsave: function () {
+      let node = this;
+      if (node.vm.$data.readDevices) node.readDevices = node.vm.$data.readDevices;
+      if (node.vm.$data.pointsToRead) node.pointsToRead = node.vm.$data.pointsToRead;
+    },
+    oneditcancel: function () {
+      let node = this;
+      if (node.vm.$data.readDevices) node.readDevices = node.vm.$data.readDevices;
+      if (node.vm.$data.pointsToRead) node.pointsToRead = node.vm.$data.pointsToRead;
+    },
+  });
 </script>
 
 <script type="text/html" data-template-name="Bacnet-Discovery">
@@ -1145,18 +1169,22 @@
 
         <div class="headerDiv">
           <a class="countStatus" style="margin-left: 15px;"> <span class="bp-deviceCount">{{deviceCount}}</span> Device(s)</a>
-          <p-progressbar class="bp-readNode-progressbar" :value="progressBarValue" :show-value="true" :style="calculateProgressBarWidth"></p-progressbar>
+          <p-progressbar
+            class="bp-readNode-progressbar"
+            :value="progressBarValue"
+            :show-value="true"
+            :style="calculateProgressBarWidth"></p-progressbar>
           <div class="buttonGroup">
-            <button @click="rebuildDataModel()" class="rebuildDataButton" title="Rebuild Data Model">
+            <button @click="rebuildConfirm()" class="rebuildDataButton" title="Rebuild Data Model">
               <i class="pi pi-wrench" style="color: #969696;"></i>
             </button>
-            
+
             <button @click="addAllDevices()" class="reloadButton" title="Add all devices">
               <i class="pi pi-plus" style="color: #62ABE9;"></i> <span>Add all devices</span>
             </button>
 
             <button @click="getData()" class="reloadButton" title="Reload Data">
-                <i class="fa fa-refresh" style="color: #4D88B7;"></i> <span>Refresh tree</span>
+              <i class="fa fa-refresh" style="color: #4D88B7;"></i> <span>Refresh tree</span>
             </button>
           </div>
         </div>
@@ -1265,14 +1293,12 @@
         <input type="file" id="readlist-file-upload" accept="application/JSON" class="inputStyle" style="display: none;" />
 
         <button @click="removeAllDevices()" class="removeAllDevicesButton" title="Remove all devices">
-            <i class="pi pi-times" title="Remove all points"></i> <a>Remove all devices</a>
+          <i class="pi pi-times" title="Remove all points"></i> <a>Remove all devices</a>
         </button>
 
         <button @click="refreshReadListTree()" class="reloadButton bp-read-list-refresh-button" title="Refresh tree">
-            <i class="fa fa-refresh" style="color: #4D88B7;"> </i><span>Refresh tree</span>
+          <i class="fa fa-refresh" style="color: #4D88B7;"> </i><span>Refresh tree</span>
         </button>
-
-
       </div>
 
       <p-tree :value="readDevices">
@@ -1307,9 +1333,7 @@
           >Object Properties</label
         >
 
-        <div
-          id="node-input-object_properties_group"
-          style="display: flex; align-items: flex-start; flex-direction: column;">
+        <div id="node-input-object_properties_group" style="display: flex; align-items: flex-start; flex-direction: column;">
           <div class="objectPropertiesLabel">
             <label
               for="node-input-object_property_simplePayload"
@@ -1359,27 +1383,17 @@
 
       <div class="form-row msgTypeDiv bp-prop-row" style="display: flex;">
         <label for="node-input-msgType" class="bp-prop-heading"> Message type </label>
-        <div
-          id="node-input-msgType"
-          style="display: flex; align-items: flex-start; flex-direction: column;">
+        <div id="node-input-msgType" style="display: flex; align-items: flex-start; flex-direction: column;">
           <!-- class= checkbox-round -->
           <div style="display: flex; flex-direction: row; align-items: flex-start;">
-            <input
-              class="checkbox-round"
-              type="checkbox"
-              id="node-input-json"
-              style="width: 13px; margin-left: 5px;" /><label
+            <input class="checkbox-round" type="checkbox" id="node-input-json" style="width: 13px; margin-left: 5px;" /><label
               for="node-input-json"
               style="padding-left: 20px; width: fit-content;"
               >Block per device</label
             >
           </div>
           <div style="display: flex; flex-direction: row; align-items: flex-start;">
-            <input
-              class="checkbox-round"
-              type="checkbox"
-              id="node-input-mqtt"
-              style="width: 13px; margin-left: 5px;" /><label
+            <input class="checkbox-round" type="checkbox" id="node-input-mqtt" style="width: 13px; margin-left: 5px;" /><label
               for="node-input-mqtt"
               style="padding-left: 20px; width: fit-content;"
               >Individual msgs</label
@@ -1400,13 +1414,10 @@
       </div>
 
       <div class="bp-checkbox-row bp-readnode-useDeviceName">
-        <label
-        for="node-input-useDeviceName"
-        style="padding-left: 4px; align-items: start;"
-        class="objectPropertiesLabel">
-        <span data-i18n="bitpool-bacnet.label.useDeviceName"></span>
-        <a style="white-space: nowrap;">Use device name in topic</a>
-        <input
+        <label for="node-input-useDeviceName" style="padding-left: 4px; align-items: start;" class="objectPropertiesLabel">
+          <span data-i18n="bitpool-bacnet.label.useDeviceName"></span>
+          <a style="white-space: nowrap;">Use device name in topic</a>
+          <input
             style="margin-left: 10px; bottom: 3px;"
             class=" objectProp bp-checkbox"
             type="checkbox"
@@ -1425,11 +1436,12 @@
         <input style="display: none !important;" type="checkbox" id="node-input-hiddenDeployToggle" />
       </label>
 
-      <hr>
+      <hr />
 
       <div class="form-row bp-import-buttons">
         <label for="points-export" class="export-points-button" @click="exportPointListCsv()">
-          <i class="fa fa-arrow-circle-down" id="fileLabel"></i> <a id="points-export" style="padding-left: 10px;">Export point list</a>
+          <i class="fa fa-arrow-circle-down" id="fileLabel"></i>
+          <a id="points-export" style="padding-left: 10px;">Export point list</a>
         </label>
       </div>
     </div>
@@ -1441,11 +1453,11 @@
   <h3><strong>Device List</strong></h3>
   <ol class="node-ports">
     <p>
-      This tab displays the devices and device points that are a result of a network Discover. The data is broken down and
-      listed as Devices, Points for the Device, and Point properties for the Points. On this tab the user may choose specific
-      points to read, or all of the points present in a device. The reload button may be used to show any new data that may
-      have been recieved by the bitpool BACnet node. Please note: Data can only be shown here once a Discover sucessfully
-      recieves a response from online devices on the network
+      This tab displays the devices and device points that are a result of a network Discover. The data is broken down and listed
+      as Devices, Points for the Device, and Point properties for the Points. On this tab the user may choose specific points to
+      read, or all of the points present in a device. The reload button may be used to show any new data that may have been
+      recieved by the bitpool BACnet node. Please note: Data can only be shown here once a Discover sucessfully recieves a
+      response from online devices on the network
     </p>
   </ol>
 
@@ -1457,16 +1469,15 @@
   <h3><strong>Properties</strong></h3>
   <ol class="node-ports">
     <p>
-      This tab shows all of the point properties the user may choose to read from the points detailed in the Read List tab.
-      Here the user may also choose the output format of the Read data, as MQTT compatible Individual msgs, or a JSON block
-      per device.
+      This tab shows all of the point properties the user may choose to read from the points detailed in the Read List tab. Here
+      the user may also choose the output format of the Read data, as MQTT compatible Individual msgs, or a JSON block per device.
     </p>
   </ol>
 
   <h3><strong>Examples</strong></h3>
   <p>
-    For example flows, please use the examples section for this node. These examples can be found at: Node-red hamburger menu
-    on top right -> Import -> Examples -> @bitpoolos/edge-bacnet
+    For example flows, please use the examples section for this node. These examples can be found at: Node-red hamburger menu on
+    top right -> Import -> Examples -> @bitpoolos/edge-bacnet
   </p>
   <p>
     To find captured examples of settings and flows, please go to our wiki

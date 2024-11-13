@@ -6,7 +6,15 @@ const bacnet = require("./resources/node-bacstack-ts/dist/index.js");
 const baEnum = bacnet.enum;
 const bacnetIdMax = baEnum.ASN1_MAX_PROPERTY_ID;
 const { EventEmitter } = require("events");
-const { getUnit, roundDecimalPlaces, parseBacnetError, getBacnetErrorString, Read_Config_Sync, isNumber, decodeBitArray } = require("./common");
+const {
+  getUnit,
+  roundDecimalPlaces,
+  parseBacnetError,
+  getBacnetErrorString,
+  Read_Config_Sync,
+  isNumber,
+  decodeBitArray,
+} = require("./common");
 const { ToadScheduler, SimpleIntervalJob, Task } = require("toad-scheduler");
 const { BacnetDevice } = require("./bacnet_device");
 const { Mutex } = require("async-mutex");
@@ -65,13 +73,12 @@ class BacnetClient extends EventEmitter {
       };
 
       try {
-
         that.client = new bacnet.Client({
           apduTimeout: config.apduTimeout,
           interface: config.localIpAdrress,
           port: config.port,
           broadcastAddress: config.broadCastAddr,
-          portRangeMatrix: config.portRangeMatrix
+          portRangeMatrix: config.portRangeMatrix,
         });
         that.setMaxListeners(1);
 
@@ -193,8 +200,25 @@ class BacnetClient extends EventEmitter {
 
     let addressObject = {
       address: address,
-      port: port
+      port: port,
     };
+
+    const propertiesArray = [{ objectId: { type: type, instance: instance }, properties: [{ id: property }] }];
+
+    that.client.readPropertyMultiple(addressObject, propertiesArray, that.readPropertyMultipleOptions, (err, value) => {
+      console.log("1 - readPropertyMultiple:  ");
+
+      console.log(value);
+      if (value) {
+        // If the result has value, resolve the promise
+        console.log(value.values[0]);
+        value.values[0].values.forEach(function (value) {
+          console.log("value: ", value.value);
+        });
+      } else {
+        console.log(err);
+      }
+    });
 
     that.client.readProperty(
       addressObject,
@@ -202,6 +226,8 @@ class BacnetClient extends EventEmitter {
       property,
       that.readPropertyMultipleOptions,
       (err, value) => {
+        console.log("2 - readProperty:  ");
+
         console.log(value);
         if (value) {
           // If the result has value, resolve the promise
@@ -264,7 +290,7 @@ class BacnetClient extends EventEmitter {
     let that = this;
     let addressObject = {
       address: device.getAddress(),
-      port: device.getPort()
+      port: device.getPort(),
     };
     return new Promise((resolve, reject) => {
       that.client.readProperty(
@@ -871,7 +897,7 @@ class BacnetClient extends EventEmitter {
     let that = this;
     let addressObject = {
       address: device.getAddress(),
-      port: device.getPort()
+      port: device.getPort(),
     };
     return new Promise((resolve, reject) => {
       that.client.readProperty(
@@ -1029,7 +1055,7 @@ class BacnetClient extends EventEmitter {
 
       let addressObject = {
         address: device.getAddress(),
-        port: device.getPort()
+        port: device.getPort(),
       };
 
       let index = 1;
@@ -1068,7 +1094,7 @@ class BacnetClient extends EventEmitter {
     let that = this;
     let addressObject = {
       address: device.getAddress(),
-      port: device.getPort()
+      port: device.getPort(),
     };
     return new Promise((resolve, reject) => {
       that.client.readPropertyMultiple(addressObject, requestArray, readOptions, (error, value) => {
@@ -1085,7 +1111,7 @@ class BacnetClient extends EventEmitter {
 
     let addressObject = {
       address: device.getAddress(),
-      port: device.getPort()
+      port: device.getPort(),
     };
     let deviceId = device.getDeviceId();
 
@@ -1102,7 +1128,7 @@ class BacnetClient extends EventEmitter {
     let that = this;
     let addressObject = {
       address: device.getAddress(),
-      port: device.getPort()
+      port: device.getPort(),
     };
     let deviceId = device.getDeviceId();
     try {
@@ -1150,7 +1176,7 @@ class BacnetClient extends EventEmitter {
 
     let addressObject = {
       address: device.getAddress(),
-      port: device.getPort()
+      port: device.getPort(),
     };
 
     // Define all properties to be read
@@ -1251,7 +1277,7 @@ class BacnetClient extends EventEmitter {
 
     let addressObject = {
       address: device.getAddress(),
-      port: device.getPort()
+      port: device.getPort(),
     };
 
     // Define all properties to be read
@@ -1333,7 +1359,7 @@ class BacnetClient extends EventEmitter {
         let device = that.deviceList.find((ele) => ele.getDeviceId() === point.deviceId);
         let addressObject = {
           address: device.getAddress(),
-          port: device.getPort()
+          port: device.getPort(),
         };
 
         let writeObject = {
@@ -1670,7 +1696,6 @@ class BacnetClient extends EventEmitter {
 
     that.buildJsonInProgress = false;
   }
-
 
   async buildJsonObject(device) {
     try {

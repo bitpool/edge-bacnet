@@ -238,14 +238,15 @@
 
       queryAdapters();
 
-      if (node.vm1 == undefined) {
+      window.confirmDialogExists = window.confirmDialogExists || false;
+
+      if (node.vm1 == undefined && !window.confirmDialogExists) {
         const confirmDialog = document.createElement("p-confirm-dialog");
         document.getElementById("serverParent").appendChild(confirmDialog);
+        window.confirmDialogExists = true;
       }
 
       const { createApp, ref, onMounted } = Vue;
-      const ConfirmDialog = primevue.confirmdialog;
-      const ConfirmationService = primevue.confirmationservice;
       const ListBox = primevue.listbox;
 
       //prime vue app
@@ -517,7 +518,6 @@
             document.getElementById("node-input-reg-block-count-portRangeMatrix").innerHTML = $(
               "#node-input-portRangeMatrix-container"
             ).editableList("length");
-
           },
           removeItem: function (data) {
             document.getElementById("node-input-reg-block-count-portRangeMatrix").innerHTML = $(
@@ -587,7 +587,6 @@
 
       document.getElementById("node-input-reg-block-count-portRangeMatrix").innerHTML = node.portRangeRegisters.length;
       //end port range matrix
-
     },
     oneditsave: function () {
       let node = this;
@@ -619,7 +618,6 @@
         node.deviceRangeRegisters.push(mapItem);
       });
 
-
       node.portRangeRegisters = [];
       let portRanges = $("#node-input-portRangeMatrix-container").editableList("items");
       portRanges.each(function (i) {
@@ -631,7 +629,6 @@
         };
         node.portRangeRegisters.push(mapItem);
       });
-
     },
   });
 
@@ -679,10 +676,6 @@
     .networkTreeContent {
       margin-top: 20px;
       margin-left: 50px;
-    }
-    .p-confirm-dialog-accept > .p-button-label,
-    .bacnetServerRebuildSchedule_clearButton > .p-button-label {
-      color: white;
     }
     .red-ui-editor label {
       font-size: 12px;
@@ -761,8 +754,7 @@
 
       <div class="form-row bp-row" id="networkInterfaceDiv">
         <label for="node-input-local_device_address"
-          ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.local_device_address"></span> Network
-          Interface</label
+          ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.local_device_address"></span> Network Interface</label
         >
         <select id="node-input-local_device_address"></select>
       </div>
@@ -795,7 +787,6 @@
       <div class="form-row node-input-deviceIdRangeMatrix-container-row bp-row">
         <ol id="node-input-deviceIdRangeMatrix-container"></ol>
       </div>
-
     </div>
 
     <div id="read-discover-tab" style="display:none">
@@ -898,8 +889,8 @@
 
       <div class="form-row bp-row" style="align-items: center; display: none;">
         <label for="node-input-sanitise_device_schedule_value"
-          ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.sanitise_device_schedule"></span>Device
-          Sanitisation Frequency</label
+          ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.sanitise_device_schedule"></span>Device Sanitisation
+          Frequency</label
         >
         <p style="margin-right: 5px; margin-bottom: 0px; padding-left: 7px;">Every</p>
         <input type="text" id="node-input-sanitise_device_schedule" style="display: none;" />
@@ -917,17 +908,17 @@
       </div>
 
       <div class="form-row bp-checkbox-row">
-        <input type="checkbox" id="node-input-cacheFileEnabled" class="bp-checkbox"/>
+        <input type="checkbox" id="node-input-cacheFileEnabled" class="bp-checkbox" />
         <label for="node-input-cacheFileEnabled"> Enable cache file </label>
       </div>
 
       <div class="form-row bp-checkbox-row">
-        <input type="checkbox" id="node-input-toLogIam" class="bp-checkbox"/>
+        <input type="checkbox" id="node-input-toLogIam" class="bp-checkbox" />
         <label for="node-input-toLogIam"> Log found device </label>
       </div>
 
       <div class="form-row bp-checkbox-row" style="border-bottom: 1px solid #cbcbcb; padding-bottom: 20px;">
-        <input type="checkbox" id="node-input-logErrorToConsole" class="bp-checkbox"/>
+        <input type="checkbox" id="node-input-logErrorToConsole" class="bp-checkbox" />
         <label for="node-input-logErrorToConsole"> Log BACnet errors to console </label>
       </div>
 
@@ -949,15 +940,12 @@
 
     <div id="read-server-tab" style="display:none">
       <div class="form-row bp-checkbox-row">
-        <input type="checkbox" id="node-input-serverEnabled" class="bp-checkbox"/>
+        <input type="checkbox" id="node-input-serverEnabled" class="bp-checkbox" />
         <label for="node-input-serverEnabled"> Enable Server </label>
       </div>
 
       <div class="read_server_parent_div" id="serverParent">
-        <div
-          class="form-row bp-row clearServerContainer"
-          id="clearServerContainer"
-          style="align-items: center; display: flex;">
+        <div class="form-row bp-row clearServerContainer" id="clearServerContainer" style="align-items: center; display: flex;">
           <p-button class="bacnetServerRebuildSchedule_clearButton" @click="confirmAll($event)" label="Reinitialize Server">
           </p-button>
         </div>
@@ -990,8 +978,8 @@
   <h3><strong>Gateway Tab</strong></h3>
   <ul class="node-ports">
     <li>
-      Network Interface - the desired interface for the bacstack client to bind to. This interface must not have any other
-      BACnet clients bound to it.
+      Network Interface - the desired interface for the bacstack client to bind to. This interface must not have any other BACnet
+      clients bound to it.
     </li>
     <li>
       Broadcast Address - the desired subnet for global msgs to be broadcast and recieved on. This should be as strict as
@@ -1006,13 +994,13 @@
     <li>Max APDU Size - BACnet max apdu size</li>
     <li>Max Segments - BACnet max segments</li>
     <li>
-      Global Discover Frequency - the frequency at which the gateway issues global WhoIs BACnet commands. This should be
-      limited to the least amount possible, as over-loading a network can be a serious issue with BACnet commmunications.
+      Global Discover Frequency - the frequency at which the gateway issues global WhoIs BACnet commands. This should be limited
+      to the least amount possible, as over-loading a network can be a serious issue with BACnet commmunications.
     </li>
     <li>
-      Manual Point Discovery Instance Range - if a BACnet device doesnt have a Object list (BACnet objectType:propertyId -
-      8:76), the this bacnet client will enter into manual discovery mode, where it iterates through types and instnace
-      ranges. This range can be used to limit this manual scanning
+      Manual Point Discovery Instance Range - if a BACnet device doesnt have a Object list (BACnet objectType:propertyId - 8:76),
+      the this bacnet client will enter into manual discovery mode, where it iterates through types and instnace ranges. This
+      range can be used to limit this manual scanning
     </li>
     <li>Log Device Found - toggles logging of found devices to the node-red debug tab.</li>
     <li>Log BACnet Errors to Console - toggles logging of BACnet related errors to the node-red console</li>
@@ -1025,20 +1013,18 @@
     devices via BACnet/IP
   </p>
   <p>
-    This node only supports 2 BACnet object types, Analog Value - to show numeric data, and a Character String - to show
-    string data.
+    This node only supports 2 BACnet object types, Analog Value - to show numeric data, and a Character String - to show string
+    data.
   </p>
   <ul class="node-ports">
     <li>Enabled - toggles whether or not the local BACnet server is started or not.</li>
-    <li>
-      Clear Server Points - a schedule for the locally generated BACnet points to get cleared from the node object store
-    </li>
+    <li>Clear Server Points - a schedule for the locally generated BACnet points to get cleared from the node object store</li>
   </ul>
 
   <h3><strong>Examples</strong></h3>
   <p>
-    For example flows, please use the examples section for this node. These examples can be found at: Node-red hamburger menu
-    on top right -> Import -> Examples -> @bitpoolos/edge-bacnet
+    For example flows, please use the examples section for this node. These examples can be found at: Node-red hamburger menu on
+    top right -> Import -> Examples -> @bitpoolos/edge-bacnet
   </p>
   <p>
     To find captured examples of settings and flows, please go to our wiki

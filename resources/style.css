@@ -745,3 +745,8 @@
 .bp-deviceCount {
   font-weight: bold;
 }
+
+.p-confirm-dialog-accept > .p-button-label,
+.bacnetServerRebuildSchedule_clearButton > .p-button-label {
+  color: white;
+}

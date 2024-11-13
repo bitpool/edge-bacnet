@@ -1,13 +1,13 @@
 {
   "name": "@bitpoolos/edge-bacnet",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "A bacnet gateway for node-red",
   "dependencies": {
     "@plus4nodered/ts-node-bacnet": "^1.0.0-beta.2",
     "async-mutex": "^0.4.0",
     "cronosjs": "^1.7.1",
     "debug": "^4.1.1",
-    "iconv-lite": "^0.5.1",
+    "iconv-lite": "^0.6.3",
     "toad-scheduler": "^1.6.0",
     "underscore": "^1.10.2",
     "winston": "^3.2.1"
