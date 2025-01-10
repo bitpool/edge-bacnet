@@ -240,6 +240,8 @@ module.exports = function (RED) {
           }).catch(function (error) {
             logOut("Error in applyDisplayNames: ", error);
           });
+      } else if (msg.forceUpdateDevices == true) {
+        node.bacnetClient.forceUpdateDevices(msg.deviceIdArray);
       }
     });
 

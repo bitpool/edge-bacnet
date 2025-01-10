@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.5.2] - 10-01-2025
+
+Mismatched network request hot fix
+
+
 ## [1.5.1] - 13-11-2024
 
 ### Summary

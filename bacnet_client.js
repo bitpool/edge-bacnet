@@ -365,6 +365,20 @@ class BacnetClient extends EventEmitter {
     });
   }
 
+  forceUpdateDevices(deviceArray) {
+    let that = this;
+    try {
+      deviceArray.forEach(async function (deviceId) {
+        let device = that.deviceList.find((ele) => ele.getDeviceId() === deviceId);
+        if (device) {
+          await that.buildJsonObject(device);
+        }
+      });
+    } catch (e) {
+      that.logOut("forceUpdateDevices error: ", e);
+    }
+  }
+
   async updatePointsForDevice(deviceObject) {
     try {
       let device = this.deviceList.find((ele) => ele.getDeviceId() === deviceObject.deviceId);
@@ -396,6 +410,7 @@ class BacnetClient extends EventEmitter {
           await this.getDevicePointListWithoutObjectList(device);
           await this.buildJsonObject(device);
         } catch (e) {
+          await this.buildJsonObject(device);
           this.logOut(`Update points list error 4: ${this.getDeviceAddress(device)}`, e);
         }
       }
@@ -495,11 +510,11 @@ class BacnetClient extends EventEmitter {
     });
   }
 
-  //test re write
   async queryDevices() {
     let that = this;
     try {
       that.pollInProgress = true;
+
       let index = 0;
       await query(index);
 
@@ -519,6 +534,7 @@ class BacnetClient extends EventEmitter {
               }
             }
             try {
+
               await that.updateDeviceName(device);
 
               if (device.getSegmentation() !== 3) {
@@ -743,6 +759,7 @@ class BacnetClient extends EventEmitter {
 
           // Process the batch when the request array is full or the last point is reached
           if (requestArray.length === maxObjectCount || i === pointNames.length - 1) {
+
             if (device.getProtocolServiceSupport("ReadPropertyMultiple") == true) {
               await that.processBatch(device, requestArray, deviceName, bacnetResults, that, roundDecimal);
             } else {
@@ -757,6 +774,7 @@ class BacnetClient extends EventEmitter {
           // Check if all points for the device have been processed
           if (processedPoints >= totalPoints) {
             pendingRequests++;
+
             // Emit the `values` event for the current device
             that.emit(
               "values",
@@ -851,22 +869,30 @@ class BacnetClient extends EventEmitter {
     for (const request of requestArray) {
       const { objectId, pointRef, pointName } = request;
       try {
+
+
         const result = await that.updatePoint(device, pointRef);
-        const val = result.values[0].value;
 
-        if (isNumber(val)) {
-          pointRef.presentValue = roundDecimalPlaces(val, roundDecimal);
-        } else {
-          pointRef.presentValue = val;
+        //const result = await that.updatePointWithRetry(device, pointRef, 1);
+
+
+        if (result.objectId.type == objectId.type && result.objectId.instance == objectId.instance) {
+          const val = result.values[0].value;
+
+          if (isNumber(val)) {
+            pointRef.presentValue = roundDecimalPlaces(val, roundDecimal);
+          } else {
+            pointRef.presentValue = val;
+          }
+
+          pointRef.meta["device"] = deviceMetaInfo;
+          pointRef.timestamp = Date.now();
+          pointRef.status = "online";
+          pointRef.error = "none";
+
+          // Store the point data in results
+          bacnetResults[deviceName][pointName] = pointRef;
         }
-
-        pointRef.meta["device"] = deviceMetaInfo;
-        pointRef.timestamp = Date.now();
-        pointRef.status = "online";
-        pointRef.error = "none";
-
-        // Store the point data in results
-        bacnetResults[deviceName][pointName] = pointRef;
       } catch (err) {
         that.logOut(`Error updating point ${pointName}:`, err);
 
@@ -882,6 +908,12 @@ class BacnetClient extends EventEmitter {
   updateManyPoints(device, points) {
     let that = this;
     return new Promise((resolve, reject) => {
+
+      // let readOptions = {
+      //   maxSegments: device.getMaxSe,
+      //   maxApdu: that.readPropertyMultipleOptions.maxApdu,
+      // };
+
       that
         ._readObjectWithRequestArray(device, points, that.readPropertyMultipleOptions)
         .then(function (results) {
@@ -891,6 +923,22 @@ class BacnetClient extends EventEmitter {
           reject(err);
         });
     });
+  }
+
+  updatePointWithRetry(device, point, retryCount = 1) {
+    let that = this;
+    const tryUpdate = (retriesLeft) => {
+      return that.updatePoint(device, point).catch((err) => {
+        if (retriesLeft > 0) {
+          that.logOut(`Retrying updatePoint... Attempts left: ${retriesLeft}`);
+          return tryUpdate(retriesLeft - 1);
+        }
+        // If no retries are left, reject with the original error
+        return Promise.reject(err);
+      });
+    };
+
+    return tryUpdate(retryCount);
   }
 
   updatePoint(device, point) {
@@ -1780,32 +1828,36 @@ class BacnetClient extends EventEmitter {
 
                       switch (object.id) {
                         case baEnum.PropertyIdentifier.PRESENT_VALUE:
-                          if (object.value[0] && object.value[0].value !== "undefined" && object.value[0].value !== null) {
-                            //check for binary object type
-                            if (objectType == 3 || objectType == 4 || objectType == 5) {
-                              if (object.value[0].value == 0) {
-                                values[objectId].presentValue = false;
-                              } else if (object.value[0].value == 1) {
-                                values[objectId].presentValue = true;
-                              }
-                            } else if (objectType == 40) {
-                              //character string
-                              values[objectId].presentValue = object.value[0].value;
-                            } else if (objectType == 13 || objectType == 14 || objectType == 19) {
-                              //check for MSV MSI MSO - for enum state text
-                              if (values[objectId].stateTextArray && values[objectId].stateTextArray.length > 0) {
+                          try {
+                            if (object.value[0] && object.value[0].value !== "undefined" && object.value[0].value !== null) {
+                              //check for binary object type
+                              if (objectType == 3 || objectType == 4 || objectType == 5) {
                                 if (object.value[0].value == 0) {
-                                  values[objectId].presentValue = values[objectId].stateTextArray[object.value[0].value].value;
-                                } else if (object.value[0].value !== 0) {
-                                  values[objectId].presentValue =
-                                    values[objectId].stateTextArray[object.value[0].value - 1].value;
+                                  values[objectId].presentValue = false;
+                                } else if (object.value[0].value == 1) {
+                                  values[objectId].presentValue = true;
                                 }
+                              } else if (objectType == 40) {
+                                //character string
+                                values[objectId].presentValue = object.value[0].value;
+                              } else if (objectType == 13 || objectType == 14 || objectType == 19) {
+                                //check for MSV MSI MSO - for enum state text
+                                if (values[objectId].stateTextArray && values[objectId].stateTextArray.length > 0) {
+                                  if (object.value[0].value == 0) {
+                                    values[objectId].presentValue = values[objectId].stateTextArray[object.value[0].value].value;
+                                  } else if (object.value[0].value !== 0) {
+                                    values[objectId].presentValue =
+                                      values[objectId].stateTextArray[object.value[0].value - 1].value;
+                                  }
+                                }
+                              } else if (objectType !== 8) {
+                                values[objectId].presentValue = roundDecimalPlaces(object.value[0].value, 2);
                               }
-                            } else if (objectType !== 8) {
-                              values[objectId].presentValue = roundDecimalPlaces(object.value[0].value, 2);
                             }
+                            values[objectId].meta.arrayIndex = object.index;
+                          } catch (e) {
+                            that.logOut("buildResponse PRESENT_VALUE error: ", e);
                           }
-                          values[objectId].meta.arrayIndex = object.index;
                           break;
                         case baEnum.PropertyIdentifier.DESCRIPTION:
                           if (object.value[0]) values[objectId].description = object.value[0].value;
@@ -1853,20 +1905,24 @@ class BacnetClient extends EventEmitter {
                           }
                           break;
                         case baEnum.PropertyIdentifier.STATE_TEXT:
-                          if (object.value) {
-                            values[objectId].stateTextArray = object.value;
-                            if (
-                              typeof values[objectId].presentValue == "number" &&
-                              values[objectId].presentValue !== null &&
-                              values[objectId].presentValue !== undefined
-                            ) {
-                              const tempIndex = values[objectId].presentValue;
-                              if (tempIndex == 0) {
-                                values[objectId].presentValue = values[objectId].stateTextArray[tempIndex].value;
-                              } else if (tempIndex !== 0) {
-                                values[objectId].presentValue = values[objectId].stateTextArray[tempIndex - 1].value;
+                          try {
+                            if (object.value) {
+                              values[objectId].stateTextArray = object.value;
+                              if (
+                                typeof values[objectId].presentValue == "number" &&
+                                values[objectId].presentValue !== null &&
+                                values[objectId].presentValue !== undefined
+                              ) {
+                                const tempIndex = values[objectId].presentValue;
+                                if (tempIndex == 0) {
+                                  values[objectId].presentValue = values[objectId].stateTextArray[tempIndex].value;
+                                } else if (tempIndex !== 0) {
+                                  values[objectId].presentValue = values[objectId].stateTextArray[tempIndex - 1].value;
+                                }
                               }
                             }
+                          } catch (e) {
+                            that.logOut("buildResponse STATE_TEXT error: ", e);
                           }
                           break;
                         case baEnum.PropertyIdentifier.VENDOR_NAME:
