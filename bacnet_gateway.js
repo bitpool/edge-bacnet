@@ -371,6 +371,42 @@ module.exports = function (RED) {
       }
     });
 
+    //route handler for getting data model
+    RED.httpAdmin.get("/bitpool-bacnet-data/getDataModel", function (req, res) {
+      if (!node.bacnetClient) {
+        logOut("Issue with the bacnetClient while getting data model: ", node.bacnetClient);
+        res.send(false);
+      } else {
+        node.bacnetClient
+          .getDataModel()
+          .then(function (result) {
+            res.send(result);
+          })
+          .catch(function (error) {
+            res.send(error);
+            logOut("Error getting data model:  ", error);
+          });
+      }
+    });
+
+    //route handler for updating data model
+    RED.httpAdmin.post("/bitpool-bacnet-data/updateDataModel", function (req, res) {
+      if (!node.bacnetClient) {
+        logOut("Issue with the bacnetClient while getting data model: ", node.bacnetClient);
+        res.send(false);
+      } else {
+        node.bacnetClient
+          .updateDataModel(req)
+          .then(function (result) {
+            res.send(result);
+          })
+          .catch(function (error) {
+            res.send(error);
+            logOut("Error getting data model:  ", error);
+          });
+      }
+    });
+
     //route handler for purge device
     RED.httpAdmin.post("/bitpool-bacnet-data/purgeDevice", function (req, res) {
       if (!node.bacnetClient) {

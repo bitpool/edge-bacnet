@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.5.3] - 23-01-2025
+
+New feature: 
+ - import / export buttons added to new tab in gateway node, used to manage the complete data model for backup or restore
+ - associated API end points for programatic backing up or restoring - /bitpool-bacnet-data/getDataModel; /bitpool-bacnet-data/updateDataModel;
+
+Further async / await refactoring
+
+Bug fixes:
+ - incorrect device name in read list export
+ - read command indexing unhandled scenario 
+ - duplicating points in read list after pressing refresh tree button
+ - Multi State Values and other state text based points not being handled correctly in large volume scenarios
+
+NOTE: 
+  New importing and exporting feature handles a .json file instead of the .cfg file used in the back end. This is due to browsers flagging .cfg files as malicious. The contents of the file are unchanged. 
+
 ## [1.5.2] - 10-01-2025
 
 Mismatched network request hot fix

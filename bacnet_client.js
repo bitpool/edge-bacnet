@@ -534,7 +534,6 @@ class BacnetClient extends EventEmitter {
               }
             }
             try {
-
               await that.updateDeviceName(device);
 
               if (device.getSegmentation() !== 3) {
@@ -579,23 +578,35 @@ class BacnetClient extends EventEmitter {
     }
   }
 
-  updateDeviceName(device) {
-    let that = this;
-    return new Promise((resolve, reject) => {
-      that
-        ._getDeviceName(device)
-        .then(function (deviceObject) {
-          if (typeof deviceObject.name == "string") {
-            device.setDeviceName(deviceObject.name + " " + device.getDeviceId());
-            device.setPointsList(deviceObject.devicePointEntry);
-          }
-          resolve();
-        })
-        .catch(function (e) {
-          that.logOut("updateDeviceName error: ", e);
-          resolve();
-        });
-    });
+  // updateDeviceName(device) {
+  //   let that = this;
+  //   return new Promise((resolve, reject) => {
+  //     that
+  //       ._getDeviceName(device)
+  //       .then(function (deviceObject) {
+  //         if (typeof deviceObject.name == "string") {
+  //           device.setDeviceName(deviceObject.name + " " + device.getDeviceId());
+  //           device.setPointsList(deviceObject.devicePointEntry);
+  //         }
+  //         resolve();
+  //       })
+  //       .catch(function (e) {
+  //         that.logOut("updateDeviceName error: ", e);
+  //         resolve();
+  //       });
+  //   });
+  // }
+
+  async updateDeviceName(device) {
+    try {
+      const deviceObject = await this._getDeviceName(device);
+      if (typeof deviceObject?.name === "string") {
+        device.setDeviceName(deviceObject.name + " " + device.getDeviceId());
+        device.setPointsList(deviceObject.devicePointEntry);
+      }
+    } catch (e) {
+      this.logOut("updateDeviceName error: ", e);
+    }
   }
 
   reinitializeClient(config) {
@@ -729,15 +740,15 @@ class BacnetClient extends EventEmitter {
         // Process points for the current device
         const pointsToRead = readConfig.pointsToRead[key];
         const pointNames = Object.keys(pointsToRead);
-        let totalPoints = pointNames.length;
+        let totalPoints = pointNames.length - 1;
         let requestArray = [];
         let processedPoints = 0; // Counter for processed points
 
         // Process each point for the device in batches
         for (let i = 0; i < pointNames.length; i++) {
+
           const pointName = pointNames[i];
           if (pointName === "deviceName") {
-            totalPoints = totalPoints - 1;
             continue;
           }
 
@@ -758,8 +769,7 @@ class BacnetClient extends EventEmitter {
           }
 
           // Process the batch when the request array is full or the last point is reached
-          if (requestArray.length === maxObjectCount || i === pointNames.length - 1) {
-
+          if (requestArray.length === maxObjectCount) {
             if (device.getProtocolServiceSupport("ReadPropertyMultiple") == true) {
               await that.processBatch(device, requestArray, deviceName, bacnetResults, that, roundDecimal);
             } else {
@@ -769,6 +779,16 @@ class BacnetClient extends EventEmitter {
             requestArray = [];
             // Increment the processed points counter
             processedPoints += maxObjectCount;
+          } else if (i === pointNames.length - 1) {
+            if (device.getProtocolServiceSupport("ReadPropertyMultiple") == true) {
+              await that.processBatch(device, requestArray, deviceName, bacnetResults, that, roundDecimal);
+            } else {
+              await that.processIndividualPoints(device, requestArray, deviceName, bacnetResults, that, roundDecimal);
+            }
+
+            requestArray = [];
+            // Increment the processed points counter
+            processedPoints += i;
           }
 
           // Check if all points for the device have been processed
@@ -870,17 +890,23 @@ class BacnetClient extends EventEmitter {
       const { objectId, pointRef, pointName } = request;
       try {
 
-
         const result = await that.updatePoint(device, pointRef);
-
-        //const result = await that.updatePointWithRetry(device, pointRef, 1);
-
 
         if (result.objectId.type == objectId.type && result.objectId.instance == objectId.instance) {
           const val = result.values[0].value;
 
           if (isNumber(val)) {
             pointRef.presentValue = roundDecimalPlaces(val, roundDecimal);
+
+            if (pointRef.meta.objectId.type == 19 || pointRef.meta.objectId.type == 13 || pointRef.meta.objectId.type == 14) {
+              if (pointRef.stateTextArray && typeof pointRef.stateTextArray[0].value !== "object") {
+                if (val != 0) {
+                  pointRef.presentValue = pointRef.stateTextArray[val - 1].value;
+                } else {
+                  pointRef.presentValue = pointRef.stateTextArray[val].value;
+                }
+              }
+            }
           } else {
             pointRef.presentValue = val;
           }
@@ -905,24 +931,37 @@ class BacnetClient extends EventEmitter {
     }
   }
 
-  updateManyPoints(device, points) {
-    let that = this;
-    return new Promise((resolve, reject) => {
+  // updateManyPoints(device, points) {
+  //   let that = this;
+  //   return new Promise((resolve, reject) => {
+  //     // let readOptions = {
+  //     //   maxSegments: device.getMaxSe,
+  //     //   maxApdu: that.readPropertyMultipleOptions.maxApdu,
+  //     // };
 
+  //     that
+  //       ._readObjectWithRequestArray(device, points, that.readPropertyMultipleOptions)
+  //       .then(function (results) {
+  //         resolve(results);
+  //       })
+  //       .catch(function (err) {
+  //         reject(err);
+  //       });
+  //   });
+  // }
+
+  async updateManyPoints(device, points) {
+    try {
       // let readOptions = {
       //   maxSegments: device.getMaxSe,
       //   maxApdu: that.readPropertyMultipleOptions.maxApdu,
       // };
 
-      that
-        ._readObjectWithRequestArray(device, points, that.readPropertyMultipleOptions)
-        .then(function (results) {
-          resolve(results);
-        })
-        .catch(function (err) {
-          reject(err);
-        });
-    });
+      const results = await this._readObjectWithRequestArray(device, points, this.readPropertyMultipleOptions);
+      return results;
+    } catch (error) {
+      throw error;
+    }
   }
 
   updatePointWithRetry(device, point, retryCount = 1) {
@@ -1552,6 +1591,22 @@ class BacnetClient extends EventEmitter {
     });
   }
 
+  getDataModel() {
+    let that = this;
+    return new Promise(async function (resolve, reject) {
+      try {
+        resolve({
+          renderList: that.renderList,
+          deviceList: that.deviceList,
+          pointList: that.networkTree,
+          renderListCount: that.renderListCount,
+        });
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
   updatePointsList(json) {
     let that = this;
     json.deviceList.forEach(function (updatedDevice) {
@@ -1581,6 +1636,29 @@ class BacnetClient extends EventEmitter {
         });
 
         resolve(true);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  updateDataModel(json) {
+    let that = this;
+    return new Promise(async function (resolve, reject) {
+      try {
+        if (json.body.renderList) {
+          that.renderList = json.body.renderList;
+        }
+        if (json.body.deviceList) {
+          await that.updateDeviceList(json);
+        }
+        if (json.body.pointList) {
+          that.networkTree = json.body.pointList;
+        }
+        if (json.body.renderListCount) {
+          that.renderListCount = json.body.renderListCount;
+        }
+        resolve();
       } catch (e) {
         reject(e);
       }

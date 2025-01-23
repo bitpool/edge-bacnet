@@ -203,6 +203,11 @@
         label: "Server",
       });
 
+      tabs.addTab({
+        id: "read-backup-tab",
+        label: "Backup & Restore",
+      });
+
       if (node.networkInterfaces && node.networkInterfaces.length > 0) {
         let nicSelector = document.getElementById("node-input-local_device_address");
         node.networkInterfaces.forEach(function (option) {
@@ -333,6 +338,8 @@
       vueapp.use(primevue.confirmationservice);
       node.vm1 = vueapp.mount("#serverParent");
 
+
+      // Import Device List
       $("#file-upload").on("change", function (event) {
         const input = event.target.files[0];
         const reader = new FileReader();
@@ -356,6 +363,7 @@
         reader.readAsText(input);
       });
 
+      //Export Device List
       $("#file-export").click(function (params) {
         $.ajax({
           url: RED.settings.httpNodeRoot + "bitpool-bacnet-data/getDeviceList",
@@ -364,6 +372,45 @@
             let aEle = document.getElementById("exportJSON");
             aEle.setAttribute("href", "data:" + data);
             aEle.setAttribute("download", "bitpool-bacnet-devices.json");
+            aEle.click();
+          },
+          timeout: 10000,
+        });
+      });
+
+      //Import complete Data model
+      $("#file-upload-database").on("change", function (event) {
+        const input = event.target.files[0];
+        const reader = new FileReader();
+
+        reader.onload = function (e) {
+          const text = e.target.result;
+
+          let jsonPayload = JSON.parse(text);
+
+          $.ajax({
+            type: "POST",
+            url: RED.settings.httpNodeRoot + "bitpool-bacnet-data/updateDataModel",
+            dataType: "json",
+            contentType: "application/json",
+            data: JSON.stringify(jsonPayload),
+            success: function (result) { },
+            timeout: 15000,
+          });
+        };
+
+        reader.readAsText(input);
+      });
+
+      // Export complete Data model
+      $("#file-export-database").click(function (params) {
+        $.ajax({
+          url: RED.settings.httpNodeRoot + "bitpool-bacnet-data/getDataModel",
+          success: function (deviceList) {
+            let data = "text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(deviceList));
+            let aEle = document.getElementById("exportJSON");
+            aEle.setAttribute("href", "data:" + data);
+            aEle.setAttribute("download", "edge-bacnet-datastore.json");
             aEle.click();
           },
           timeout: 10000,
@@ -739,6 +786,21 @@
     .point_name {
       font-weight: bold;
     }
+    .database-backup {
+      border-top: 1px solid grey;
+      padding-top: 25px;
+      margin-top: 5px !important;
+    }
+    .database-file-label {
+      color: black;
+      font-weight: bold;
+      font-size: 16px;
+      width: auto !important;
+      
+    }
+    .database-file-label-div {
+      padding-top: 15px;
+    }
   </style>
 
   <div class="form-row node-input-read-tabs-row">
@@ -965,6 +1027,26 @@
               icon="pi pi-times"></p-button>
           </div>
         </div>
+      </div>
+    </div>
+    <div id="read-backup-tab" style="display:none">
+      <div class="database-file-label-div">
+        <span class="database-file-label">Database File</span>
+      </div>
+
+      <div class="form-row bp-import-buttons database-backup" id="importDeviceList">
+        <!-- <label> Device List: </label> -->
+        <label for="file-upload-database" class="custom-file-upload">
+          <i class="fa fa-arrow-circle-up" id="fileLabel"></i>
+          <a id="fileLabelText" style="padding-left: 10px;">Import database</a>
+        </label>
+        <input type="file" id="file-upload-database" accept="application/JSON" class="inputStyle" style="width: 258px;" />
+        <label for="file-export-database" class="custom-file-upload" style="margin-left: 5px;">
+          <i class="fa fa-arrow-circle-down" id="fileLabel"></i>
+          <a id="fileLabelText" style="padding-left: 10px;">Export database</a>
+        </label>
+        <input id="file-export-database" class="inputStyle" style="width: 258px; display: none;" />
+        <a id="exportJSON" style="display: none"></a>
       </div>
     </div>
   </div>

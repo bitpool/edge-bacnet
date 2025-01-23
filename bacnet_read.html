@@ -634,14 +634,7 @@
             let app = this;
             const slotProps = app.rightClickedDevice;
             const displayName = app.deviceDisplayNameValue;
-            let device = app.deviceList.find((ele) => {
-              if (ele.address.address) {
-                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-              } else {
-                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-              }
-            });
-
+            let device = app.getDeviceFromDeviceList(slotProps.node.ipAddr, slotProps.node.deviceId);
             if (device) {
               app.nodeService.setDeviceDisplayName(device, displayName).then(function (result) {
                 if (result) {
@@ -660,7 +653,7 @@
             const pointName = slotProps.node.pointName;
 
             let device = app.deviceList.find((ele) => {
-              return ele.deviceName == slotProps.node.parentDevice;
+              return ele.displayName == slotProps.node.parentDevice;
             });
 
             if (device) {
@@ -675,6 +668,18 @@
             }
 
             app.showPointNameDialog = false;
+          },
+          getDeviceFromDeviceList(ip, id) {
+            let app = this;
+            let device = app.deviceList.find((ele) => {
+              if (ele.address.address) {
+                return ele.address.address == ip && ele.deviceId == id;
+              } else {
+                return ele.address == ip && ele.deviceId == id;
+              }
+            });
+
+            return device;
           },
           settingDeviceName(slotProps) {
             let app = this;
@@ -709,11 +714,9 @@
                 (ele) => ele.ipAddr == key.split("-")[0] && ele.deviceId == key.split("-")[1]
               );
               let deviceName;
-
               if (readDevice) {
                 deviceName = readDevice.label;
               }
-
               exportJson[key] = {};
               if (deviceName) {
                 exportJson[key]["deviceName"] = deviceName;
@@ -725,9 +728,8 @@
                 let pointName = devicePoints[pointIndex];
                 let pointObject = device[pointName];
 
-                //formatting json payload, still in progress
-
-                if (pointObject) {
+                //formatting json payload
+                if (pointObject && pointName !== "deviceName") {
                   exportJson[key][pointName] = {
                     meta: pointObject.meta,
                     objectName: pointObject.objectName,
@@ -765,6 +767,7 @@
               let ip = key.split("-")[0];
               let id = key.split("-")[1];
               const importedDevice = pointsToRead[key];
+              //match only by IP, to handle case of mstp device
               let foundIndex = app.devices.findIndex((ele) => ele.ipAddr == ip);
 
               if (foundIndex !== -1) {
@@ -772,17 +775,11 @@
                 if (app.devices[foundIndex].deviceId == id) {
                   //found device
                   let treeDevice = app.devices[foundIndex];
-                  let device = app.deviceList.find((ele) => {
-                    if (ele.address.address) {
-                      return ele.address.address == ip && ele.deviceId == id;
-                    } else {
-                      return ele.address == ip && ele.deviceId == id;
-                    }
-                  });
+                  let device = app.getDeviceFromDeviceList(ip, id);
 
                   for (let pointName in importedDevice) {
                     let point = importedDevice[pointName];
-                    if (pointName == "deviceName") {
+                    if (pointName == "deviceName" && typeof point == "string") {
                       app.nodeService.setDeviceDisplayName(device, point);
                       treeDevice.label = point;
                     } else {
@@ -849,7 +846,7 @@
 
                     for (let pointName in importedDevice) {
                       let point = importedDevice[pointName];
-                      if (pointName == "deviceName") {
+                      if (pointName == "deviceName" && typeof point == "string") {
                         app.nodeService.setDeviceDisplayName(device, point);
                         mstpDevice.label = point;
                       } else {
@@ -878,7 +875,7 @@
                           } else {
                             // read device found, add point to existing
                             let pointIndex = app.readDevices[isDeviceInReadList].children[0].children.findIndex(
-                              (ele) => ele.data == point.objectName
+                              (ele) => parseInt(ele.bacnetInstance) == parseInt(point.meta.objectId.instance) && parseInt(ele.bacnetType) == parseInt(point.meta.objectId.type)
                             );
                             if (pointIndex == -1) {
                               app.readDevices[isDeviceInReadList].children[0].children.push(pointInTree);

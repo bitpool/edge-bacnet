@@ -237,9 +237,13 @@ class Client extends events_1.EventEmitter {
             if (!result) return debug('Received invalid deleteObject message');
             this.emit('deleteObject', { address: address, invokeId: invokeId, request: result, srcAddress: srcAddress });
         } else if (service === baEnum.ConfirmedServiceChoice.ACKNOWLEDGE_ALARM) {
-            result = baServices.alarmAcknowledge.decode(buffer, offset, length);
-            if (!result) return debug('Received invalid alarmAcknowledge message');
-            this.emit('alarmAcknowledge', { address: address, invokeId: invokeId, request: result, srcAddress: srcAddress });
+            try {
+                result = baServices.alarmAcknowledge.decode(buffer, offset, length);
+                if (!result) return debug('Received invalid alarmAcknowledge message');
+                this.emit('alarmAcknowledge', { address: address, invokeId: invokeId, request: result, srcAddress: srcAddress });
+            } catch (e) {
+                //console.log("Error in alarmAcknowledge: ", e);
+            }
         } else if (service === baEnum.ConfirmedServiceChoice.GET_ALARM_SUMMARY) {
             this.emit('getAlarmSummary', { address: address, invokeId: invokeId });
         } else if (service === baEnum.ConfirmedServiceChoice.GET_ENROLLMENT_SUMMARY) {

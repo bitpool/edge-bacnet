@@ -88,7 +88,9 @@ class BacnetDevice {
     }
 
     setDisplayName(displayName) {
-        this.displayName = displayName;
+        if (typeof displayName == "string") {
+            this.displayName = displayName;
+        }
     }
 
     getDisplayName() {
