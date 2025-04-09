@@ -323,6 +323,23 @@
   font-size: 12px;
 }
 
+.pointAddedToRead {
+  .set-point-name-option {
+    color: grey;
+    pointer-events: none;
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+.deviceAddedToRead {
+  .set-device-name-option {
+    color: grey;
+    pointer-events: none;
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
 .point-context-menu {
   --mouse-x: 0;
   --mouse-y: 0;
@@ -335,7 +352,6 @@
   transform: translateX(min(var(--mouse-x), calc(100vw - 100%))) translateY(min(var(--mouse-y), calc(100vh - 100%)));
   z-index: 10;
 }
-
 .context-menu {
   --mouse-x: 0;
   --mouse-y: 0;

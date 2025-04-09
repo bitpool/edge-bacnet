@@ -1,13 +1,12 @@
 /*
-  MIT License Copyright 2021, 2024 - Bitpool Pty Ltd
+  MIT License Copyright 2021, 2025 - Bitpool Pty Ltd
 */
 
-const { createLogger, format, transports } = require("winston");
 const { randomUUID } = require("crypto");
 const os = require("os");
-const { exec } = require("child_process");
 const baEnum = require("./resources/node-bacstack-ts/dist/index.js").enum;
 const fs = require("fs");
+const fs2 = require("fs").promises;
 
 class BacnetConfig {
   constructor(
@@ -102,8 +101,6 @@ class BacnetClientConfig {
   }
 }
 
-
-
 class ReadCommandConfig {
   constructor(pointsToRead, objectProperties, decimalPrecision) {
     this.pointsToRead = pointsToRead;
@@ -190,30 +187,12 @@ const roundDecimalPlaces = function (value, decimals) {
   return value;
 };
 
-const doNodeRedRestart = function () {
-  return new Promise(function (resolve, reject) {
-    try {
-      exec("restart", (error, stdout, stderr) => {
-        if (error) {
-          console.log(`Node-Red restart error: ${error.message}`);
-          reject(error.message);
-        }
-        if (stderr) {
-          console.log(`Node-Red restart stderr: ${stderr}`);
-          reject(stderr);
-        }
-        resolve(stdout);
-      });
-    } catch (e) {
-      console.log(`Node-Red restart error: ${e}`);
-      reject(e);
-    }
-  });
-};
-
 // STORE CONFIG FUNCTION ==========================================================
 //
 // ================================================================================
+
+/*
+
 async function Store_Config(data) {
   try {
     await fs.writeFile("edge-bacnet-datastore.cfg", data, { encoding: "utf8", flag: "w" }, (err) => {
@@ -226,18 +205,185 @@ async function Store_Config(data) {
   }
 }
 
+*/
+
+// refactor:
+
+let storeQueue = [];
+let isStoreProcessing = false;
+
+async function queueConfigStore(data) {
+  storeQueue.push(data);
+
+  if (!isStoreProcessing) {
+    isStoreProcessing = true;
+
+    while (storeQueue.length > 0) {
+      const nextData = storeQueue.pop(); // Get most recent data
+      storeQueue.length = 0; // Clear any accumulated data
+
+      await Store_Config(nextData);
+
+      // Add small delay between attempts
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    isStoreProcessing = false;
+  }
+}
+
+async function Store_Config(data) {
+  const mainFile = "edge-bacnet-datastore.cfg";
+  const tempFile = "edge-bacnet-datastore.cfg.tmp";
+  const backupFile = "edge-bacnet-datastore.cfg.bak";
+
+  try {
+    // First validate the JSON to ensure it's valid before writing
+    try {
+      JSON.parse(JSON.stringify(data));
+    } catch (jsonError) {
+      console.error("Invalid JSON data detected:", jsonError);
+      return false;
+    }
+
+    // Write to temporary file first
+    await fs2.writeFile(tempFile, JSON.stringify(data, null, 2), { encoding: "utf8" });
+
+    // Verify the temporary file is valid JSON
+    try {
+      const tempContent = await fs2.readFile(tempFile, "utf8");
+      JSON.parse(tempContent);
+    } catch (verifyError) {
+      console.error("Temporary file validation failed:", verifyError);
+      await fs2.unlink(tempFile).catch(() => {});
+      return false;
+    }
+
+    // Create backup of current file if it exists
+    try {
+      await fs2.access(mainFile);
+      await fs2.copyFile(mainFile, backupFile);
+    } catch (backupError) {
+      // If main file doesn't exist, no backup needed
+    }
+
+    // Atomic rename of temporary file to main file
+    await fs2.rename(tempFile, mainFile);
+    return true;
+  } catch (error) {
+    console.error("Store_Config error:", error);
+
+    // Cleanup temporary file if it exists
+    try {
+      await fs2.unlink(tempFile).catch(() => {});
+    } catch (cleanupError) {}
+
+    // If main file is corrupted and backup exists, restore from backup
+    try {
+      const backupExists = await fs2.access(backupFile).catch(() => false);
+      if (backupExists) {
+        await fs2.copyFile(backupFile, mainFile);
+        console.log("Restored from backup file");
+      }
+    } catch (restoreError) {
+      console.error("Failed to restore from backup:", restoreError);
+    }
+
+    return false;
+  }
+}
+
 // READ CONFIG SYNC FUNCTION ======================================================
 //
 // ================================================================================
+
 function Read_Config_Sync() {
-  var data = "{}";
+  const mainFile = "edge-bacnet-datastore.cfg";
+  const backupFile = "edge-bacnet-datastore.cfg.bak";
+  const defaultData = "{}";
+
   try {
-    data = fs.readFileSync("edge-bacnet-datastore.cfg", { encoding: "utf8", flag: "r" });
-  } catch (err) {
-    data = "{}";
-    Store_Config(data);
+    // Try to read the main file
+    let data = fsSync.readFileSync(mainFile, { encoding: "utf8" });
+
+    // Validate JSON
+    try {
+      JSON.parse(data);
+      return data;
+    } catch (jsonError) {
+      console.error("Main file contains invalid JSON, attempting backup recovery");
+
+      // Try to read backup file
+      try {
+        const backupData = fsSync.readFileSync(backupFile, { encoding: "utf8" });
+        JSON.parse(backupData); // Validate backup JSON
+
+        // Restore from backup
+        fsSync.copyFileSync(backupFile, mainFile);
+        console.log("Successfully restored from backup file");
+        return backupData;
+      } catch (backupError) {
+        console.error("Backup recovery failed, creating new file");
+        fsSync.writeFileSync(mainFile, defaultData, { encoding: "utf8" });
+        return defaultData;
+      }
+    }
+  } catch (error) {
+    console.error("Error reading config:", error);
+    fsSync.writeFileSync(mainFile, defaultData, { encoding: "utf8" });
+    return defaultData;
   }
-  return data;
+}
+
+// refactor:
+
+async function Read_Config_Async() {
+  // todo rename function, not using sync
+  const mainFile = "edge-bacnet-datastore.cfg";
+  const backupFile = "edge-bacnet-datastore.cfg.bak";
+  const defaultData = "{}";
+
+  try {
+    // Try to read the main file
+    const data = await fs2.readFile(mainFile, { encoding: "utf8" });
+
+    // Validate JSON
+    try {
+      JSON.parse(data);
+
+      return data;
+    } catch (jsonError) {
+      console.error("Main file contains invalid JSON, attempting backup recovery");
+
+      // Try to read backup file
+      try {
+        const backupData = await fs2.readFile(backupFile, { encoding: "utf8" });
+        JSON.parse(backupData); // Validate backup JSON
+
+        // Restore from backup
+        await fs.copyFile(backupFile, mainFile);
+        console.log("Successfully restored from backup file");
+
+        console.log("log2");
+
+        return backupData;
+      } catch (backupError) {
+        console.error("Backup recovery failed, creating new file");
+        await Store_Config(defaultData);
+
+        console.log("log3");
+
+        return defaultData;
+      }
+    }
+  } catch (error) {
+    console.error("Error reading config:", error);
+    await Store_Config(defaultData);
+
+    console.log("log4");
+
+    return defaultData;
+  }
 }
 
 // STORE CONFIG FUNCTION - BACNET SERVER ==========================================
@@ -250,7 +396,7 @@ async function Store_Config_Server(data) {
         //console.log("Store_Config_Server writeFile error: ", err);
       }
     });
-  } catch (err) { }
+  } catch (err) {}
 }
 
 // READ CONFIG SYNC FUNCTION - BACNET SERVER ======================================
@@ -288,12 +434,12 @@ function decodeBitArray(size, bits) {
     if (i == bits.length - 1) {
       return array;
     }
-  };
+  }
 }
 
 function getBacnetErrorString(classInt, codeInt) {
-  const classString = Object.keys(baEnum.ErrorClass).find(key => baEnum.ErrorClass[key] === classInt);
-  const codeString = Object.keys(baEnum.ErrorCode).find(key => baEnum.ErrorCode[key] === codeInt);
+  const classString = Object.keys(baEnum.ErrorClass).find((key) => baEnum.ErrorClass[key] === classInt);
+  const codeString = Object.keys(baEnum.ErrorCode).find((key) => baEnum.ErrorCode[key] === codeInt);
   return `BacnetError - Class:${classString} - Code:${codeString}`;
 }
 
@@ -309,7 +455,22 @@ function parseBacnetError(error) {
   }
 
   return err;
-};
+}
+function debounce(func, wait) {
+  let timeout;
+
+  return function (...args) {
+    const context = this;
+
+    // Clear the previous timeout
+    clearTimeout(timeout);
+
+    // Set a new timeout
+    timeout = setTimeout(() => {
+      func.apply(context, args);
+    }, wait);
+  };
+}
 
 module.exports = {
   BacnetConfig,
@@ -320,13 +481,15 @@ module.exports = {
   generateId,
   getIpAddress,
   roundDecimalPlaces,
-  doNodeRedRestart,
+  queueConfigStore,
   Store_Config,
   Read_Config_Sync,
+  Read_Config_Async,
   Store_Config_Server,
   Read_Config_Sync_Server,
   isNumber,
   decodeBitArray,
   parseBacnetError,
   getBacnetErrorString,
+  debounce,
 };

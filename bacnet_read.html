@@ -545,6 +545,12 @@
             menu.style.setProperty("--mouse-x", event.clientX + "px");
             menu.style.setProperty("--mouse-y", event.clientY + "px");
             menu.style.display = "block";
+
+            if (app.rightClickedDevice.node.showAdded == true) {
+              menu.classList.add("deviceAddedToRead");
+            } else if (app.rightClickedDevice.node.showAdded == false) {
+              menu.classList.remove("deviceAddedToRead");
+            }
           },
           onPointRightClick(slotProps, event) {
             let app = this;
@@ -553,6 +559,12 @@
             pointMenu.style.setProperty("--mouse-x", event.clientX + "px");
             pointMenu.style.setProperty("--mouse-y", event.clientY + "px");
             pointMenu.style.display = "block";
+
+            if (app.rightClickedPoint.node.showAdded == true) {
+              pointMenu.classList.add("pointAddedToRead");
+            } else if (app.rightClickedPoint.node.showAdded == false) {
+              pointMenu.classList.remove("pointAddedToRead");
+            }
           },
           handleContextMenuClick(type) {
             let app = this;
@@ -593,41 +605,27 @@
           },
           purgeDevice(slotProps) {
             let app = this;
-            let device = app.deviceList.find((ele) => {
-              if (ele.address.address) {
-                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-              } else {
-                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-              }
-            });
+            let device = app.getDeviceFromDeviceList(slotProps.node.ipAddr, slotProps.node.deviceId);
             if (device) {
-              app.nodeService.purgeDevice(device).then(function (result) { });
+              app.nodeService.purgeDevice(device).then(function (result) {});
             }
           },
           updatePointsForDevice(slotProps) {
             let app = this;
-            let device = app.deviceList.find((ele) => {
-              if (ele.address.address) {
-                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-              } else {
-                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-              }
-            });
+            let device = app.getDeviceFromDeviceList(slotProps.node.ipAddr, slotProps.node.deviceId);
             if (device) {
-              app.nodeService.updatePointsForDevice(device).then(function (result) { });
+              app.nodeService.updatePointsForDevice(device).then(function (result) {});
             }
           },
           updatePoint(slotProps) {
             let app = this;
-            let device = app.deviceList.find((ele) => {
-              if (ele.address.address) {
-                return ele.address.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-              } else {
-                return ele.address == slotProps.node.ipAddr && ele.deviceId == slotProps.node.deviceId;
-              }
+            const pointKey = `${slotProps.node.bacnetType}:${slotProps.node.bacnetInstance}`;
+            const device = app.deviceList.find((ele) => {
+              return ele.displayName == slotProps.node.parentDevice;
             });
+            const deviceKey = `${app.getDeviceAddress(device.address)}-${device.deviceId}`;
             if (device) {
-              app.nodeService.updatePoint(device).then(function (result) { });
+              app.nodeService.updatePoint(deviceKey, pointKey).then(function (result) {});
             }
           },
           setDeviceName() {
@@ -875,7 +873,9 @@
                           } else {
                             // read device found, add point to existing
                             let pointIndex = app.readDevices[isDeviceInReadList].children[0].children.findIndex(
-                              (ele) => parseInt(ele.bacnetInstance) == parseInt(point.meta.objectId.instance) && parseInt(ele.bacnetType) == parseInt(point.meta.objectId.type)
+                              (ele) =>
+                                parseInt(ele.bacnetInstance) == parseInt(point.meta.objectId.instance) &&
+                                parseInt(ele.bacnetType) == parseInt(point.meta.objectId.type)
                             );
                             if (pointIndex == -1) {
                               app.readDevices[isDeviceInReadList].children[0].children.push(pointInTree);
@@ -1085,7 +1085,7 @@
         </a>
       </li>
       <li class="red-ui-menu-divider"></li>
-      <li class="context-menu-item" @click="handleContextMenuClick('setDeviceName')">
+      <li class="context-menu-item set-device-name-option" @click="handleContextMenuClick('setDeviceName')">
         <a class="red-ui-menu-label">
           <i class="pi pi-pencil context-menu-icon"></i>
           <span class="context-menu-item-text">Set Device Name</span>
@@ -1097,7 +1097,7 @@
     <!-- Start Point Context Menu -->
     <ul
       class="red-ui-menu red-ui-menu-dropdown red-ui-menu-dropdown-direction-right red-ui-menu-dropdown-noicons red-ui-menu-dropdown-submenus point-context-menu">
-      <li class="context-menu-item" @click="handlePointContextMenuClick('setPointName')">
+      <li class="context-menu-item set-point-name-option" @click="handlePointContextMenuClick('setPointName')">
         <a class="red-ui-menu-label">
           <i class="pi pi-pencil context-menu-icon"></i>
           <span class="context-menu-item-text">Set Point Name</span>

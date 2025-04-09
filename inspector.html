@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bitpool BACnet Inspector</title>
+  <link rel="icon" type="image/x-icon" href="resources/@bitpoolos/edge-bacnet/icons/favicon.ico">
+
+  <!-- Vue 3 -->
+  <script src="resources/@bitpoolos/edge-bacnet/vue3513.global.prod.js"></script>
+  <script src="resources/@bitpoolos/edge-bacnet/primevue.min.js"></script>
+
+  <script src="resources/@bitpoolos/edge-bacnet/downloadAsHtml.js"></script>
+
+  <link href="resources/@bitpoolos/edge-bacnet/primevue-saga-blue-theme.css" rel="stylesheet" />
+  <link href="resources/@bitpoolos/edge-bacnet/primevue.min.css" rel="stylesheet" />
+  <link href="resources/@bitpoolos/edge-bacnet/primeflex.min.css" rel="stylesheet" />
+  <link href="resources/@bitpoolos/edge-bacnet/primeicons.css" rel="stylesheet" />
+  <link href="resources/@bitpoolos/edge-bacnet/inspectorStyles.css" rel="stylesheet" />
+</head>
+
+<body>
+  <div id="app">
+    <div class="card header-content">
+      <div class="header">
+        <div class="dividerRight">
+          <img src="resources/@bitpoolos/edge-bacnet/Logo_Simplified_Positive.svg" class="logo" alt="Bitpool" />
+        </div>
+        <div class="status">
+          <span @click="statusItemClicked" class="statusItem status-with-icon">
+            <span class="status-icon-wrapper" style="background-color: #10B981;">
+              <img src="resources/@bitpoolos/edge-bacnet/icons/points-ok-icon.svg" class="status-icon ok-icon"
+                alt="Points OK" />
+            </span>
+            <div class="status-text">
+              <span class="statBlockValue">
+                {{statCounts?.readCount}}
+                <span class="stat-percentage">{{statPercentages.readCount}}%</span>
+              </span>
+              <span class="statBlockKey">Points OK</span>
+            </div>
+          </span>
+          <span @click="statusItemClicked" class="statusItem status-with-icon">
+            <span class="status-icon-wrapper" style="background-color: #F1707B;">
+              <img src="resources/@bitpoolos/edge-bacnet/icons/points-error-icon.svg" class="status-icon error-icon"
+                alt="Points Error" />
+            </span>
+            <div class="status-text">
+              <span class="statBlockValue">
+                {{statCounts?.statBlock.error}}
+                <span class="stat-percentage">{{statPercentages.error}}%</span>
+              </span>
+              <span class="statBlockKey">Points Error</span>
+            </div>
+          </span>
+          <span @click="statusItemClicked" class="statusItem status-with-icon">
+            <span class="status-icon-wrapper" style="background-color: #133547;">
+              <img src="resources/@bitpoolos/edge-bacnet/icons/points-missing-icon.svg" class="status-icon missing-icon"
+                alt="Points Missing" />
+            </span>
+            <div class="status-text">
+              <span class="statBlockValue">
+                {{statCounts?.statBlock.missing}}
+                <span class="stat-percentage">{{statPercentages.missing}}%</span>
+              </span>
+              <span class="statBlockKey">Points Missing</span>
+            </div>
+          </span>
+          <span @click="statusItemClicked" class="statusItem status-with-icon">
+            <span class="status-icon-wrapper" style="background-color: #F59E0B;">
+              <img src="resources/@bitpoolos/edge-bacnet/icons/points-warning-icon.svg" class="status-icon warning-icon"
+                alt="Points Warning" />
+            </span>
+            <div class="status-text">
+              <span class="statBlockValue">
+                {{statCounts?.statBlock.warnings}}
+                <span class="stat-percentage">{{statPercentages.warnings}}%</span>
+              </span>
+              <span class="statBlockKey">Points Warnings</span>
+            </div>
+          </span>
+          <span @click="statusItemClicked" class="statusItem status-with-icon">
+            <span class="status-icon-wrapper" style="background-color: #00ADEF;">
+              <img src="resources/@bitpoolos/edge-bacnet/icons/points-unmapped-icon.svg"
+                class="status-icon unmapped-icon" alt="Points Unmapped" />
+            </span>
+            <div class="status-text">
+              <span class="statBlockValue">
+                {{statCounts?.statBlock.unmapped}}
+                <span class="stat-percentage">{{statPercentages.unmapped}}%</span>
+              </span>
+              <span class="statBlockKey">Points Unmapped</span>
+            </div>
+          </span>
+          <span @click="statusItemClicked" class="statusItem status-with-icon">
+            <span class="status-icon-wrapper" style="background-color: #0689BC;">
+              <img src="resources/@bitpoolos/edge-bacnet/icons/device-id-change-icon.svg"
+                class="status-icon device-id-change-icon" alt="Device ID Change" />
+            </span>
+            <div class="status-text">
+              <span class="statBlockValue">
+                {{statCounts?.statBlock.deviceIdChange}}
+                <span class="stat-percentage">{{statPercentages.deviceIdChange}}%</span>
+              </span>
+              <span class="statBlockKey">Changed Device ID's</span>
+            </div>
+          </span>
+          <span @click="statusItemClicked" class="statusItem status-with-icon">
+            <span class="status-icon-wrapper" style="background-color: #406C7D;">
+              <img src="resources/@bitpoolos/edge-bacnet/icons/device-id-conflict-icon.svg"
+                class="status-icon device-id-conflict-icon" alt="Device ID Conflict" />
+            </span>
+            <div class="status-text">
+              <span class="statBlockValue">
+                {{statCounts?.statBlock.deviceIdConflict}}
+                <span class="stat-percentage">{{statPercentages.deviceIdConflict}}%</span>
+              </span>
+              <span class="statBlockKey">Conflicting Device ID's</span>
+            </div>
+          </span>
+        </div>
+        <div class="actionButtons">
+          <p-button icon="pi pi-refresh" onclick="window.location.reload()" class="refreshButton" label="Refresh">
+          </p-button>
+          <p-button icon="pi pi-download" @click="downloadCSV()" class="bitpool-blue" label="Download CSV"></p-button>
+          <p-button icon="pi pi-download" @click="downloadHTML()" class="bitpool-blue" label="Download HTML"></p-button>
+        </div>
+      </div>
+    </div>
+    <div class="content-wrapper">
+      <div class="card datatable-card">
+        <div class="center">
+          <p class="headertext">{{siteName}} - Point Status Display</p>
+        </div>
+        <p-datatable :value="displayData" paginator :rows="12" filterDisplay="menu" :filters="filters"
+          v-model:filters="filters" :sortMode="'multiple'" @filter="onFilter" scrollable scrollHeight="800px"
+          class="datatable fixed-height-table">
+          <template #header>
+            <div class="tableHeaderDiv">
+              <div style="margin-right: 5px">
+                <p-multiselect v-model="selectedColumns" :options="allColumns" optionLabel="header" dataKey="field"
+                  placeholder="Select Columns" :maxSelectedLabels="3" class="columnSelector w-full md:w-20rem"
+                  display="chip">
+                  <template #option="slotProps">
+                    <div style="display: flex; align-items: center">
+                      <div class="custom-checkbox">
+                        <div :class="['custom-checkbox-box', {'selected': isSelected(slotProps.option)}]">
+                          <i v-if="isSelected(slotProps.option)" class="pi pi-check custom-checkbox-icon"></i>
+                        </div>
+                      </div>
+                      <span>{{ slotProps.option.header }}</span>
+                    </div>
+                  </template>
+
+                  <template #value="slotProps">
+                    <template v-if="slotProps.value && slotProps.value.length > 0">
+                      <template v-if="slotProps.value.length <= 3">
+                        <div class="p-multiselect-token" v-for="(item, index) in slotProps.value" :key="item.field">
+                          <span class="p-multiselect-token-label">{{ item.header }}</span>
+                          <span v-if="index < slotProps.value.length - 1">, </span>
+                        </div>
+                      </template>
+                      <template v-else>
+                        <div class="p-multiselect-token-label">{{ slotProps.value.length }} items selected</div>
+                      </template>
+                    </template>
+                    <span v-else class="p-multiselect-placeholder">{{ 'Select Columns' }}</span>
+                  </template>
+                </p-multiselect>
+              </div>
+
+              <div style="width: 100%">
+                <i class="pi pi-search searchBarContainer"></i>
+                <p-input-text class="searchBar" type="text" pInputText v-model="filters['global'].value"
+                  placeholder="Search"></p-input-text>
+              </div>
+            </div>
+          </template>
+          <p-column v-for="col in visibleColumns" :key="col.field" :field="col.field" :header="col.header" sortable
+            filter></p-column>
+          <template #paginatorstart>
+
+          </template>
+          <template #paginatorend="slotProps">
+            <span class="">
+              <span class="statBlockValue">{{displayedRowsCount}} results</span>
+            </span>
+          </template>
+        </p-datatable>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref } = Vue;
+    // Create app
+    const app = createApp({
+      data() {
+        return {
+          tableData: null,
+          loading: false,
+          totalRecords: 0,
+          first: 0,
+          lazyParams: {},
+          siteName: ref(),
+          statCounts: ref(),
+          displayedRowsCount: 0, // Track how many rows are visible
+          filters: {
+            global: { value: null, matchMode: "contains" },
+            deviceID: { value: null, matchMode: "contains" },
+            ObjectType: { value: null, matchMode: "contains" },
+            objectInstance: { value: null, matchMode: "contains" },
+            presentValue: { value: null, matchMode: "contains" },
+            dataModelStatus: { value: null, matchMode: "contains" },
+            pointName: { value: null, matchMode: "contains" },
+            discoveredBACnetPointName: { value: null, matchMode: "contains" },
+            displayName: { value: null, matchMode: "contains" },
+            deviceName: { value: null, matchMode: "contains" },
+            ipAddress: { value: null, matchMode: "contains" },
+            area: { value: null, matchMode: "contains" },
+            key: { value: null, matchMode: "contains" },
+            topic: { value: null, matchMode: "contains" },
+            lastSeen: { value: null, matchMode: "contains" },
+            error: { value: null, matchMode: "contains" },
+          },
+          allColumns: [
+            { field: "deviceID", header: "Device ID" },
+            { field: "objectType", header: "Object Type" },
+            { field: "objectInstance", header: "Object Instance" },
+            { field: "presentValue", header: "Present Value" },
+            { field: "dataModelStatus", header: "Data Model Status" },
+            { field: "pointName", header: "Mapped Point Name" },
+            { field: "discoveredBACnetPointName", header: "Discovered Point Name" },
+            { field: "displayName", header: "Display Name" },
+            { field: "deviceName", header: "Device Name" },
+            { field: "ipAddress", header: "IP Address" },
+            { field: "area", header: "Area" },
+            { field: "key", header: "Key" },
+            { field: "topic", header: "Topic" },
+            { field: "lastSeen", header: "Last Seen" },
+            { field: "error", header: "Error" },
+          ],
+          selectedColumns: [],
+          statPercentages: {
+            readCount: 0,
+            error: 0,
+            missing: 0,
+            warnings: 0,
+            deviceIdChange: 0,
+            deviceIdConflict: 0,
+            unmapped: 0
+          },
+          activeFilter: null,
+        };
+      },
+      setup() {
+        return {};
+      },
+      mounted() {
+        let app = this;
+        this.observeHeaderHeight();
+
+        this.selectedColumns = JSON.parse(JSON.stringify(this.allColumns));
+
+        fetch("/getModelStats")
+          .then((response) => {
+            // Check if the response is successful
+            if (!response.ok) {
+              throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            // Parse the JSON response
+            return response.json();
+          })
+          .then((data) => {
+            let tableData = [];
+
+            if (data.resultList) {
+              for (let item in data.resultList) {
+                tableData.push(data.resultList[item]);
+              }
+            }
+            app.tableData = tableData;
+            app.siteName = data.siteName;
+            app.statCounts = data.statCounts;
+
+            // Calculate percentages
+            const total = tableData.length || 1; // Avoid division by zero
+            app.statPercentages = {
+              readCount: Math.round((data.statCounts.readCount / total) * 100),
+              error: Math.round((data.statCounts.statBlock.error / total) * 100),
+              missing: Math.round((data.statCounts.statBlock.missing / total) * 100),
+              warnings: Math.round((data.statCounts.statBlock.warnings / total) * 100),
+              deviceIdChange: Math.round((data.statCounts.statBlock.deviceIdChange / total) * 100),
+              deviceIdConflict: Math.round((data.statCounts.statBlock.deviceIdConflict / total) * 100),
+              unmapped: Math.round((data.statCounts.statBlock.unmapped / total) * 100)
+            };
+          })
+          .catch((error) => {
+            // Handle any errors
+            console.error("Error:", error);
+          });
+      },
+      computed: {
+        visibleColumns() {
+          return this.selectedColumns || []; // Handle null case
+        },
+        displayData() {
+          if (!this.tableData || this.tableData.length === 0) {
+            // Create empty rows to maintain height
+            return Array(20)
+              .fill({})
+              .map(() => ({}));
+          }
+          return this.tableData;
+        },
+      },
+      methods: {
+        statusItemClicked(e) {
+          // Get the filter category from the clicked item's text content
+          const clickedItem = e.currentTarget;
+          const statusType = clickedItem.querySelector('.statBlockKey').textContent.trim();
+
+          // Clear previous active status styling
+          document.querySelectorAll('.statusItem').forEach(item => {
+            item.classList.remove('active-filter');
+          });
+
+          // If clicking the already active filter, clear it
+          if (this.activeFilter === statusType) {
+            this.activeFilter = null;
+            this.filters['dataModelStatus'].value = null;
+            return;
+          }
+
+          // Set this item as active
+          clickedItem.classList.add('active-filter');
+          this.activeFilter = statusType;
+
+          // Apply the appropriate filter based on which status item was clicked
+          let filterValue = '';
+          switch (statusType) {
+            case 'Points OK':
+              filterValue = 'Point Ok';
+              break;
+            case 'Points Error':
+              filterValue = 'Point Error';
+              break;
+            case 'Points Missing':
+              filterValue = 'Point Missing';
+              break;
+            case 'Points Warnings':
+              filterValue = 'Point Warning';
+              break;
+            case 'Points Unmapped':
+              filterValue = 'Point Unmapped';
+              break;
+            case 'Changed Device ID\'s':
+              filterValue = 'Device ID Changed';
+              break;
+            case 'Conflicting Device ID\'s':
+              filterValue = 'Device ID Conflict';
+              break;
+            default:
+              filterValue = '';
+          }
+
+          // Apply the filter
+          this.filters['dataModelStatus'].value = filterValue;
+        },
+        observeHeaderHeight() {
+          const header = document.querySelector('.header-content');
+          const updateContentMargin = () => {
+            const headerHeight = header.offsetHeight;
+            document.documentElement.style.setProperty('--header-height', `${headerHeight}px`);
+          };
+
+          // Update initially
+          updateContentMargin();
+
+          // Observe header size changes
+          const resizeObserver = new ResizeObserver(updateContentMargin);
+          resizeObserver.observe(header);
+
+          // Update on window resize
+          window.addEventListener('resize', updateContentMargin);
+        },
+        enforceTableHeight() {
+          // Force minimum height on table elements
+          const tableWrapper = document.querySelector(".p-datatable-wrapper");
+          if (tableWrapper) {
+            tableWrapper.style.minHeight = "800px";
+          }
+
+          const tableBody = document.querySelector(".p-datatable-tbody");
+          if (tableBody) {
+            tableBody.style.minHeight = "760px";
+          }
+        },
+        isSelected(option) {
+          if (!this.selectedColumns) return false;
+          return this.selectedColumns.some((item) => item.field === option.field);
+        },
+        getRowClass(rowData) {
+          console.log("rowData", rowData);
+          if (rowData.dataModelStatus.includes("Point OK")) return "row-ok";
+          if (rowData.dataModelStatus.includes("Point Error")) return "row-error";
+          if (rowData.dataModelStatus.includes("Point Warning")) return "row-warning";
+          if (rowData.dataModelStatus.includes("Point Missing")) return "row-missing";
+          return ""; // Default, no class
+        },
+        downloadCSV() {
+          window.location.href = "/getmodelstatscsv";
+        },
+        downloadHTML() {
+          let filename = `${this.siteName}_BACnetStats_${Date.now()}.html`;
+          // Create data object with all necessary properties
+          const data = {
+            tableData: this.tableData,
+            siteName: this.siteName,
+            statCounts: this.statCounts,
+            displayedRowsCount: this.displayedRowsCount,
+            filters: this.filters,
+            selectedColumns: this.selectedColumns,
+            allColumns: this.allColumns,
+          };
+          downloadPrimeVueAppAsHtml(filename, data);
+        },
+        onFilter(e) {
+          // e.filteredValue contains the new filtered dataset
+          if (e.filteredValue) {
+            this.displayedRowsCount = e.filteredValue.length;
+          } else {
+            // if no filter is applied, revert to full tableData length
+            this.displayedRowsCount = this.tableData ? this.tableData.length : 0;
+          }
+
+          this.$nextTick(() => {
+            this.enforceTableHeight();
+          });
+        },
+      },
+      components: {
+        "p-button": PrimeVue.Button,
+        "p-card": PrimeVue.Card,
+        "p-input-text": PrimeVue.InputText,
+        "p-datatable": PrimeVue.DataTable,
+        "p-column": PrimeVue.Column,
+        "p-icon-field": PrimeVue.IconField,
+        "p-input-icon": PrimeVue.InputIcon,
+        "p-multiselect": PrimeVue.MultiSelect,
+      },
+    });
+
+    app.use(PrimeVue.Config);
+    app.mount("#app");
+  </script>
+</body>
+
+</html>

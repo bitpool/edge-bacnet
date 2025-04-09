@@ -1,0 +1,43 @@
+<script type="text/javascript">
+  RED.nodes.registerType("Bacnet-Inspector", {
+    category: "Bitpool BACnet",
+    siteName: "",
+    color: "#00aeef",
+    defaults: {
+      name: { value: "" },
+      siteName: { value: "" },
+      totalUniqueReadCount: { value: 0 },
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: "debug.png",
+    label: function () {
+      return this.name || "Bacnet-Inspector";
+    },
+    oneditprepare: function () {
+      let node = this;
+    },
+  });
+
+  function openInspectorWebpage() {
+    window.open("/inspector", "_blank");
+  }
+
+</script>
+
+<script type="text/html" data-template-name="Bacnet-Inspector">
+  <div class="form-row">
+    <label for="node-input-name"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.name"></span> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name" />
+  </div>
+
+  <div class="form-row">
+    <label for="node-input-siteName"><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.name"></span> Site Name</label>
+    <input type="text" id="node-input-siteName" placeholder="Name" />
+  </div>
+
+  <label class="openInspectorLink" for="open-inspector" onclick="openInspectorWebpage()" style="margin-top: 30px;">
+    <i class="pi pi-external-link" id="open-inspector"></i>
+    <a id="open-inspector-text" style="padding-left: 10px;">Open Inspector Webpage</a>
+  </label>
+</script>

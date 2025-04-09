@@ -4,13 +4,13 @@
 
 const bacnet = require("./resources/node-bacstack-ts/dist/index.js");
 const baEnum = bacnet.enum;
-const bacnetIdMax = baEnum.ASN1_MAX_PROPERTY_ID;
 const { EventEmitter } = require("events");
 const {
   getUnit,
   roundDecimalPlaces,
   parseBacnetError,
   getBacnetErrorString,
+  Read_Config_Async,
   Read_Config_Sync,
   isNumber,
   decodeBitArray,
@@ -41,20 +41,6 @@ class BacnetClient extends EventEmitter {
     that.portRangeMatrix = config.portRangeMatrix;
 
     try {
-      if (that.config.cacheFileEnabled) {
-        let cachedData = JSON.parse(Read_Config_Sync());
-        if (cachedData && typeof cachedData == "object") {
-          if (cachedData.renderList) that.renderList = cachedData.renderList;
-          if (cachedData.deviceList) {
-            cachedData.deviceList.forEach(function (device) {
-              let newBacnetDevice = new BacnetDevice(true, device);
-              that.deviceList.push(newBacnetDevice);
-            });
-          }
-          if (cachedData.pointList) that.networkTree = cachedData.pointList;
-          if (cachedData.renderListCount) that.renderListCount = cachedData.renderListCount;
-        }
-      }
 
       that.roundDecimal = config.roundDecimal;
       that.apduSize = config.apduSize;
@@ -73,6 +59,8 @@ class BacnetClient extends EventEmitter {
       };
 
       try {
+        that.readCachedFile();
+
         that.client = new bacnet.Client({
           apduTimeout: config.apduTimeout,
           interface: config.localIpAdrress,
@@ -115,22 +103,48 @@ class BacnetClient extends EventEmitter {
 
         that.scheduler.addSimpleIntervalJob(buildNetworkTreeJob);
 
-        that.globalWhoIs();
-
         setTimeout(() => {
-          that.queryDevices();
-          that.buildJsonTree();
+          that.globalWhoIs();
+          setTimeout(() => {
+            that.queryDevices();
+            that.buildJsonTree();
+          }, "4000");
         }, "5000");
+
       } catch (e) {
         that.logOut("Issue initializing client: ", e);
       }
 
-      //who is callback
-      that.client.on("iAm", (device) => {
-        if (device.address !== that.config.localIpAdrress) {
-          if (that.scanMatrix.length > 0) {
-            let matrixMap = that.scanMatrix.filter((ele) => device.deviceId >= ele.start && device.deviceId <= ele.end);
-            if (matrixMap.length > 0) {
+      try {
+
+        //who is callback
+        that.client.on("iAm", (device) => {
+          if (device.address !== that.config.localIpAdrress) {
+            if (that.scanMatrix.length > 0) {
+              let matrixMap = that.scanMatrix.filter((ele) => device.deviceId >= ele.start && device.deviceId <= ele.end);
+              if (matrixMap.length > 0) {
+                //only add unique device to array
+                let foundIndex = that.deviceList.findIndex((ele) => ele.getDeviceId() == device.deviceId);
+                if (foundIndex == -1) {
+                  let newBacnetDevice = new BacnetDevice(false, device);
+                  newBacnetDevice.setLastSeen(Date.now());
+                  if (newBacnetDevice.getIsMstpDevice()) {
+                    that.addToParentMstpNetwork(newBacnetDevice);
+                  }
+                  that.deviceList.push(newBacnetDevice);
+                  that.addToNetworkTree(newBacnetDevice);
+                } else if (foundIndex !== -1) {
+                  that.deviceList[foundIndex].updateDeviceConfig(device);
+                  that.deviceList[foundIndex].setLastSeen(Date.now());
+                  if (that.deviceList[foundIndex].getIsMstpDevice()) {
+                    that.addToParentMstpNetwork(that.deviceList[foundIndex]);
+                  }
+                  that.addToNetworkTree(that.deviceList[foundIndex]);
+                }
+                //emit event for node-red to log
+                that.emit("deviceFound", device);
+              }
+            } else {
               //only add unique device to array
               let foundIndex = that.deviceList.findIndex((ele) => ele.getDeviceId() == device.deviceId);
               if (foundIndex == -1) {
@@ -149,49 +163,49 @@ class BacnetClient extends EventEmitter {
                 }
                 that.addToNetworkTree(that.deviceList[foundIndex]);
               }
+
               //emit event for node-red to log
               that.emit("deviceFound", device);
             }
-          } else {
-            //only add unique device to array
-            let foundIndex = that.deviceList.findIndex((ele) => ele.getDeviceId() == device.deviceId);
-            if (foundIndex == -1) {
-              let newBacnetDevice = new BacnetDevice(false, device);
-              newBacnetDevice.setLastSeen(Date.now());
-              if (newBacnetDevice.getIsMstpDevice()) {
-                that.addToParentMstpNetwork(newBacnetDevice);
-              }
-              that.deviceList.push(newBacnetDevice);
-              that.addToNetworkTree(newBacnetDevice);
-            } else if (foundIndex !== -1) {
-              that.deviceList[foundIndex].updateDeviceConfig(device);
-              that.deviceList[foundIndex].setLastSeen(Date.now());
-              if (that.deviceList[foundIndex].getIsMstpDevice()) {
-                that.addToParentMstpNetwork(that.deviceList[foundIndex]);
-              }
-              that.addToNetworkTree(that.deviceList[foundIndex]);
-            }
-
-            //emit event for node-red to log
-            that.emit("deviceFound", device);
           }
+        });
+      } catch (e) {
+        that.logOut("Issue with creating bacnet client, see error:  ", e);
+      }
+
+      that.client.on("error", (err) => {
+        that.logOut("Error occurred: ", err);
+
+        if (err.errno == -4090) {
+          that.logOut("Invalid Client information or incorrect IP address provided");
+        } else if (err.errno == -49) {
+          that.logOut("Invalid IP address provided");
+        } else {
+          that.reinitializeClient(that.config);
         }
       });
     } catch (e) {
-      that.logOut("Issue with creating bacnet client, see error:  ", e);
+      console.log("BACnet Client client binder error: ", e);
     }
+  }
 
-    that.client.on("error", (err) => {
-      that.logOut("Error occurred: ", err);
-
-      if (err.errno == -4090) {
-        that.logOut("Invalid Client information or incorrect IP address provided");
-      } else if (err.errno == -49) {
-        that.logOut("Invalid IP address provided");
-      } else {
-        that.reinitializeClient(that.config);
+  async readCachedFile() {
+    let that = this;
+    if (that.config.cacheFileEnabled) {
+      const cachedData = await Read_Config_Async();
+      const parsedData = JSON.parse(cachedData);
+      if (parsedData && typeof parsedData == "object") {
+        if (parsedData.renderList) that.renderList = parsedData.renderList;
+        if (parsedData.deviceList) {
+          parsedData.deviceList.forEach(function (device) {
+            let newBacnetDevice = new BacnetDevice(true, device);
+            that.deviceList.push(newBacnetDevice);
+          });
+        }
+        if (parsedData.pointList) that.networkTree = parsedData.pointList;
+        if (parsedData.renderListCount) that.renderListCount = parsedData.renderListCount;
       }
-    });
+    }
   }
 
   testFunction(address, port, type, instance, property) {
@@ -578,25 +592,6 @@ class BacnetClient extends EventEmitter {
     }
   }
 
-  // updateDeviceName(device) {
-  //   let that = this;
-  //   return new Promise((resolve, reject) => {
-  //     that
-  //       ._getDeviceName(device)
-  //       .then(function (deviceObject) {
-  //         if (typeof deviceObject.name == "string") {
-  //           device.setDeviceName(deviceObject.name + " " + device.getDeviceId());
-  //           device.setPointsList(deviceObject.devicePointEntry);
-  //         }
-  //         resolve();
-  //       })
-  //       .catch(function (e) {
-  //         that.logOut("updateDeviceName error: ", e);
-  //         resolve();
-  //       });
-  //   });
-  // }
-
   async updateDeviceName(device) {
     try {
       const deviceObject = await this._getDeviceName(device);
@@ -931,32 +926,8 @@ class BacnetClient extends EventEmitter {
     }
   }
 
-  // updateManyPoints(device, points) {
-  //   let that = this;
-  //   return new Promise((resolve, reject) => {
-  //     // let readOptions = {
-  //     //   maxSegments: device.getMaxSe,
-  //     //   maxApdu: that.readPropertyMultipleOptions.maxApdu,
-  //     // };
-
-  //     that
-  //       ._readObjectWithRequestArray(device, points, that.readPropertyMultipleOptions)
-  //       .then(function (results) {
-  //         resolve(results);
-  //       })
-  //       .catch(function (err) {
-  //         reject(err);
-  //       });
-  //   });
-  // }
-
   async updateManyPoints(device, points) {
     try {
-      // let readOptions = {
-      //   maxSegments: device.getMaxSe,
-      //   maxApdu: that.readPropertyMultipleOptions.maxApdu,
-      // };
-
       const results = await this._readObjectWithRequestArray(device, points, this.readPropertyMultipleOptions);
       return results;
     } catch (error) {
@@ -980,18 +951,63 @@ class BacnetClient extends EventEmitter {
     return tryUpdate(retryCount);
   }
 
+  //used for manual point updates in the UI tree
+  async updateIndividualPoint(deviceKey, pointKey) {
+    let that = this;
+    try {
+      let device = that.deviceList.find((ele) => ele.getDeviceId() == deviceKey.split("-")[1]);
+      const pointType = parseInt(pointKey.split(":")[0]);
+      const pointInstance = parseInt(pointKey.split(":")[1]);
+      const promiseArray = [];
+      const result = await that._readObjectFull(device, pointType, pointInstance);
+
+      if (!result.error) {
+        device.setLastSeen(Date.now());
+        if (result.length > 0 && Array.isArray(result)) {
+          promiseArray.push(...result);
+        } else {
+          promiseArray.push(result);
+        }
+      }
+
+      await that.buildNetworkModel(promiseArray, device);
+
+      return true;
+    } catch (e) {
+      throw e
+    }
+  }
+
+  //used in the doRead querying work flow
   updatePoint(device, point) {
     let that = this;
     let addressObject = {
       address: device.getAddress(),
       port: device.getPort(),
     };
+
+    let maxSegments = that.readPropertyMultipleOptions.maxSegments;
+    let maxApdu = that.readPropertyMultipleOptions.maxApdu;
+
+    if (device.getSegmentation() == 3) {
+      maxSegments = 0;
+    }
+
+    if (device.getMaxApdu() == 480) {
+      maxApdu = 3;
+    }
+
+    let settings = {
+      maxSegments: maxSegments,
+      maxApdu: maxApdu,
+    }
+
     return new Promise((resolve, reject) => {
       that.client.readProperty(
         addressObject,
         { type: point.meta.objectId.type, instance: point.meta.objectId.instance },
         baEnum.PropertyIdentifier.PRESENT_VALUE,
-        that.readPropertyMultipleOptions,
+        settings,
         (err, value) => {
           if (err) {
             reject(err);
@@ -1855,7 +1871,7 @@ class BacnetClient extends EventEmitter {
         requestMutex.release();
       }
 
-      await this.buildResponse(promiseArray, device);
+      await this.buildNetworkModel(promiseArray, device);
       this.lastNetworkPoll = Date.now();
 
       return { deviceList: this.deviceList, pointList: this.networkTree };
@@ -1865,8 +1881,8 @@ class BacnetClient extends EventEmitter {
     }
   }
 
-  // Builds response object for a fully qualified
-  buildResponse(fullObjects, device) {
+  // Builds the data rich bacnet network model
+  buildNetworkModel(fullObjects, device) {
     let that = this;
     const reg = /[$#\/\\+,]/gi;
     return new Promise(function (resolve, reject) {
@@ -1934,7 +1950,7 @@ class BacnetClient extends EventEmitter {
                             }
                             values[objectId].meta.arrayIndex = object.index;
                           } catch (e) {
-                            that.logOut("buildResponse PRESENT_VALUE error: ", e);
+                            that.logOut("buildNetworkModel PRESENT_VALUE error: ", e);
                           }
                           break;
                         case baEnum.PropertyIdentifier.DESCRIPTION:
@@ -2000,7 +2016,7 @@ class BacnetClient extends EventEmitter {
                               }
                             }
                           } catch (e) {
-                            that.logOut("buildResponse STATE_TEXT error: ", e);
+                            that.logOut("buildNetworkModel STATE_TEXT error: ", e);
                           }
                           break;
                         case baEnum.PropertyIdentifier.VENDOR_NAME:

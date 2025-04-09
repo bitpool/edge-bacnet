@@ -1,0 +1,254 @@
+body {
+  background: #133547;
+  color: #333;
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 20px;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1 {
+  color: #fff;
+  font-family: Inter, Poppins, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, Liberation Sans, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", Segoe UI Symbol, "Noto Color Emoji";
+  padding-bottom: 0px;
+  line-height: 70px;
+}
+
+.headertext {
+  color: #fff;
+  font-family: Inter, Poppins, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, Liberation Sans, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", Segoe UI Symbol, "Noto Color Emoji";
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+  margin-top: 0px !important;
+  margin-bottom: 0px !important;
+  /*font-size: 28px !important;*/
+  background: #164e67 !important;
+  /*#0688bc !important;*/
+  border-radius: 10px !important;
+  align-items: center !important;
+  font-size: 1.5rem;
+  font-weight: bold;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* When the screen width is less than 1800px */
+@media (max-width: 1800px) {
+  .container {
+    font-size: 1.0rem !important;
+  }
+}
+
+.container-fluid {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.container {
+  display: grid;
+  grid-template-columns: 25% 50% 25%;
+  align-items: center;
+  /* Aligns items vertically */
+  width: 100vw !important;
+  height: auto;
+  padding: 5px;
+  padding-bottom: 0px;
+  max-width: 100%;
+  /* Ensure no extra margin */
+}
+
+.left {
+  display: flex;
+  /*justify-content: center; /* Center the image horizontally */
+  justify-content: flex-start;
+  /* Push image to the left */
+}
+
+.center {
+  text-align: center;
+  /* Centers the text */
+  height: 60px;
+}
+
+.right {
+  display: flex;
+  justify-content: flex-end;
+  /* Aligns buttons to the right */
+  /*gap: 10px; /* Adds spacing between buttons */
+  height: 60px;
+}
+
+/* When the screen width is less than 1800px, adjust the columns */
+@media (max-width: 1800px) {
+  .container {
+    grid-template-columns: 35% 30% 35%;
+    /* Adjusted layout */
+    display: block;
+  }
+
+  .right {
+    justify-content: center;
+    /* Aligns buttons to the centre */
+    padding-top: 10px;
+  }
+
+  .center {
+    /*padding-top: 10px;*/
+    margin-top: 10px;
+  }
+}
+
+.btn-custom {
+  margin-left: 5px;
+  margin-right: 5px;
+  /*padding: 10px 30px;*/
+  font-size: 1.1rem;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 500px) {
+  .btn-custom {
+    font-size: 0.9rem;
+  }
+
+  .headertext {
+    font-size: 1.0rem;
+  }
+}
+
+.btn-primary {
+  background-color: #164e67;
+  border-color: #164e67;
+}
+
+.btn-primary:hover {
+  background-color: #08b3f7 !important;
+  border-color: #08b3f7 !important;
+}
+
+.btn-header {
+  background-color: #0688bc;
+  border-color: #0689bc;
+}
+
+.btn-header:hover {
+  background-color: #0688bc;
+  border-color: #0689bc;
+}
+
+.filter-input {
+  margin-bottom: 0px;
+  background-color: #164e67;
+  border: none;
+  border-radius: 10px;
+}
+
+.filter-input::placeholder {
+  color: #fff;
+}
+
+.table-container {
+  flex-grow: 1;
+  /*height: calc(100vh - 180px);*/
+  overflow-y: auto;
+  background: #f5f5f5;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  height: 500px;
+  /* Adjust this based on your need */
+}
+
+table {
+  width: 100%;
+  table-layout: fixed !important;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 10px;
+  font-size: 1rem;
+
+  white-space: nowrap;
+  /* Prevent text wrapping */
+  overflow: hidden;
+  /* Hide overflow content */
+  text-overflow: ellipsis;
+  /* Add ellipsis (...) for overflowing content */
+  font-family: Inter, Poppins, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, Liberation Sans, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", Segoe UI Symbol, "Noto Color Emoji";
+}
+
+th {
+  background: #fff !important;
+  color: #000 !important;
+  position: sticky;
+  top: 0;
+  cursor: pointer;
+}
+
+tbody tr {
+  transition: background-color 0.3s;
+  cursor: pointer;
+}
+
+tbody tr:hover {
+  background-color: #08b3f7;
+}
+
+tbody tr.selected {
+  background-color: #0689bc;
+}
+
+.status-ok {
+  background-color: #d4edda;
+  /* Green */
+}
+
+.status-error {
+  background-color: #f8c7ca;
+  /* Red */
+}
+
+.status-warning {
+  background-color: #edb50230;
+  /*#fff3cd; /* Yellow */
+}
+
+.status-missing {
+  background-color: #f8d7da;
+  /* Red */
+}
+
+.status-unmapped {
+  background-color: #c0c1c2;
+  /* Grey */
+}
+
+.status-moved {
+  background-color: #fc9803;
+  /* Orange */
+}
+
+.status-deviceidchange {
+  background-color: #fc9803;
+  /* Orange */
+}
+
+.DefaultText {
+  font-family: Inter, Poppins, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, Liberation Sans, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", Segoe UI Symbol, "Noto Color Emoji";
+}
+
+.logo {
+  height: 80px;
+  width: 280px;
+}

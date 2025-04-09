@@ -1,26 +1,159 @@
 # Changelog
 
+## [1.6.0] - 09-04-2025
+
+New features:
+
+- New node - Inspector version 1:
+
+  - Link the outputs of all of your Read nodes and Gateway node into the inspector node for a more detailed analysis of that current state of your site.
+  - There is a custom UI which can be viewed once the node is placed and deployed, via the open webpage link in the node properties view.
+  - Basic point status statistics can be output in MQTT format via an injection of msg.type = "sendMqttStats" directly into the inspector node. This can be done with a node-red inject node or a bitpool-inject node.
+  - The custom UI shows a data table with rich meta data, that can be filtered.
+  - The inspector node comes with a variety of API routes that can be used for analysis and engineering
+  - API routes available:
+
+    - /inspector
+      - view UI in web browser
+
+    - /inspector-downloadhtml
+      - downloads the html of the inspector in its current state
+
+    - /inspector-downloadhtml?filter=tableKey&value=value1,value2
+      - downloads the html of the inspector, but with a applied filter to the table. 
+      - tableKey in the above example can be any of the table columns, only 1 tableKey may be filtered on: 
+        deviceID, objectType, objectInstance, presentValue, dataModelStatus, pointName, discoveredBACnetPointName, displayName, deviceName, ipAddress, area, key, topic, lastSeen, error
+      - value=value1,value2 etc can be any value that the tableKey can contain. This parameter can accept many comma separated values
+      - an example filter request may look like: 
+        /inspector-downloadhtml?filter=dataModelStatus&value=error,missing
+
+    - /getModelStats
+      - returns JSON data with analysis of the BACnet model
+      - contains point status, metrics, and detailed information
+
+    - /pointstoread
+      - downloads CSV file with all points in the read list
+      - format: [siteName]_PointsToRead_[timestamp].csv
+
+    - /getpointerrors
+      - downloads CSV file with all points that have errors
+      - format: [siteName]_PointErrors_[timestamp].csv
+      
+    - /getmodelstatscsv
+      - downloads CSV file with all model stats data in CSV format
+      - format: [siteName]_ModelStats_[timestamp].csv
+      
+    - /publishedpointslist
+      - downloads CSV file with all published points and their current values
+      - format: [siteName]_PublishedPointsList_[timestamp].csv
+      - outputs mqtt topic and payloads with statistics about the current state of the bacnet network
+      - output topics:
+          EDGE_DEVICE_{IP_ID}/STATUS/LAST_POINT_PUSHED_TIME
+          payload: Timestamp of when the last point was pushed (ISO string)
+          EDGE_DEVICE_{IP_ID}/STATUS/LAST_STAT_CALC_TIME
+          payload: Current timestamp (ISO string)
+          EDGE_DEVICE_{IP_ID}/STATUS/UPTIME
+          payload: System uptime formatted as string (e.g., "Uptime: 3 days, 5 hours, 12 minutes, 45 seconds")
+          EDGE_DEVICE_{IP_ID}/STATUS/ONLINE_POINTS
+          payload: Number of online points
+          EDGE_DEVICE_{IP_ID}/STATUS/OFFLINE_POINTS
+          payload: Number of offline points
+          EDGE_DEVICE_{IP_ID}/STATUS/TOTAL_POLLED_POINTS
+          payload: Total number of polled points
+          EDGE_DEVICE_{IP_ID}/STATUS/AVERAGE_TIME_SINCE_COV_IN_SECONDS
+          payload: Average time since last change of value in seconds
+          EDGE_DEVICE_{IP_ID}/STATUS/TOTAL_POINTS_TO_READ
+          payload: Total number of points to read
+          EDGE_DEVICE_{IP_ID}/STATUS/DISCOVERED_POINT_COUNT
+          payload: Number of discovered points
+          EDGE_DEVICE_{IP_ID}/STATUS/DISCOVERED_DEVICE_COUNT
+          payload: Number of discovered devices
+
+          where {IP_ID} is the IP address of the device with periods removed (e.g., 192.168.1.100 becomes 192168110).
+          each of these topics includes the site name as a tag in the message metadata with format geoAddr={siteName}.
+
+  - Additional input options: 
+    - reset - resets the complete data model used for all of the inspector analytics
+      - msg input format: msg.reset = true
+
+    - sendMqttStats - outputs additional mqtt statistics
+      - msg input format:  msg.type = sendMqttStats
+      - output topics: 
+        EDGE_DEVICE_{siteName}/BACNETSTATS/ok
+        payload: Number of points with OK status
+        EDGE_DEVICE_{siteName}/BACNETSTATS/error
+        payload: Number of points with error status
+        EDGE_DEVICE_{siteName}/BACNETSTATS/missing
+        payload: Number of missing points
+        EDGE_DEVICE_{siteName}/BACNETSTATS/warnings
+        payload: Number of points with warnings
+        EDGE_DEVICE_{siteName}/BACNETSTATS/moved
+        payload: Number of points that have moved (e.g changed object instance)
+        EDGE_DEVICE_{siteName}/BACNETSTATS/deviceIdChange
+        payload: Number of points with changed device IDs
+        EDGE_DEVICE_{siteName}/BACNETSTATS/deviceIdConflict
+        payload: Number of points with conflicting device IDs
+        EDGE_DEVICE_{siteName}/BACNETSTATS/unmapped
+        payload: Number of unmapped points
+        EDGE_DEVICE_{siteName}/BACNETSTATS/offlinePercentage
+        payload: Percentage of points that are offline
+
+        where {siteName} is the site name configured in the inspector node.
+
+
+- Right click -> Update Point on a individual point in the device tree. (Read node UI)
+
+- Added programmatic reinitialize/clear points on BACnet server via injecting { msg.reinitializeBacnetServer: true } into the gateway node. Optionally can include a msg.responseTopic string to get a confrimation published to that topic output from the gateway node on sucessfull reinitialize.
+  - Example workflow:
+    -inject into gateway node:
+    ```javascript
+    msg = {
+      reinitializeBacnetServer: true,
+      responseTopic: "/mqtt/subscriber/topic",
+    };
+    ```
+    -upon sucessfull reinitialize, gateway outputs:
+    ```javascript
+    {
+      topic: "/mqtt/subscriber/topic";
+      payload: "Server successfully reinitialized";
+    }
+    ```
+
+Refactor:
+
+- Reading and Writing to the cache file of the datamodel.
+  - write operations are now locked to 1 operation at a time
+  - a rolling secondary backup file is now created, which can be used in case of corruption of the primary file
+
+- Ported more of the project to async / await program flow vs Promise.then
+
+Bug fixes:
+
+- timeouts removed from import and export database file, as they can be very large.
+
 ## [1.5.3] - 23-01-2025
 
-New feature: 
- - import / export buttons added to new tab in gateway node, used to manage the complete data model for backup or restore
- - associated API end points for programatic backing up or restoring - /bitpool-bacnet-data/getDataModel; /bitpool-bacnet-data/updateDataModel;
+New feature:
+
+- import / export buttons added to new tab in gateway node, used to manage the complete data model for backup or restore
+- associated API end points for programatic backing up or restoring - /bitpool-bacnet-data/getDataModel; /bitpool-bacnet-data/updateDataModel;
 
 Further async / await refactoring
 
 Bug fixes:
- - incorrect device name in read list export
- - read command indexing unhandled scenario 
- - duplicating points in read list after pressing refresh tree button
- - Multi State Values and other state text based points not being handled correctly in large volume scenarios
 
-NOTE: 
-  New importing and exporting feature handles a .json file instead of the .cfg file used in the back end. This is due to browsers flagging .cfg files as malicious. The contents of the file are unchanged. 
+- incorrect device name in read list export
+- read command indexing unhandled scenario
+- duplicating points in read list after pressing refresh tree button
+- Multi State Values and other state text based points not being handled correctly in large volume scenarios
+
+NOTE:
+New importing and exporting feature handles a .json file instead of the .cfg file used in the back end. This is due to browsers flagging .cfg files as malicious. The contents of the file are unchanged.
 
 ## [1.5.2] - 10-01-2025
 
 Mismatched network request hot fix
-
 
 ## [1.5.1] - 13-11-2024
 

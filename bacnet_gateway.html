@@ -106,6 +106,16 @@
         body: JSON.stringify({ d: device }),
       }).then((res) => res.json());
     }
+    updatePoint(device, pointKey) {
+      return fetch(RED.settings.httpNodeRoot + "bitpool-bacnet-data/updatePoint", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ d: device, k: pointKey }),
+      }).then((res) => res.json());
+    }
     setDeviceDisplayName(device, displayName) {
       return fetch(RED.settings.httpNodeRoot + "bitpool-bacnet-data/setDeviceDisplayName", {
         method: "POST",
@@ -143,6 +153,7 @@
     defaults: {
       name: { value: "" },
       local_device_address: { value: "", required: true },
+      local_interface_name: { value: "", required: false },
       apduTimeout: { value: 6000 },
       roundDecimal: { value: 2 },
       local_device_port: { value: 47808, required: true },
@@ -241,6 +252,13 @@
         });
       }
 
+      //sets name of network adapter
+      document.getElementById("node-input-local_device_address").addEventListener("change", function () {
+        let selectedText = this.options[this.selectedIndex].innerText;
+        let nicName = selectedText.split(":")[0];
+        node.local_interface_name = nicName;
+      });
+
       queryAdapters();
 
       window.confirmDialogExists = window.confirmDialogExists || false;
@@ -338,7 +356,6 @@
       vueapp.use(primevue.confirmationservice);
       node.vm1 = vueapp.mount("#serverParent");
 
-
       // Import Device List
       $("#file-upload").on("change", function (event) {
         const input = event.target.files[0];
@@ -356,7 +373,7 @@
             contentType: "application/json",
             data: JSON.stringify(jsonPayload),
             success: function (result) { },
-            timeout: 15000,
+            timeout: 0,
           });
         };
 
@@ -374,7 +391,7 @@
             aEle.setAttribute("download", "bitpool-bacnet-devices.json");
             aEle.click();
           },
-          timeout: 10000,
+          timeout: 0,
         });
       });
 
@@ -395,7 +412,7 @@
             contentType: "application/json",
             data: JSON.stringify(jsonPayload),
             success: function (result) { },
-            timeout: 15000,
+            timeout: 0,
           });
         };
 
@@ -413,7 +430,7 @@
             aEle.setAttribute("download", "edge-bacnet-datastore.json");
             aEle.click();
           },
-          timeout: 10000,
+          timeout: 0,
         });
       });
 
@@ -796,7 +813,6 @@
       font-weight: bold;
       font-size: 16px;
       width: auto !important;
-      
     }
     .database-file-label-div {
       padding-top: 15px;

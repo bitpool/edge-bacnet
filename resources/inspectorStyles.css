@@ -1,0 +1,478 @@
+body {
+  font-family: Inter, Poppins, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, Liberation Sans,
+    sans-serif, "Apple Color Emoji", "Segoe UI Emoji", Segoe UI Symbol, "Noto Color Emoji" !important;
+  margin: 0;
+  padding: 0;
+  background-color: #fafafa;
+}
+#app {
+  margin-left: 2em;
+  margin-right: 2em;
+}
+.card {
+  font-family: Inter, Poppins, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, Liberation Sans,
+    sans-serif, "Apple Color Emoji", "Segoe UI Emoji", Segoe UI Symbol, "Noto Color Emoji" !important;
+  background: #ffffff;
+  padding: 2rem;
+  border-radius: 10px;
+  margin-bottom: 1rem;
+}
+.p-field {
+  margin-bottom: 1.5rem;
+}
+.p-inputtext {
+  width: 100%;
+}
+.action-buttons .p-button {
+  margin-right: 0.5rem;
+}
+
+.logo {
+  height: 100%;
+  width: 100%;
+}
+
+.dividerRight {
+  border-right: 1px solid #d4d4d4;
+  padding-right: 20px;
+  height: 40px;
+}
+
+.statusItem {
+  padding-right: 10px;
+  margin-right: 5px;
+  cursor: pointer;
+}
+
+.right {
+  float: right;
+}
+
+.header {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.headertext {
+  font-family: Inter, Poppins, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, Liberation Sans,
+    sans-serif, "Apple Color Emoji", "Segoe UI Emoji", Segoe UI Symbol, "Noto Color Emoji" !important;
+  font-weight: 500;
+  font-size: 17px;
+  margin: 0 !important;
+  padding-top: 10px;
+}
+
+.actionButtons {
+  margin-left: auto;
+}
+
+.refreshButton {
+  color: #00adef !important;
+  border: 1px solid #00adef !important;
+  padding: 8px !important;
+  border-radius: 5px !important;
+}
+
+.bitpool-blue {
+  color: white !important;
+  background-color: #00adef !important;
+  border: 1px solid #00adef !important;
+  padding: 8px !important;
+  border-radius: 5px !important;
+  margin-left: 10px;
+}
+
+.statBlockKey {
+  font-weight: 500;
+}
+
+.searchBar {
+  font-family: Inter, Poppins, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, Liberation Sans,
+    sans-serif, "Apple Color Emoji", "Segoe UI Emoji", Segoe UI Symbol, "Noto Color Emoji" !important;
+  width: 100% !important;
+  background: white !important;
+  border: 1px solid #d4d4d4 !important;
+  border-radius: 20px !important;
+  height: 40px !important;
+  padding-left: 15px !important;
+}
+.searchBarContainer {
+  width: 100% !important;
+}
+
+.columnSelector {
+  border: 1px solid #e5e5e5 !important;
+  border-radius: 15px !important;
+  width: 250px;
+  padding-right: 10px;
+  margin-bottom: 20px;
+}
+
+.p-multiselect {
+  margin-top: 22px;
+}
+
+.p-multiselect-overlay {
+  border: 1px solid #e5e5e5 !important;
+  border-radius: 5px !important;
+}
+
+.p-multiselect-option {
+  margin-top: 5px !important;
+  margin-left: 2px !important;
+  margin-right: 2px !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+}
+
+.p-multiselect-option:hover {
+  background-color: #00adef !important;
+  border: 1px solid #00adef !important;
+  border-radius: 5px !important;
+}
+
+.p-datatable .p-datatable-header {
+  padding-top: 0em !important;
+  padding-bottom: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.tableHeaderDiv {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+}
+
+.pi-search:before {
+  position: absolute;
+  right: 15px;
+  top: 41px;
+  transform: translateY(-50%);
+}
+
+.p-datatable-header {
+  background: inherit !important;
+  border: none !important;
+  display: flex;
+}
+
+.p-datatable-table-container {
+  border: 1px solid #e5e5e5;
+  border-radius: 15px;
+}
+
+.p-datatable-paginator-bottom {
+  border: none !important;
+}
+
+.p-datatable-wrapper {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.p-datatable th,
+.p-datatable td {
+  min-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+/* changes start */
+
+/* Add these rules to forcefully control table height */
+.fixed-height-table {
+  height: 800px !important; /* Fixed height matching scrollHeight */
+}
+
+.fixed-height-table .p-datatable-wrapper {
+  height: calc(800px - 92px) !important; /* Subtract header and paginator height */
+  min-height: calc(800px - 92px) !important;
+}
+
+.fixed-height-table .p-datatable-table {
+  min-height: 800px !important; /* Force table to maintain minimum height */
+}
+
+/* Make sure the table body expands to fill available space */
+.fixed-height-table .p-datatable-tbody {
+  min-height: 760px !important; /* Approximate calculation for body only */
+}
+
+/* Add an empty row to maintain height when filtered results are few */
+.p-datatable-emptymessage td {
+  height: 760px !important;
+}
+
+.row-missing {
+  background-color: #00adef;
+}
+
+.p-paginator-page.p-paginator-page-selected {
+  background-color: #00adef !important;
+  color: white !important;
+}
+
+.header-content {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: fixed;
+  z-index: 9999;
+  width: 100%;
+  left: 0;
+  margin: auto;
+}
+
+.content-wrapper {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  top: 100px;
+  position: absolute;
+  width: -webkit-fill-available;
+  margin: 5px;
+  left: 0px;
+  height: 1000px !important;
+}
+
+.datatable-card {
+  padding-top: 0 !important;
+  padding-bottom: 1rem !important;
+  padding-left: 2rem;
+  padding-right: 2rem;
+  height: 1000px !important;
+}
+
+.p-multiselect-overlay {
+  background-color: #ffffff !important;
+}
+
+  /* Hide the default checkbox that comes with PrimeVue */
+  .p-multiselect-option .p-checkbox {
+    display: none !important;
+  }
+  
+  /* Make sure our custom checkbox is visible */
+  .custom-checkbox {
+    display: flex !important;
+    margin-right: 0.5rem;
+  }
+  
+  /* Style for the checkbox container */
+  .custom-checkbox-box {
+    border: 1px solid #ced4da;
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #ffffff;
+  }
+  
+  /* Style for selected checkbox */
+  .custom-checkbox-box.selected {
+    background-color: #2196F3;
+    border-color: #2196F3;
+  }
+  
+  /* Style for the checkmark icon */
+  .custom-checkbox-icon {
+    color: white;
+    font-size: 12px;
+  }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: 25px;
+  }
+  
+  .status-with-icon {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 50px;
+  }
+  
+  .status-icon {
+    font-size: 24px;
+    width: 18px;
+    height: 18px;
+
+  }
+
+  .status-icon-wrapper {
+    border-radius: 6px;
+    width: 31px;
+    height: 31px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .status-text {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    height: 100%;
+    text-align: left;
+  }
+  
+  .status-text .statBlockValue {
+    font-size: 14px;
+    line-height: 1.2;
+    font-weight: normal;
+    order: -1; /* This moves the value to the top */
+  }
+  
+  .status-text .statBlockKey {
+    font-size: 12px;
+    line-height: 1.2;
+  }
+  
+  /* Keep the original showing results item styling */
+  .statusItem:first-child {
+    display: flex;
+    align-items: center;
+    height: 40px;
+  }
+
+  .stat-percentage {
+    display: inline-block;
+    background-color: #e0e0e0;
+    color: #333;
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin-left: 6px;
+    font-size: 0.85em;
+    font-weight: 500;
+    text-align: center;
+  }
+
+
+  /* responsive updates */
+
+
+  /* Base styles for the header */
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  align-items: center;
+  padding: 10px;
+  width: 100%;
+}
+
+/* Logo section */
+.dividerRight {
+  flex: 0 0 auto;
+  min-width: 120px;
+  max-width: 180px;
+  border-right: 1px solid #d4d4d4;
+  padding-right: 20px;
+  height: 40px;
+}
+
+/* Status section */
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  flex: 1 1 auto;
+  justify-content: flex-start;
+  align-items: center;
+  margin: 0;
+}
+
+/* Individual status items */
+.statusItem {
+  flex: 0 1 auto;
+  min-width: 150px;
+  margin: 0;
+  padding: 5px;
+  border-radius: 6px;
+}
+
+/* Styling for active filter */
+.statusItem.active-filter {
+  background-color: rgba(0, 173, 239, 0.1);
+  border: 1px solid #00ADEF;
+}
+
+/* Cursor change to indicate clickable */
+.statusItem:hover {
+  background-color: rgba(0, 173, 239, 0.05);
+}
+
+/* Action buttons section */
+.actionButtons {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 10px;
+  margin: 0;
+}
+
+/* Responsive breakpoints */
+@media screen and (max-width: 1400px) {
+  .status {
+    justify-content: center;
+  }
+  
+  .statusItem {
+    min-width: 140px;
+  }
+}
+
+@media screen and (max-width: 1200px) {
+  .header {
+    justify-content: center;
+  }
+
+  .dividerRight {
+    border-right: none;
+    padding-right: 0;
+  }
+
+  .actionButtons {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .statusItem {
+    min-width: calc(50% - 20px);
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .statusItem {
+    min-width: 100%;
+  }
+  
+  .actionButtons {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actionButtons .p-button {
+    margin: 5px 0;
+  }
+}
+
+/* Adjust the header content container */
+.header-content {
+  position: fixed;
+  z-index: 9999;
+  width: 100%;
+  left: 0;
+  margin: auto;
+  padding: 0.8rem;
+  box-sizing: border-box;
+  max-height: 80vh;
+  overflow-y: auto;
+}

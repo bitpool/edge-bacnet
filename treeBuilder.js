@@ -1,4 +1,4 @@
-const { Store_Config } = require("./common");
+const { queueConfigStore } = require("./common");
 const { BacnetDevice } = require("./bacnet_device");
 
 /**
@@ -33,12 +33,12 @@ class treeBuilder {
     */
     cacheData() {
         // Cache the current state of the network tree and other data
-        Store_Config(JSON.stringify({
+        queueConfigStore({
             renderList: this.renderList,
             deviceList: this.deviceList,
             pointList: this.networkTree,
             renderListCount: this.renderListCount,
-        }));
+        });
     }
 
     /**

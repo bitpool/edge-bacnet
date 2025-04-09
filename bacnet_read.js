@@ -1,9 +1,6 @@
 /*
   MIT License Copyright 2021, 2022 - Bitpool Pty Ltd
 */
-
-
-
 module.exports = function (RED) {
   const { ReadCommandConfig } = require('./common');
   const baEnum = require('./resources/node-bacstack-ts/dist/index.js').enum;
