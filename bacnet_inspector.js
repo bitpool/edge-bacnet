@@ -115,10 +115,6 @@ module.exports = function (RED) {
     this.batchInterval = setInterval(processBatch, BATCH_PROCESS_INTERVAL);
     this.syncInterval = setInterval(syncWithFlowContext, SYNC_INTERVAL);
 
-    const debouncedGetBacnetStats = debounce((node, context, msg) => {
-      getModelStats();
-    }, 3000);
-
     // Function to sync cache to flow context
     function syncWithFlowContext() {
       const flow = context.flow;
@@ -187,7 +183,7 @@ module.exports = function (RED) {
 
     node.on("input", function (msg, send, done) {
       if (msg.type === "getBacnetStats") {
-        processMessage(msg, send, done);
+        getPublishedPointsList();
       } else if (msg.type === "Read") {
         calculateCombinedReadList(node, msg);
         if (done) done();
@@ -197,7 +193,6 @@ module.exports = function (RED) {
         if (done) done();
       } else if (msg.payload && msg.topic) {
         //regular bacnet output
-        debouncedGetBacnetStats(node, context, msg);
         // Queue the message for batch processing instead of immediate processing
         messageQueue.push({ msg, send, done });
         if (messageQueue.length >= MAX_BATCH_SIZE) {
@@ -218,6 +213,7 @@ module.exports = function (RED) {
           }
           if (done) done();
         });
+
       } else if (msg.reset === true) {
         node.status({ text: "Resetting..." });
 
@@ -248,17 +244,6 @@ module.exports = function (RED) {
         if (done) done();
       }
     });
-
-    // Process individual messages that shouldn't be batched
-    function processMessage(msg, send, done) {
-      try {
-        getBacnetStats(node, context, msg);
-        if (done) done();
-      } catch (error) {
-        console.error("Error processing message:", error);
-        if (done) done(error);
-      }
-    }
 
     // Process a batch of messages efficiently
     function processBatch() {
@@ -293,6 +278,10 @@ module.exports = function (RED) {
 
       // Use cached data instead of flow context
       const now = new Date();
+      const flow = context.flow;
+
+      // Set the last point pushed time
+      flow.set("Last_Point_Pushed_Time", now.toISOString());
 
       // Process all messages in the batch
       messages.forEach((msg) => {
@@ -449,6 +438,13 @@ module.exports = function (RED) {
 
       // Update the node status
       node.status({ text: "Points Online: " + cachedData.onlineCount + "/" + cachedData.totalUniquePolledCount });
+
+      // Periodically call getModelStats to keep model stats updated
+      // Use a debounce pattern to avoid calling it too frequently
+      if (!processBatchData.lastModelStatsUpdate || (now - processBatchData.lastModelStatsUpdate) > 3000) {
+        getModelStats();
+        processBatchData.lastModelStatsUpdate = now;
+      }
     }
 
     //API Request Handlers Start
@@ -923,146 +919,6 @@ module.exports = function (RED) {
       };
 
       return msg;
-    }
-
-    //calculates bacnet stats on correctly injected msg to inspector node
-    //fired on every valid bacnet output
-    function getBacnetStats(node, context, msg) {
-      let flow = context.flow;
-      let now = new Date(); // Create a new Date object
-
-      // Initialize or retrieve the current list of unique topics and the count from the context context
-      let uniqueTopics = flow.get("uniqueReadTopics") || [];
-      let topicStatusMap = flow.get("topicStatusMap") || {}; // Store status per topic
-      let topicDataMap = flow.get("topicDataMap") || {}; // Store presentValue, timestamp, and last value change time per topic
-      let totalUniqueCount = flow.get("totalUniquePolledCount") || 0;
-      let onlineCount = flow.get("onlineCount") || 0;
-      let offlineCount = flow.get("offlineCount") || 0;
-
-      flow.set("site_Name", node.siteName);
-
-      // Calculate the IP address of the edge device
-      var IP_Add = getIPAddresses(); // Get the IP address of the current device
-      var IP_Str = "NA";
-      if (IP_Add[0]) {
-        IP_Str = IP_Add[0].replace(/\./g, "");
-      } // If an IP address of the first network adapter exists remove the full stops
-
-      // Get the current message's topic, status, presentValue, and timestamp
-      let topic = msg.topic;
-      let status = msg.payload.status;
-      let error = msg.payload.error;
-      let presentValue = msg.payload.presentValue;
-      let timestamp = msg.payload.timestamp;
-
-      // Extract properties only if they exist
-      let deviceID = msg.payload.meta?.device?.deviceId;
-      let objectType = msg.payload.meta?.objectId?.type;
-      let objectInstance = msg.payload.meta?.objectId?.instance;
-      let pointName = msg.payload?.objectName;
-
-      if (pointName !== undefined) {
-        pointName = pointName + "_" + getObjectType(objectType) + "_" + objectInstance;
-      }
-
-      let displayName = msg.payload?.displayName;
-      let deviceName = msg.payload.meta?.device?.deviceName;
-
-      let ipAddress =
-        typeof msg.payload.meta?.device?.address === "object"
-          ? msg.payload.meta.device.address.address
-          : msg.payload.meta?.device?.address;
-
-      // Only proceed if the status key exists
-      if (status !== undefined) {
-        // Check if the topic is already in the unique topics list
-        if (!uniqueTopics.includes(topic)) {
-          uniqueTopics.push(topic);
-          totalUniqueCount++;
-        }
-
-        // Update the status in the topicStatusMap
-        if (topicStatusMap[topic] !== status) {
-          // Adjust counts based on the previous status
-          if (topicStatusMap[topic] === "online") {
-            onlineCount--;
-          } else if (topicStatusMap[topic] === "offline") {
-            offlineCount--;
-          }
-
-          // Update with the new status
-          topicStatusMap[topic] = status;
-
-          // Adjust counts based on the new status
-          if (status === "online") {
-            onlineCount++;
-          } else if (status === "offline") {
-            offlineCount++;
-          }
-        }
-
-        // Create an entry in the data map if it doesn't already exist
-        if (!topicDataMap[topic]) {
-          topicDataMap[topic] = {
-            presentValue: presentValue,
-            status: status,
-            bacnetLastSeen: timestamp,
-            lastCOVTime: now.getTime(), // Initialize last value change time
-          };
-
-          // Add properties conditionally if they exist or are explicitly set to 0
-          if (deviceID !== undefined) topicDataMap[topic].deviceID = deviceID;
-          if (objectType !== undefined) topicDataMap[topic].objectType = objectType;
-          if (objectInstance !== undefined) topicDataMap[topic].objectInstance = objectInstance;
-          if (pointName !== undefined) topicDataMap[topic].pointName = pointName;
-          if (displayName !== undefined) topicDataMap[topic].displayName = displayName;
-          if (deviceName !== undefined) topicDataMap[topic].deviceName = deviceName;
-          if (ipAddress !== undefined) topicDataMap[topic].ipAddress = ipAddress;
-          if (error !== undefined) topicDataMap[topic].error = error;
-          topicDataMap[topic].key =
-            topicDataMap[topic].deviceID + ":" + topicDataMap[topic].objectType + ":" + topicDataMap[topic].objectInstance;
-        } else {
-          // If the entry already exists
-
-          if (presentValue != topicDataMap[topic].presentValue) {
-            // If the present value has changed
-            topicDataMap[topic].lastCOVTime = now.getTime(); // Update last value change time
-          }
-
-          topicDataMap[topic].presentValue = presentValue; // Update the existing timestamp and present value
-          topicDataMap[topic].bacnetLastSeen = timestamp; // Update timestamp
-
-          // Update properties conditionally if they exist or are explicitly set to 0
-          if (deviceID !== undefined) topicDataMap[topic].deviceID = deviceID;
-          if (objectType !== undefined) topicDataMap[topic].objectType = objectType;
-          if (objectInstance !== undefined) topicDataMap[topic].objectInstance = objectInstance;
-          if (pointName !== undefined) topicDataMap[topic].pointName = pointName;
-          if (displayName !== undefined) topicDataMap[topic].displayName = displayName;
-          if (deviceName !== undefined) topicDataMap[topic].deviceName = deviceName;
-          if (ipAddress !== undefined) topicDataMap[topic].ipAddress = ipAddress;
-          if (error !== undefined) topicDataMap[topic].error = error;
-          topicDataMap[topic].key =
-            topicDataMap[topic].deviceID + ":" + topicDataMap[topic].objectType + ":" + topicDataMap[topic].objectInstance;
-        }
-      } else {
-        node.warn("Status key is missing for topic: " + topic);
-      }
-
-      let offlinePercentage = (offlineCount / (onlineCount + offlineCount)) * 100;
-
-      node.statBlock.offlinePercentage = offlinePercentage;
-
-      // Store the updated unique topics, status map, topic data map, and counts back in the context context
-      flow.set("uniqueTopics", uniqueTopics);
-      flow.set("topicStatusMap", topicStatusMap);
-      flow.set("topicDataMap", topicDataMap);
-      flow.set("totalUniquePolledCount", totalUniqueCount);
-      flow.set("onlineCount", onlineCount);
-      flow.set("offlineCount", offlineCount);
-      flow.set("offlinePercentage", offlinePercentage);
-
-      // Update the node status
-      node.status({ text: "Points Online: " + onlineCount + "/" + totalUniqueCount });
     }
 
     function makeGetRequest(route) {

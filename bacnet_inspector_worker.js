@@ -367,7 +367,7 @@ function processModelStats(data) {
   }
 
   // Update statBlock
-  statBlock.missing = pointMatchDiscoveryNotPublishingCount;
+  statBlock.missing = pointNotInDiscoveryCount;
   statBlock.warnings = pointMatchDiscoveryNotPublishingCount;
   statBlock.unmapped = unmappedCount;
 

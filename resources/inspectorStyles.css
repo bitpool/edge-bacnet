@@ -476,3 +476,28 @@ body {
   max-height: 80vh;
   overflow-y: auto;
 }
+
+.p-datatable-scrollable-body {
+  min-height: 576px !important;
+}
+
+/* Set consistent row heights */
+.p-datatable .p-datatable-tbody>tr {
+  height: 48px !important;
+  min-height: 48px !important;
+  max-height: 48px !important;
+}
+
+/* Make sure content in cells doesn't expand the row */
+.p-datatable .p-datatable-tbody>tr>td {
+  height: 48px !important;
+  padding: 0.5rem 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ensure table takes minimum space when empty */
+.p-datatable-empty-message {
+  height: 576px !important;
+}

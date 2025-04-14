@@ -35,8 +35,8 @@
             </span>
             <div class="status-text">
               <span class="statBlockValue">
-                {{statCounts?.readCount}}
-                <span class="stat-percentage">{{statPercentages.readCount}}%</span>
+                {{statCounts?.statBlock.ok}}
+                <span class="stat-percentage">{{statPercentages.ok}}%</span>
               </span>
               <span class="statBlockKey">Points OK</span>
             </div>
@@ -244,6 +244,7 @@
           selectedColumns: [],
           statPercentages: {
             readCount: 0,
+            ok: 0,
             error: 0,
             missing: 0,
             warnings: 0,
@@ -288,6 +289,7 @@
             const total = tableData.length || 1; // Avoid division by zero
             app.statPercentages = {
               readCount: Math.round((data.statCounts.readCount / total) * 100),
+              ok: Math.round((data.statCounts.statBlock.ok / total) * 100),
               error: Math.round((data.statCounts.statBlock.error / total) * 100),
               missing: Math.round((data.statCounts.statBlock.missing / total) * 100),
               warnings: Math.round((data.statCounts.statBlock.warnings / total) * 100),
@@ -401,14 +403,6 @@
           if (!this.selectedColumns) return false;
           return this.selectedColumns.some((item) => item.field === option.field);
         },
-        getRowClass(rowData) {
-          console.log("rowData", rowData);
-          if (rowData.dataModelStatus.includes("Point OK")) return "row-ok";
-          if (rowData.dataModelStatus.includes("Point Error")) return "row-error";
-          if (rowData.dataModelStatus.includes("Point Warning")) return "row-warning";
-          if (rowData.dataModelStatus.includes("Point Missing")) return "row-missing";
-          return ""; // Default, no class
-        },
         downloadCSV() {
           window.location.href = "/getmodelstatscsv";
         },
@@ -423,6 +417,7 @@
             filters: this.filters,
             selectedColumns: this.selectedColumns,
             allColumns: this.allColumns,
+            statPercentages: this.statPercentages  // Include the calculated percentages
           };
           downloadPrimeVueAppAsHtml(filename, data);
         },

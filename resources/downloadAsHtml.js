@@ -125,6 +125,7 @@ async function processPrimeVueHtml(appData) {
           selectedColumnValues: CAPTURED_APP_DATA.selectedColumnValues || [],
           statPercentages: CAPTURED_APP_DATA.statPercentages || {
             readCount: 0,
+            ok: 0,
             error: 0,
             missing: 0,
             warnings: 0,
@@ -146,6 +147,7 @@ async function processPrimeVueHtml(appData) {
         const total = this.tableData.length || 1; // Avoid division by zero
         this.statPercentages = {
           readCount: Math.round((this.statCounts.readCount / total) * 100),
+          ok: Math.round((this.statCounts.statBlock.ok / total) * 100),
           error: Math.round((this.statCounts.statBlock.error / total) * 100),
           missing: Math.round((this.statCounts.statBlock.missing / total) * 100),
           warnings: Math.round((this.statCounts.statBlock.warnings / total) * 100),
@@ -285,8 +287,8 @@ async function processPrimeVueHtml(appData) {
                 </span>
                 <div class="status-text">
                   <span class="statBlockValue">
-                    {{statCounts?.readCount}}
-                    <span class="stat-percentage">{{statPercentages.readCount}}%</span>
+                    {{statCounts?.statBlock.ok}}
+                    <span class="stat-percentage">{{statPercentages.ok}}%</span>
                   </span>
                   <span class="statBlockKey">Points OK</span>
                 </div>

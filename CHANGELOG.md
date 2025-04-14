@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.1] - 14-04-2025
+
+Bug fixes: 
+  - Inspector stats were calculating incorrectly in certain scenarios
+  - Inspector downloaded HTML files had incorrect stat percentages
+  - Inspector Last_Polled_Time stat was always "UNKNOWN", now shows correct date time.
+
+Minor updates: 
+  - Inspector BACnet main stats now output on msg.type = getBacnetStats inject. Can be set on a scheduled inject. 
+  - Updated Examples with Inspector
+
+
 ## [1.6.0] - 09-04-2025
 
 New features:

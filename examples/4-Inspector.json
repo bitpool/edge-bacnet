@@ -45,7 +45,8 @@
     "y": 440,
     "wires": [
       [
-        "8db122ce13172090"
+        "8db122ce13172090",
+        "df826da5f464306c"
       ]
     ]
   },
@@ -71,7 +72,8 @@
     "y": 360,
     "wires": [
       [
-        "1617c14c07ac6e16"
+        "1617c14c07ac6e16",
+        "df826da5f464306c"
       ]
     ]
   },
@@ -217,11 +219,150 @@
     "tosidebar": true,
     "console": false,
     "tostatus": false,
-    "complete": "false",
+    "complete": "true",
+    "targetType": "full",
     "statusVal": "",
     "statusType": "auto",
     "x": 1040,
     "y": 440,
     "wires": []
+  },
+  {
+    "id": "df826da5f464306c",
+    "type": "Bacnet-Inspector",
+    "z": "f1fc21f44027188c",
+    "name": "",
+    "siteName": "INSPECTOR_SITE_NAME",
+    "totalUniqueReadCount": 0,
+    "x": 1070,
+    "y": 360,
+    "wires": [
+      [
+        "6eeed73a4976730b"
+      ]
+    ]
+  },
+  {
+    "id": "6eeed73a4976730b",
+    "type": "debug",
+    "z": "f1fc21f44027188c",
+    "name": "debug 2",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1300,
+    "y": 360,
+    "wires": []
+  },
+  {
+    "id": "70b41e715ed44733",
+    "type": "Bitpool-Inject",
+    "z": "f1fc21f44027188c",
+    "name": "sendMqttStats",
+    "props": [
+      {
+        "p": "type",
+        "v": "sendMqttStats",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "doPoll": true,
+    "doDiscover": false,
+    "json": false,
+    "mqtt": false,
+    "pointJson": true,
+    "object_property_simplePayload": false,
+    "object_property_simpleWithStatus": false,
+    "object_property_fullObject": true,
+    "useDeviceName": true,
+    "x": 870,
+    "y": 240,
+    "wires": [
+      [
+        "df826da5f464306c"
+      ]
+    ]
+  },
+  {
+    "id": "031ec232c48e17de",
+    "type": "Bitpool-Inject",
+    "z": "f1fc21f44027188c",
+    "name": "getBacnetStats",
+    "props": [
+      {
+        "p": "type",
+        "v": "getBacnetStats",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "doPoll": true,
+    "doDiscover": false,
+    "json": false,
+    "mqtt": false,
+    "pointJson": true,
+    "object_property_simplePayload": false,
+    "object_property_simpleWithStatus": false,
+    "object_property_fullObject": true,
+    "useDeviceName": true,
+    "x": 860,
+    "y": 300,
+    "wires": [
+      [
+        "df826da5f464306c"
+      ]
+    ]
+  },
+  {
+    "id": "74e1dd56bce21e2f",
+    "type": "Bitpool-Inject",
+    "z": "f1fc21f44027188c",
+    "name": "reset",
+    "props": [
+      {
+        "p": "reset",
+        "v": "true",
+        "vt": "bool"
+      },
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "doPoll": true,
+    "doDiscover": false,
+    "json": false,
+    "mqtt": false,
+    "pointJson": true,
+    "object_property_simplePayload": false,
+    "object_property_simpleWithStatus": false,
+    "object_property_fullObject": true,
+    "useDeviceName": true,
+    "x": 890,
+    "y": 180,
+    "wires": [
+      [
+        "df826da5f464306c"
+      ]
+    ]
   }
 ]

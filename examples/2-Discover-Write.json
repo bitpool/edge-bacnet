@@ -1,1 +1,164 @@
-[{"id":"e478e80571442399","type":"Bacnet-Gateway","z":"1bc98a48ab9b3af5","name":"","local_device_address":"","apduTimeout":6000,"roundDecimal":2,"local_device_port":47808,"apduSize":"5","maxSegments":"0x50","retries":"5","broadCastAddr":"255.255.255.255","toLogIam":true,"discover_polling_schedule":"60","discover_polling_schedule_value":"1","discover_polling_schedule_options":"Minutes","device_id_range_enabled":false,"device_id_range_start":"","device_id_range_end":"","deviceId":"817001","manual_instance_range_enabled":false,"manual_instance_range_start":"","manual_instance_range_end":"","logErrorToConsole":false,"serverEnabled":false,"device_read_schedule":"60","device_read_schedule_value":"1","device_read_schedule_options":"Minutes","x":700,"y":320,"wires":[["0313b7ee1cfa6b42"]]},{"id":"c2e012301c4a6af4","type":"Bitpool-Inject","z":"1bc98a48ab9b3af5","name":"Discover","props":[{"p":"payload"},{"p":"topic","vt":"str"}],"repeat":"","crontab":"","once":false,"onceDelay":0.1,"topic":"","payload":"","payloadType":"date","doPoll":false,"doDiscover":true,"x":520,"y":320,"wires":[["e478e80571442399"]]},{"id":"8172620e7be7b505","type":"Bitpool-Inject","z":"1bc98a48ab9b3af5","name":"Poll","props":[{"p":"payload"},{"p":"topic","vt":"str"}],"repeat":"","crontab":"","once":false,"onceDelay":0.1,"topic":"","payload":"1","payloadType":"num","doPoll":true,"doDiscover":false,"x":370,"y":400,"wires":[["b3293195b7c5bd9d"]]},{"id":"0313b7ee1cfa6b42","type":"debug","z":"1bc98a48ab9b3af5","name":"debug 1","active":true,"tosidebar":true,"console":false,"tostatus":false,"complete":"true","targetType":"full","statusVal":"","statusType":"auto","x":880,"y":320,"wires":[]},{"id":"b3293195b7c5bd9d","type":"Bacnet-Write","z":"1bc98a48ab9b3af5","name":"","applicationTag":"4","priority":"16","pointsToWrite":[],"writeDevices":[],"hiddenDeployToggle":false,"prevHiddenToggleState":false,"x":530,"y":400,"wires":[["e478e80571442399"]]}]
+[
+  {
+    "id": "25ee9078510fe398",
+    "type": "Bacnet-Gateway",
+    "z": "f1fc21f44027188c",
+    "name": "",
+    "local_device_address": "",
+    "local_interface_name": "",
+    "apduTimeout": 6000,
+    "roundDecimal": 2,
+    "local_device_port": 47808,
+    "apduSize": "5",
+    "maxSegments": "0x50",
+    "retries": "5",
+    "broadCastAddr": "255.255.255.255",
+    "toLogIam": false,
+    "discover_polling_schedule": "900",
+    "discover_polling_schedule_value": "15",
+    "discover_polling_schedule_options": "Minutes",
+    "deviceId": 817001,
+    "logErrorToConsole": false,
+    "serverEnabled": true,
+    "device_read_schedule": "900",
+    "device_read_schedule_value": "15",
+    "device_read_schedule_options": "Minutes",
+    "deviceRangeRegisters": [
+      {
+        "enabled": true,
+        "start": "0",
+        "end": "4194303"
+      }
+    ],
+    "portRangeRegisters": [
+      {
+        "enabled": true,
+        "start": "47808",
+        "end": "47808"
+      }
+    ],
+    "cacheFileEnabled": true,
+    "sanitise_device_schedule": "3600",
+    "sanitise_device_schedule_value": "1",
+    "sanitise_device_schedule_options": "Hours",
+    "x": 840,
+    "y": 420,
+    "wires": [
+      [
+        "f41ef6737463370e"
+      ]
+    ]
+  },
+  {
+    "id": "0f90856ca1808ee7",
+    "type": "Bitpool-Inject",
+    "z": "f1fc21f44027188c",
+    "name": "Discover",
+    "props": [
+      {
+        "p": "payload"
+      },
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "doPoll": false,
+    "doDiscover": true,
+    "json": false,
+    "mqtt": false,
+    "pointJson": true,
+    "object_property_simplePayload": false,
+    "object_property_simpleWithStatus": false,
+    "object_property_fullObject": true,
+    "useDeviceName": true,
+    "x": 660,
+    "y": 420,
+    "wires": [
+      [
+        "25ee9078510fe398"
+      ]
+    ]
+  },
+  {
+    "id": "c7f1aa7764f29aa1",
+    "type": "Bacnet-Write",
+    "z": "f1fc21f44027188c",
+    "name": "",
+    "applicationTag": "4",
+    "priority": "16",
+    "pointsToWrite": [],
+    "writeDevices": [],
+    "hiddenDeployToggle": false,
+    "prevHiddenToggleState": false,
+    "x": 670,
+    "y": 500,
+    "wires": [
+      [
+        "25ee9078510fe398"
+      ]
+    ]
+  },
+  {
+    "id": "c97fbed9db70de7f",
+    "type": "Bitpool-Inject",
+    "z": "f1fc21f44027188c",
+    "name": "Poll",
+    "props": [
+      {
+        "p": "payload"
+      },
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "doPoll": true,
+    "doDiscover": false,
+    "json": false,
+    "mqtt": false,
+    "pointJson": true,
+    "object_property_simplePayload": false,
+    "object_property_simpleWithStatus": false,
+    "object_property_fullObject": true,
+    "useDeviceName": true,
+    "x": 490,
+    "y": 500,
+    "wires": [
+      [
+        "c7f1aa7764f29aa1"
+      ]
+    ]
+  },
+  {
+    "id": "f41ef6737463370e",
+    "type": "debug",
+    "z": "f1fc21f44027188c",
+    "name": "debug 1",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1040,
+    "y": 420,
+    "wires": []
+  }
+]

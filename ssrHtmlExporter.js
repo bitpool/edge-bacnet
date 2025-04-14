@@ -52,8 +52,8 @@ async function generatePrimeVueAppHtmlStatic(appData, filename = "bacnet-inspect
             </span>
             <div class="status-text">
               <span class="statBlockValue">
-                {{statCounts?.readCount}}
-                <span class="stat-percentage">{{statPercentages.readCount}}%</span>
+                {{statCounts?.statBlock.ok}}
+                <span class="stat-percentage">{{statPercentages.ok}}%</span>
               </span>
               <span class="statBlockKey">Points OK</span>
             </div>
@@ -258,6 +258,7 @@ async function generatePrimeVueAppHtmlStatic(appData, filename = "bacnet-inspect
             selectedColumns: [],
             statPercentages: {
               readCount: 0,
+              ok: 0,
               error: 0,
               missing: 0,
               warnings: 0,
@@ -278,6 +279,7 @@ async function generatePrimeVueAppHtmlStatic(appData, filename = "bacnet-inspect
           const total = this.tableData.length || 1; // Avoid division by zero
           this.statPercentages = {
             readCount: Math.round((this.statCounts.readCount / total) * 100) || 0,
+            ok: Math.round((this.statCounts.statBlock?.ok / total) * 100) || 0,
             error: Math.round((this.statCounts.statBlock?.error / total) * 100) || 0,
             missing: Math.round((this.statCounts.statBlock?.missing / total) * 100) || 0,
             warnings: Math.round((this.statCounts.statBlock?.warnings / total) * 100) || 0,
