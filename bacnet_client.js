@@ -52,6 +52,7 @@ class BacnetClient extends EventEmitter {
       that.deviceRetryCount = parseInt(config.retries);
       that.sanitise_device_schedule = config.sanitise_device_schedule;
       that.buildTreeException = false;
+      that.enable_device_discovery = config.enable_device_discovery;
 
       that.readPropertyMultipleOptions = {
         maxSegments: 112,
@@ -80,11 +81,11 @@ class BacnetClient extends EventEmitter {
 
         //query device task
         const queryDevices = new Task("simple task", () => {
-          if (!that.pollInProgress) {
+          if (!that.pollInProgress && that.enable_device_discovery) {
             that.queryDevices();
           }
 
-          if (!that.buildJsonInProgress) {
+          if (!that.buildJsonInProgress && that.enable_device_discovery) {
             that.buildJsonTree();
           }
         });
@@ -106,10 +107,15 @@ class BacnetClient extends EventEmitter {
         setTimeout(() => {
           that.globalWhoIs();
           setTimeout(() => {
-            that.queryDevices();
-            that.buildJsonTree();
+            if (!that.pollInProgress && that.enable_device_discovery) {
+              that.queryDevices();
+            }
+
+            if (!that.buildJsonInProgress && that.enable_device_discovery) {
+              that.buildJsonTree();
+            }
           }, "4000");
-        }, "5000");
+        }, "15000");
 
       } catch (e) {
         that.logOut("Issue initializing client: ", e);
@@ -615,6 +621,7 @@ class BacnetClient extends EventEmitter {
     that.deviceId = config.deviceId;
     that.broadCastAddr = config.broadCastAddr;
     that.device_read_schedule = config.device_read_schedule;
+    that.enable_device_discovery = config.enable_device_discovery;
 
     if (that.scheduler !== null) {
       that.scheduler.stop();
@@ -640,11 +647,11 @@ class BacnetClient extends EventEmitter {
 
       // //query device task
       const queryDevices = new Task("simple task", () => {
-        if (!that.pollInProgress) {
+        if (!that.pollInProgress && that.enable_device_discovery) {
           that.queryDevices();
         }
 
-        if (!that.buildJsonInProgress) {
+        if (!that.buildJsonInProgress && that.enable_device_discovery) {
           that.buildJsonTree();
         }
       });

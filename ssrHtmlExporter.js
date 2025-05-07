@@ -278,14 +278,14 @@ async function generatePrimeVueAppHtmlStatic(appData, filename = "bacnet-inspect
           // Calculate percentages
           const total = this.tableData.length || 1; // Avoid division by zero
           this.statPercentages = {
-            readCount: Math.round((this.statCounts.readCount / total) * 100) || 0,
-            ok: Math.round((this.statCounts.statBlock?.ok / total) * 100) || 0,
-            error: Math.round((this.statCounts.statBlock?.error / total) * 100) || 0,
-            missing: Math.round((this.statCounts.statBlock?.missing / total) * 100) || 0,
-            warnings: Math.round((this.statCounts.statBlock?.warnings / total) * 100) || 0,
-            deviceIdChange: Math.round((this.statCounts.statBlock?.deviceIdChange / total) * 100) || 0,
-            deviceIdConflict: Math.round((this.statCounts.statBlock?.deviceIdConflict / total) * 100) || 0,
-            unmapped: Math.round((this.statCounts.statBlock?.unmapped / total) * 100) || 0
+            readCount: Math.round((this.statCounts.readCount / total) * 10000) / 100 || 0,
+            ok: Math.round((this.statCounts.statBlock.ok / total) * 10000) / 100 || 0,
+            error: Math.round((this.statCounts.statBlock.error / total) * 10000) / 100 || 0,
+            missing: Math.round((this.statCounts.statBlock.missing / total) * 10000) / 100 || 0,
+            warnings: Math.round((this.statCounts.statBlock.warnings / total) * 10000) / 100 || 0,
+            deviceIdChange: Math.round((this.statCounts.statBlock.deviceIdChange / total) * 10000) / 100 || 0,
+            deviceIdConflict: Math.round((this.statCounts.statBlock.deviceIdConflict / total) * 10000) / 100 || 0,
+            unmapped: Math.round((this.statCounts.statBlock.unmapped / total) * 10000) / 100 || 0
           };
         },
         computed: {

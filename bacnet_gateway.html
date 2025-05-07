@@ -177,6 +177,7 @@
       sanitise_device_schedule: { value: "60", required: false },
       sanitise_device_schedule_value: { value: "1", required: false },
       sanitise_device_schedule_options: { value: "Hours", required: false },
+      enable_device_discovery: { value: true, required: true },
     },
     networkInterfaces: [],
     inputs: 1,
@@ -986,6 +987,11 @@
       </div>
 
       <div class="form-row bp-checkbox-row">
+        <input type="checkbox" id="node-input-enable_device_discovery" class="bp-checkbox" />
+        <label for="node-input-enable_device_discovery"> Enable device discovery </label>
+      </div>
+
+      <div class="form-row bp-checkbox-row">
         <input type="checkbox" id="node-input-cacheFileEnabled" class="bp-checkbox" />
         <label for="node-input-cacheFileEnabled"> Enable cache file </label>
       </div>
@@ -1100,6 +1106,7 @@
       the this bacnet client will enter into manual discovery mode, where it iterates through types and instnace ranges. This
       range can be used to limit this manual scanning
     </li>
+    <li>Enable device discovery - toggles whether automatic device discovery, object scanning, and tree building is enabled.</li>
     <li>Log Device Found - toggles logging of found devices to the node-red debug tab.</li>
     <li>Log BACnet Errors to Console - toggles logging of BACnet related errors to the node-red console</li>
   </ul>

@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.6.2] - 07-05-2025
+
+Minor feature: 
+  - Added "Enable device discovery" check box to gateway settings, discovery tab. 
+    - This check box controls whether on not the auto point discovery and property discovery is enabled. 
+    - This can be used to turn off unecessary network traffic once you have discovered all of the desired devices and points.
+    - IMPORTANT - if you are updating a existing deployment, the new property will be unticked, however new installs / dragging from the pallete will by default have the option checked. So if you want to keep this enabled on an existing deployment, please check the setting. 
+    - Note - This does not turn off the whoIs task schedule.
+    - A user can use Right Click -> Update points on desired deviced in the read node tree if you would like to manually discover devices. 
+
+Minor update: 
+  - Adjusted initial whoIs broadcast delay from 5seconds to 15seconds after node-red is started with a deployed gateway. This is to ensure large cached files are completely read and loaded.
+
+Bug fixes: 
+  - Inspector:
+    - Table resized to avoid scroll bars
+    - Percentage rounding to nearest 2 decimal places rather than whole integer for more detailed data. 
+    - Loading animation added
+    - NAN years ago - removed as invalid time differential 
+    - Last seen for device points adjusted to be more accurate
+
+  
+
 ## [1.6.1] - 14-04-2025
 
 Bug fixes: 

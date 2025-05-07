@@ -37,6 +37,7 @@ module.exports = function (RED) {
     this.portRangeRegisters = config.portRangeRegisters;
     this.cacheFileEnabled = config.cacheFileEnabled;
     this.sanitise_device_schedule = config.sanitise_device_schedule;
+    this.enable_device_discovery = config.enable_device_discovery;
 
     //client and config store
     this.bacnetConfig = nodeContext.get("bacnetConfig");
@@ -65,7 +66,8 @@ module.exports = function (RED) {
         node.retries,
         node.cacheFileEnabled,
         node.sanitise_device_schedule,
-        node.portRangeRegisters.filter((ele) => ele.enabled === true)
+        node.portRangeRegisters.filter((ele) => ele.enabled === true),
+        node.enable_device_discovery
       );
 
       if (typeof node.bacnetClient !== "undefined") {
@@ -263,7 +265,7 @@ module.exports = function (RED) {
         } else if (msg.doUpdatePriorityDevices == true && msg.priorityDevices !== null) {
           node.bacnetClient
             .updatePriorityQueue(msg.priorityDevices)
-            .then(function (result) {})
+            .then(function (result) { })
             .catch(function (error) {
               logOut("Error updating priorityQueue: ", error);
             });
@@ -277,7 +279,7 @@ module.exports = function (RED) {
 
           node.bacnetClient
             .applyDisplayNames(msg.pointsToRead)
-            .then(function (result) {})
+            .then(function (result) { })
             .catch(function (error) {
               logOut("Error in applyDisplayNames: ", error);
             });

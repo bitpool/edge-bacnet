@@ -65,7 +65,8 @@ class BacnetClientConfig {
     retries,
     cacheFileEnabled,
     sanitise_device_schedule,
-    portRangeMatrix
+    portRangeMatrix,
+    enable_device_discovery
   ) {
     this.apduTimeout = apduTimeout;
     this.localIpAdrress = localIpAdrress;
@@ -84,6 +85,7 @@ class BacnetClientConfig {
     this.cacheFileEnabled = cacheFileEnabled;
     this.sanitise_device_schedule = sanitise_device_schedule;
     this.portRangeMatrix = this.generatePortRangeArray(portRangeMatrix);
+    this.enable_device_discovery = enable_device_discovery;
   }
 
   generatePortRangeArray(rangeMatrix) {
@@ -255,7 +257,7 @@ async function Store_Config(data) {
       JSON.parse(tempContent);
     } catch (verifyError) {
       console.error("Temporary file validation failed:", verifyError);
-      await fs2.unlink(tempFile).catch(() => {});
+      await fs2.unlink(tempFile).catch(() => { });
       return false;
     }
 
@@ -275,8 +277,8 @@ async function Store_Config(data) {
 
     // Cleanup temporary file if it exists
     try {
-      await fs2.unlink(tempFile).catch(() => {});
-    } catch (cleanupError) {}
+      await fs2.unlink(tempFile).catch(() => { });
+    } catch (cleanupError) { }
 
     // If main file is corrupted and backup exists, restore from backup
     try {
@@ -396,7 +398,7 @@ async function Store_Config_Server(data) {
         //console.log("Store_Config_Server writeFile error: ", err);
       }
     });
-  } catch (err) {}
+  } catch (err) { }
 }
 
 // READ CONFIG SYNC FUNCTION - BACNET SERVER ======================================

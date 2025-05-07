@@ -3,10 +3,10 @@ const { Worker } = require("worker_threads");
 const path = require("path");
 
 function getRelativeTime(timestamp) {
-  if (!timestamp) return "N/A";
+  if (!timestamp || isNaN(timestamp) || typeof timestamp !== 'number') return "N/A";
   let now = Date.now();
   let timeDiff = now - timestamp;
-  if (timeDiff < 0) return "In the future";
+  if (isNaN(timeDiff) || timeDiff < 0) return "Invalid timestamp";
 
   let seconds = Math.floor(timeDiff / 1000);
   let minutes = Math.floor(seconds / 60);

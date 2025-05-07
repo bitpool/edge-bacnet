@@ -146,14 +146,14 @@ async function processPrimeVueHtml(appData) {
         // Calculate percentages
         const total = this.tableData.length || 1; // Avoid division by zero
         this.statPercentages = {
-          readCount: Math.round((this.statCounts.readCount / total) * 100),
-          ok: Math.round((this.statCounts.statBlock.ok / total) * 100),
-          error: Math.round((this.statCounts.statBlock.error / total) * 100),
-          missing: Math.round((this.statCounts.statBlock.missing / total) * 100),
-          warnings: Math.round((this.statCounts.statBlock.warnings / total) * 100),
-          deviceIdChange: Math.round((this.statCounts.statBlock.deviceIdChange / total) * 100),
-          deviceIdConflict: Math.round((this.statCounts.statBlock.deviceIdConflict / total) * 100 || 0),
-          unmapped: Math.round((this.statCounts.statBlock.unmapped / total) * 100)
+          readCount: Math.round((this.statCounts.readCount / total) * 10000) / 100,
+          ok: Math.round((this.statCounts.statBlock.ok / total) * 10000) / 100,
+          error: Math.round((this.statCounts.statBlock.error / total) * 10000) / 100,
+          missing: Math.round((this.statCounts.statBlock.missing / total) * 10000) / 100,
+          warnings: Math.round((this.statCounts.statBlock.warnings / total) * 10000) / 100,
+          deviceIdChange: Math.round((this.statCounts.statBlock.deviceIdChange / total) * 10000) / 100,
+          deviceIdConflict: Math.round((this.statCounts.statBlock.deviceIdConflict / total) * 10000) / 100,
+          unmapped: Math.round((this.statCounts.statBlock.unmapped / total) * 10000) / 100
         };
       },
       computed: {

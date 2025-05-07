@@ -133,9 +133,9 @@
         <div class="center">
           <p class="headertext">{{siteName}} - Point Status Display</p>
         </div>
-        <p-datatable :value="displayData" paginator :rows="12" filterDisplay="menu" :filters="filters"
-          v-model:filters="filters" :sortMode="'multiple'" @filter="onFilter" scrollable scrollHeight="800px"
-          class="datatable fixed-height-table">
+        <p-datatable :value="displayData" paginator scrollable scrollHeight="800px" :rows="12" filterDisplay="menu"
+          :filters="filters" v-model:filters="filters" :sortMode="'multiple'" @filter="onFilter"
+          class="datatable fixed-height-table" :loading="loading">
           <template #header>
             <div class="tableHeaderDiv">
               <div style="margin-right: 5px">
@@ -177,6 +177,14 @@
               </div>
             </div>
           </template>
+          <template #loading>
+            <div class="loading-overlay">
+              <div class="loading-spinner">
+                <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
+                <p>Loading data...</p>
+              </div>
+            </div>
+          </template>
           <p-column v-for="col in visibleColumns" :key="col.field" :field="col.field" :header="col.header" sortable
             filter></p-column>
           <template #paginatorstart>
@@ -188,6 +196,7 @@
             </span>
           </template>
         </p-datatable>
+
       </div>
     </div>
   </div>
@@ -199,7 +208,7 @@
       data() {
         return {
           tableData: null,
-          loading: false,
+          loading: true,
           totalRecords: 0,
           first: 0,
           lazyParams: {},
@@ -263,6 +272,7 @@
         this.observeHeaderHeight();
 
         this.selectedColumns = JSON.parse(JSON.stringify(this.allColumns));
+        this.loading = true;
 
         fetch("/getModelStats")
           .then((response) => {
@@ -288,19 +298,22 @@
             // Calculate percentages
             const total = tableData.length || 1; // Avoid division by zero
             app.statPercentages = {
-              readCount: Math.round((data.statCounts.readCount / total) * 100),
-              ok: Math.round((data.statCounts.statBlock.ok / total) * 100),
-              error: Math.round((data.statCounts.statBlock.error / total) * 100),
-              missing: Math.round((data.statCounts.statBlock.missing / total) * 100),
-              warnings: Math.round((data.statCounts.statBlock.warnings / total) * 100),
-              deviceIdChange: Math.round((data.statCounts.statBlock.deviceIdChange / total) * 100),
-              deviceIdConflict: Math.round((data.statCounts.statBlock.deviceIdConflict / total) * 100),
-              unmapped: Math.round((data.statCounts.statBlock.unmapped / total) * 100)
+              readCount: Math.round((data.statCounts.readCount / total) * 10000) / 100,
+              ok: Math.round((data.statCounts.statBlock.ok / total) * 10000) / 100,
+              error: Math.round((data.statCounts.statBlock.error / total) * 10000) / 100,
+              missing: Math.round((data.statCounts.statBlock.missing / total) * 10000) / 100,
+              warnings: Math.round((data.statCounts.statBlock.warnings / total) * 10000) / 100,
+              deviceIdChange: Math.round((data.statCounts.statBlock.deviceIdChange / total) * 10000) / 100,
+              deviceIdConflict: Math.round((data.statCounts.statBlock.deviceIdConflict / total) * 10000) / 100,
+              unmapped: Math.round((data.statCounts.statBlock.unmapped / total) * 10000) / 100
             };
           })
           .catch((error) => {
             // Handle any errors
             console.error("Error:", error);
+          })
+          .finally(() => {
+            app.loading = false;
           });
       },
       computed: {

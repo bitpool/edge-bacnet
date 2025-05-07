@@ -183,31 +183,14 @@ body {
 }
 
 
-/* changes start */
-
-/* Add these rules to forcefully control table height */
-.fixed-height-table {
-  height: 800px !important; /* Fixed height matching scrollHeight */
-}
-
-.fixed-height-table .p-datatable-wrapper {
-  height: calc(800px - 92px) !important; /* Subtract header and paginator height */
-  min-height: calc(800px - 92px) !important;
-}
-
 .fixed-height-table .p-datatable-table {
-  min-height: 800px !important; /* Force table to maintain minimum height */
+  height: 70vh !important;
 }
 
-/* Make sure the table body expands to fill available space */
-.fixed-height-table .p-datatable-tbody {
-  min-height: 760px !important; /* Approximate calculation for body only */
-}
-
-/* Add an empty row to maintain height when filtered results are few */
 .p-datatable-emptymessage td {
   height: 760px !important;
 }
+
 
 .row-missing {
   background-color: #00adef;
@@ -234,7 +217,7 @@ body {
   width: -webkit-fill-available;
   margin: 5px;
   left: 0px;
-  height: 1000px !important;
+  /* height: 1000px !important; */
 }
 
 .datatable-card {
@@ -242,7 +225,7 @@ body {
   padding-bottom: 1rem !important;
   padding-left: 2rem;
   padding-right: 2rem;
-  height: 1000px !important;
+  /* height: 1000px !important; */
 }
 
 .p-multiselect-overlay {
@@ -500,4 +483,33 @@ body {
 /* Ensure table takes minimum space when empty */
 .p-datatable-empty-message {
   height: 576px !important;
+}
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.7);
+  z-index: 1000;
+}
+
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.loading-spinner p {
+  margin: 0;
+  color: #495057;
+  font-weight: 500;
+}
+
+.p-datatable .p-datatable-loading-overlay {
+  position: relative;
 }
