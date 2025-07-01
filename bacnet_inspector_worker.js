@@ -149,6 +149,7 @@ function processModelStats(data) {
     // Store the data under all variations
     const publishData = {
       error: data.error || "N/A",
+      status: data.status || "N/A",
       presentValue: data.presentValue,
       bacnetLastSeen: data.bacnetLastSeen
     };
@@ -232,15 +233,24 @@ function processModelStats(data) {
 
     if (DiscoveryKeyMatch) {
       if (PublishPointTopicMatch) {
-        const error = PublishTopicsNormalized.get(matchVariation).error;
-        if (error !== "none" && error !== "N/A") {
-          PointResult.dataModelStatus = `Point Error - Matched in Discovery / Data Model and publishing, however BACNet Error is present: ${error}`;
+        const publishData = PublishTopicsNormalized.get(matchVariation);
+        const error = publishData.error;
+        const status = publishData.status;
+
+        // Check if point has error or is offline
+        if ((error !== "none" && error !== "N/A") || status === "offline") {
+          if (status === "offline") {
+            PointResult.dataModelStatus = `Point Error - Matched in Discovery / Data Model and publishing, however point status is offline`;
+          } else {
+            PointResult.dataModelStatus = `Point Error - Matched in Discovery / Data Model and publishing, however BACNet Error is present: ${error}`;
+          }
           statBlock.error++;
         } else {
           PointResult.dataModelStatus = "Point Ok - Matched in Discovery / Data Model and publishing";
           statBlock.ok++;
         }
         PointResult.error = error;
+        PointResult.status = status; // Also store the status for reference
         pointOkCount++;
       } else {
         if (DiscoveryPointMap[ReadPointKey].objectName !== ReadPointObj.pointName) {

@@ -1,6 +1,29 @@
 const { queueConfigStore } = require("./common");
 const { BacnetDevice } = require("./bacnet_device");
 
+// Global state for smart caching - minimal memory overhead
+let lastCacheTime = 0;
+let lastDataHash = "";
+let cacheInterval = 30000; // Start with 30 seconds
+let consecutiveNoChangeCount = 0;
+const MAX_CACHE_INTERVAL = 300000; // Max 5 minutes
+const MIN_CACHE_INTERVAL = 20000; // Min 20 seconds
+
+/**
+ * Simple hash function for change detection
+ */
+function simpleHash(data) {
+    const str = JSON.stringify(data);
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+
+    return hash.toString();
+}
+
 /**
  * The `treeBuilder` class is responsible for building and processing the network tree structure.
  * It takes in a list of devices, a network tree object, a render list, a render list count, and an initial tree build flag.
@@ -27,17 +50,69 @@ class treeBuilder {
     }
 
     /**
-    * Cache the current state of the network tree and other data.
+    * Smart cache with change detection and adaptive timing.
+    * Only writes to file when data actually changes, with intelligent interval adjustment.
     * 
     * @returns {void}
     */
     cacheData() {
-        // Cache the current state of the network tree and other data
-        queueConfigStore({
-            renderList: this.renderList,
+        const now = Date.now();
+
+        // Always allow caching on initial build
+        if (this.initialTreeBuild) {
+            this.performCache();
+            return;
+        }
+
+        // Check if enough time has passed since last cache attempt
+        if (now - lastCacheTime < cacheInterval) {
+            return; // Skip this cache attempt
+        }
+
+        // Prepare data for hashing (only essential data to minimize hash computation)
+        const cacheData = {
             deviceList: this.deviceList,
             pointList: this.networkTree,
-            renderListCount: this.renderListCount,
+        };
+
+        // Generate hash of current data
+        const currentHash = simpleHash(cacheData);
+
+        // Check if data has actually changed
+        if (currentHash === lastDataHash) {
+            // No changes detected - increase cache interval (adaptive backing off)
+            consecutiveNoChangeCount++;
+            // Exponential backoff with cap
+            if (consecutiveNoChangeCount >= 3) {
+                cacheInterval = Math.min(cacheInterval * 1.5, MAX_CACHE_INTERVAL);
+            }
+
+            lastCacheTime = now;
+            return; // Skip caching since no changes
+        }
+
+        // Data has changed - perform cache and reset adaptive timing
+        lastDataHash = currentHash;
+        lastCacheTime = now;
+        consecutiveNoChangeCount = 0;
+
+        // Reset interval to be more responsive during active changes
+        cacheInterval = Math.max(cacheInterval * 0.8, MIN_CACHE_INTERVAL);
+
+        // Perform the actual cache operation
+        this.performCache();
+    }
+
+    /**
+     * Performs the actual cache operation
+     */
+    performCache() {
+        // Cache only the essential data, exclude renderList as it's too large and can be rebuilt
+        queueConfigStore({
+            deviceList: this.deviceList,
+            pointList: this.networkTree,
+            // renderList: excluded to reduce file size - will be rebuilt from deviceList and networkTree
+            // renderListCount: excluded as it can be recalculated
         });
     }
 
@@ -364,7 +439,7 @@ class treeBuilder {
                         label: `MSTP NET${mstpNetworkNumber}`,
                         data: `Devices Folder (${mstpNetworkNumber})`,
                         icon: 'pi pi-database',
-                        type: 'deviceFolder',
+                        type: 'mstpfolder',
                         children: [],
                     };
 

@@ -339,8 +339,22 @@
     cursor: not-allowed;
   }
 }
-
+.mstpLabel {
+  font-weight: 400;
+}
 .point-context-menu {
+  --mouse-x: 0;
+  --mouse-y: 0;
+  display: none;
+  position: fixed;
+  margin: 0;
+  left: 0;
+  top: 0;
+  /* The following line is responsible for all the magic */
+  transform: translateX(min(var(--mouse-x), calc(100vw - 100%))) translateY(min(var(--mouse-y), calc(100vh - 100%)));
+  z-index: 10;
+}
+.mstp-folder-context-menu {
   --mouse-x: 0;
   --mouse-y: 0;
   display: none;
@@ -765,4 +779,17 @@
 .p-confirm-dialog-accept > .p-button-label,
 .bacnetServerRebuildSchedule_clearButton > .p-button-label {
   color: white;
+}
+
+.deviceFolderLabel {
+  display: flex;
+  align-items: center;
+  color: #333;
+  font-weight: 600;
+}
+
+.deviceFolderLabel:hover {
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  padding: 2px 4px;
 }

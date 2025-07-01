@@ -61,8 +61,40 @@ module.exports = function (RED) {
       site_Name: false,
     };
 
+    // Function to update node status with combined information
+    function updateNodeStatus() {
+      // Calculate offline percentage for display
+      const totalPolledPoints = cachedData.onlineCount + cachedData.offlineCount;
+      const offlinePercentage = totalPolledPoints > 0 ?
+        Math.round((cachedData.offlineCount / totalPolledPoints) * 100) : 0;
+
+      // Build comprehensive status text
+      const statusParts = [];
+
+      // Add online/offline info if we have polled points
+      if (totalPolledPoints > 0) {
+        statusParts.push(`Online: ${cachedData.onlineCount}/${totalPolledPoints} (${100 - offlinePercentage}%)`);
+      }
+
+      // Add points to read info if we have read list
+      if (cachedData.totalUniqueReadCount > 0) {
+        statusParts.push(`Total Points: ${cachedData.totalUniqueReadCount}`);
+      }
+
+      // Fallback status if no data
+      if (statusParts.length === 0) {
+        statusParts.push("No data");
+      }
+
+      // Update node status
+      node.status({ text: statusParts.join(" | ") });
+    }
+
     // Initialize cache from flow context
     initializeCache();
+
+    // Set initial status
+    updateNodeStatus();
 
     function initializeCache() {
       let flow = context.flow;
@@ -187,21 +219,31 @@ module.exports = function (RED) {
       } else if (msg.type === "Read") {
         calculateCombinedReadList(node, msg);
         if (done) done();
-      } else if (msg.payload && msg.payload.error !== undefined && msg.payload.error !== "none") {
-        // bacnet error msg found
-        setErrorTopics(msg);
-        if (done) done();
       } else if (msg.payload && msg.topic) {
-        //regular bacnet output
+        //regular bacnet output (including those with errors)
         // Queue the message for batch processing instead of immediate processing
         messageQueue.push({ msg, send, done });
         if (messageQueue.length >= MAX_BATCH_SIZE) {
           processBatch();
         }
+
+        // Also handle error tracking for messages with errors or offline status
+        if ((msg.payload.error !== undefined && msg.payload.error !== "none") ||
+          (msg.payload.status !== undefined && msg.payload.status === "offline")) {
+          setErrorTopics(msg);
+        }
       } else if (msg.type === "sendMqttStats") {
         // Make sure we have the latest statBlock values before sending stats
         syncStatBlockWithWorkerResults().then(() => {
           let statBlock = node.statBlock;
+          let statCounts = node.statCounts || {};
+
+          // Calculate appropriate totals for percentage calculations
+          const readCount = statCounts.readCount || 0;
+          const discoveryCount = statCounts.discoveryCount || 0;
+          const totalDevices = statCounts.totalDevices || 1; // Fallback to 1 to prevent division by zero
+
+          // Send raw values
           for (let key in statBlock) {
             let value = statBlock[key];
             let keyText = key.toUpperCase();
@@ -211,6 +253,35 @@ module.exports = function (RED) {
             };
             node.send(newMsg);
           }
+
+          // Send percentage values
+          for (let key in statBlock) {
+            let rawValue = statBlock[key];
+            let percentage = 0;
+
+            // Calculate percentage based on appropriate denominator (rounded to 2 decimal places)
+            if (key === 'unmapped') {
+              // Unmapped points are from discovery list
+              percentage = discoveryCount > 0 ? Math.round((rawValue / discoveryCount) * 10000) / 100 : 0;
+            } else if (key === 'offlinePercentage') {
+              // Already a percentage, just round to 2 decimal places
+              percentage = Math.round(rawValue * 100) / 100;
+            } else if (key === 'deviceIdConflict') {
+              // Device conflicts as percentage of total devices
+              percentage = totalDevices > 0 ? Math.round((rawValue / totalDevices) * 10000) / 100 : 0;
+            } else {
+              // All other stats (ok, error, missing, warnings, moved, deviceIdChange) are based on read list
+              percentage = readCount > 0 ? Math.round((rawValue / readCount) * 10000) / 100 : 0;
+            }
+
+            let keyText = key.toUpperCase();
+            let percentageMsg = {
+              topic: `EDGE_DEVICE_${node.siteName}/BACNETSTATS/${keyText}PERCENTAGE`,
+              payload: percentage,
+            };
+            node.send(percentageMsg);
+          }
+
           if (done) done();
         });
 
@@ -419,6 +490,10 @@ module.exports = function (RED) {
               topicData.error = error;
               entryChanged = true;
             }
+            if (status !== undefined && topicData.status !== status) {
+              topicData.status = status;
+              entryChanged = true;
+            }
 
             if (entryChanged) {
               topicData.key = topicData.deviceID + ":" + topicData.objectType + ":" + topicData.objectInstance;
@@ -436,8 +511,8 @@ module.exports = function (RED) {
         dirtyFlags.offlinePercentage = true;
       }
 
-      // Update the node status
-      node.status({ text: "Points Online: " + cachedData.onlineCount + "/" + cachedData.totalUniquePolledCount });
+      // Update the node status with combined information
+      updateNodeStatus();
 
       // Periodically call getModelStats to keep model stats updated
       // Use a debounce pattern to avoid calling it too frequently
@@ -581,6 +656,7 @@ module.exports = function (RED) {
     function setErrorTopics(msg) {
       let topic = msg.topic;
       let error = msg.payload.error;
+      let status = msg.payload.status;
 
       // Extract properties only if they exist
       let deviceID = msg.payload.meta?.device?.deviceId;
@@ -595,7 +671,8 @@ module.exports = function (RED) {
           ? msg.payload.meta.device.address.address
           : msg.payload.meta?.device?.address;
 
-      if (error !== undefined && error !== "none") {
+      // Track entries with explicit errors or offline status
+      if ((error !== undefined && error !== "none") || (status !== undefined && status === "offline")) {
         // Use the cache instead of direct flow context access
         cachedData.entriesWithErrors.set(topic, {
           deviceID: deviceID,
@@ -605,7 +682,7 @@ module.exports = function (RED) {
           displayName: displayName,
           deviceName: deviceName,
           ipAddress: ipAddress,
-          error: error,
+          error: error || (status === "offline" ? "Point offline" : "N/A"),
         });
 
         // Mark as dirty so it will be synced to flow context
@@ -771,12 +848,11 @@ module.exports = function (RED) {
       // Force sync with flow context to ensure data is immediately available
       syncWithFlowContext();
 
-      // Update the node status
-      node.status({ text: "Points To Read: " + cachedData.totalUniqueReadCount });
+      // Update the node status with combined information
+      updateNodeStatus();
     }
 
     function getPublishedPointsList() {
-      node.warn("Generating Published Points List...");
       let flow = context.flow;
       let now = new Date();
 

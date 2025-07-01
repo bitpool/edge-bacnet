@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.6.3] - 00-06-2025
+
+Minor feature: 
+  - Device List - new right click option to MSTP NET folders - Update All Devices. Specifically updates the mstp device listed in that selected network 
+  - Inspector - Added statistic percentages as MQTT output in the Inspector node
+  - Inspector - Added online / offline stats and Total points to read as status on node
+  - Test Functions - Outputs results to both node-red console and node-red debug window now
+
+Minor update / refactor:
+  - Datamodel - Importing and Exporting datamodel displays process status and related stats (file size etc) while importing or exporting, informing the user of current state
+  - Device List - UI tree no longer stored in datamodel, as it is generated dynamically on a schedule. This significantly reduces datamodel file size, read / write time, system start up processes. 
+  - Datamodel - writes to file system for persistance and backup was being executed more often than needed. Process schedule is now on a larger interval, and write algorithm refactored and optimized. 
+  - Device List - right click -> Set Point Name feature refactored, due to many scenarios where it wasnt executing as expected.
+  - BACnet read output - error and status field setting optimized
+  - Inspector - updated ObjectType column values to show object type enum string instead of integer
+
+Bug fixes:
+  - Inspector - incorrect percentages, statistics and values in the statistics bar. Fixed and tested to represent site status more accurately 
+  - Inpsector - not flagging offline points in error statistic and table filter. Now correctly identifies "offline" points as an Error type
+  - BACnet read output - was not updating error and status correctly for full object payloads. 
+  - BACnet Server - was not outputting sucessfull write update MQTT msg after node-red deploy. 
+
+Updating: 
+  - There shouldnt be a need for users to remove nodes or do any specific action when updating to this version, however backing up a datamodel export is advised.
+
+
 ## [1.6.2] - 07-05-2025
 
 Minor feature: 

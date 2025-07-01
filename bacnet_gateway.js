@@ -215,11 +215,14 @@ module.exports = function (RED) {
     if (
       node.bacnetServerEnabled == true &&
       node.bacnetClient &&
-      node.bacnetServer &&
-      nodeContext.get("serverWritePropEvent") == false
+      node.bacnetServer
     ) {
       try {
-        node.bacnetServer.on("writeProperty", (topic, newValue) => {
+        // Clean up any existing listeners to prevent stale references
+        node.bacnetServer.removeAllListeners('writeProperty');
+
+        // Store the event handler function so we can clean it up later
+        node.writePropertyHandler = (topic, newValue) => {
           let formattedTopic = topic;
           if (
             node.nodeName !== "gateway" &&
@@ -234,8 +237,9 @@ module.exports = function (RED) {
           }
 
           node.send({ payload: newValue, topic: formattedTopic });
-        });
-        nodeContext.set("serverWritePropEvent", true);
+        };
+
+        node.bacnetServer.on("writeProperty", node.writePropertyHandler);
       } catch (e) {
         console.log("Bacnet gateway node server writePoperty error: ", e);
       }
@@ -270,7 +274,7 @@ module.exports = function (RED) {
               logOut("Error updating priorityQueue: ", error);
             });
         } else if (msg.testFunc == true) {
-          node.bacnetClient.testFunction(msg.address, msg.port, msg.type, msg.instance, msg.property);
+          node.bacnetClient.testFunction(msg.address, msg.port, msg.type, msg.instance, msg.property, nodeWarn);
         } else if (msg.applyDisplayNames) {
           node.status({ fill: "blue", shape: "dot", text: "Updating display names" });
           setTimeout(() => {
@@ -300,7 +304,14 @@ module.exports = function (RED) {
       });
 
       node.on("close", function () {
-        //do nothing
+        // Clean up the writeProperty event listener
+        if (node.bacnetServer && node.writePropertyHandler) {
+          node.bacnetServer.removeListener('writeProperty', node.writePropertyHandler);
+          node.writePropertyHandler = null;
+        }
+
+        // Reset the serverWritePropEvent flag so it can be re-registered
+        nodeContext.set("serverWritePropEvent", false);
       });
     } catch (e) {
       console.log("Bacnet node event handler error: ", e);
@@ -461,7 +472,7 @@ module.exports = function (RED) {
         node.bacnetClient
           .updateDataModel(req)
           .then(function (result) {
-            res.send(result);
+            res.send(true);
           })
           .catch(function (error) {
             res.send(error);
@@ -556,6 +567,24 @@ module.exports = function (RED) {
           .catch(function (error) {
             res.send(error);
             logOut("Error setting device display name:  ", error);
+          });
+      }
+    });
+
+    //route handler for applyDisplayNames
+    RED.httpAdmin.post("/bitpool-bacnet-data/applyDisplayNames", function (req, res) {
+      if (!node.bacnetClient) {
+        logOut("Issue with the bacnetClient while applying display names: ", node.bacnetClient);
+        res.send(false);
+      } else {
+        node.bacnetClient
+          .applyDisplayNames(req.body.pointsToRead)
+          .then(function (result) {
+            res.send(result);
+          })
+          .catch(function (error) {
+            res.send(error);
+            logOut("Error applying display names:  ", error);
           });
       }
     });
@@ -947,6 +976,10 @@ module.exports = function (RED) {
         return object.displayName;
       }
       return pointName;
+    }
+
+    function nodeWarn(message) {
+      node.warn(message);
     }
   }
   RED.nodes.registerType("Bacnet-Gateway", BitpoolBacnetGatewayDevice);

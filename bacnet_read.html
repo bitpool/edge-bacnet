@@ -62,6 +62,7 @@
             progressBarValue: ref(),
             rightClickedDevice: ref(),
             rightClickedPoint: ref(),
+            rightClickedMstpFolder: ref(),
             showDeviceNameDialog: ref(false),
             showPointNameDialog: ref(false),
             deviceDisplayNameValue: ref(),
@@ -288,7 +289,13 @@
                 newReadParent = JSON.parse(JSON.stringify(parentDevice));
               }
               newReadParent.children[0].children = [];
-              newReadParent.children[0].children.push(slotProps.node);
+
+              // Create a copy of the point with preserved display name
+              let pointCopy = JSON.parse(JSON.stringify(slotProps.node));
+              // Ensure display name is preserved from the original point
+              pointCopy.label = slotProps.node.label;
+              newReadParent.children[0].children.push(pointCopy);
+
               while (newReadParent.children.length > 1) {
                 newReadParent.children.forEach(function (child, index) {
                   if (child.label.includes("MSTP")) {
@@ -307,7 +314,10 @@
                 (ele) => ele.pointName == slotProps.node.pointName
               );
               if (pointIndex == -1) {
-                this.readDevices[foundDeviceIndex].children[0].children.push(slotProps.node);
+                // Create a copy of the point with preserved display name
+                let pointCopy = JSON.parse(JSON.stringify(slotProps.node));
+                pointCopy.label = slotProps.node.label;
+                this.readDevices[foundDeviceIndex].children[0].children.push(pointCopy);
               }
             }
 
@@ -321,6 +331,10 @@
             }
 
             let point = this.pointList[key][slotProps.node.pointName];
+            // Preserve any existing display name when adding to pointsToRead
+            if (slotProps.node.label !== slotProps.node.pointName) {
+              point.displayName = slotProps.node.label;
+            }
             this.pointsToRead[key][point.objectName] = point;
 
             //force a deploy state
@@ -566,6 +580,27 @@
               pointMenu.classList.remove("pointAddedToRead");
             }
           },
+          // NEW: Handle right-click on MSTP network folders
+          onMstpFolderRightClick(slotProps, event) {
+            let app = this;
+            app.rightClickedMstpFolder = slotProps;
+            event.preventDefault();
+            event.stopPropagation();
+
+            // Hide other context menus first
+            const menu = document.querySelector(".context-menu");
+            const pointMenu = document.querySelector(".point-context-menu");
+            if (menu) menu.style.display = "none";
+            if (pointMenu) pointMenu.style.display = "none";
+
+            const mstpFolderMenu = document.querySelector(".mstp-folder-context-menu");
+
+            if (mstpFolderMenu) {
+              mstpFolderMenu.style.setProperty("--mouse-x", event.clientX + "px");
+              mstpFolderMenu.style.setProperty("--mouse-y", event.clientY + "px");
+              mstpFolderMenu.style.display = "block";
+            }
+          },
           handleContextMenuClick(type) {
             let app = this;
             switch (type) {
@@ -589,6 +624,17 @@
                 break;
             }
           },
+          // NEW: Handle context menu clicks for MSTP folders
+          handleMstpFolderContextMenuClick(type) {
+            let app = this;
+            switch (type) {
+              case "updateAllDevices":
+                app.updateAllMstpDevices(app.rightClickedMstpFolder);
+                break;
+              default:
+                break;
+            }
+          },
           handlePointContextMenuClick(type) {
             let app = this;
             switch (type) {
@@ -603,18 +649,52 @@
                 break;
             }
           },
+          // NEW: Update all devices within an MSTP network folder
+          updateAllMstpDevices(slotProps) {
+            let app = this;
+
+            if (!slotProps || !slotProps.node || !slotProps.node.children) {
+              return;
+            }
+
+            const mstpDevices = slotProps.node.children;
+            let updatedCount = 0;
+
+            // Iterate through all MSTP devices in the folder
+            mstpDevices.forEach(function (mstpDevice) {
+              // Find the device in the device list
+              let device = app.getDeviceFromDeviceList(mstpDevice.ipAddr, mstpDevice.deviceId);
+              if (device) {
+                app.nodeService.updatePointsForDevice(device).then(function (result) {
+                  updatedCount++;
+                }).catch(function (error) {
+                  // Handle error silently
+                });
+              }
+            });
+
+            // Show user feedback
+            if (mstpDevices.length > 0) {
+              app.$toast?.add({
+                severity: 'info',
+                summary: 'Update Started',
+                detail: `Updating points for ${mstpDevices.length} devices in ${slotProps.node.label}`,
+                life: 3000
+              });
+            }
+          },
           purgeDevice(slotProps) {
             let app = this;
             let device = app.getDeviceFromDeviceList(slotProps.node.ipAddr, slotProps.node.deviceId);
             if (device) {
-              app.nodeService.purgeDevice(device).then(function (result) {});
+              app.nodeService.purgeDevice(device).then(function (result) { });
             }
           },
           updatePointsForDevice(slotProps) {
             let app = this;
             let device = app.getDeviceFromDeviceList(slotProps.node.ipAddr, slotProps.node.deviceId);
             if (device) {
-              app.nodeService.updatePointsForDevice(device).then(function (result) {});
+              app.nodeService.updatePointsForDevice(device).then(function (result) { });
             }
           },
           updatePoint(slotProps) {
@@ -625,7 +705,7 @@
             });
             const deviceKey = `${app.getDeviceAddress(device.address)}-${device.deviceId}`;
             if (device) {
-              app.nodeService.updatePoint(deviceKey, pointKey).then(function (result) {});
+              app.nodeService.updatePoint(deviceKey, pointKey).then(function (result) { });
             }
           },
           setDeviceName() {
@@ -660,12 +740,94 @@
 
               app.nodeService.setPointDisplayName(deviceKey, pointName, pointDisplayName).then(function (result) {
                 if (result) {
-                  slotProps.node.label = pointDisplayName;
+                  // Update the display name across all UI representations
+                  app.syncPointDisplayNameAcrossUI(deviceKey, pointName, pointDisplayName);
+                  app.updatePointsToReadDisplayName(deviceKey, pointName, pointDisplayName);
                 }
               });
             }
 
             app.showPointNameDialog = false;
+          },
+          // NEW: Centralized method to sync display names across all UI trees
+          syncPointDisplayNameAcrossUI(deviceKey, pointName, newDisplayName) {
+            let app = this;
+
+            // Update in main devices tree
+            app.updatePointDisplayNameInDevicesTree(deviceKey, pointName, newDisplayName);
+
+            // Update in read devices tree
+            app.updatePointDisplayNameInReadDevicesTree(deviceKey, pointName, newDisplayName);
+
+            // Force UI update
+            app.$forceUpdate();
+          },
+          // NEW: Update display name in main devices tree
+          updatePointDisplayNameInDevicesTree(deviceKey, pointName, newDisplayName) {
+            let app = this;
+            let [ipAddress, deviceId] = deviceKey.split('-');
+
+            // Find the device in main tree
+            let deviceIndex = app.devices ? app.devices.findIndex(device =>
+              device.ipAddr === ipAddress && device.deviceId.toString() === deviceId) : -1;
+
+            if (deviceIndex !== -1) {
+              // Update direct device points
+              let pointIndex = app.devices[deviceIndex].children[0].children.findIndex(point =>
+                point.pointName === pointName);
+              if (pointIndex !== -1) {
+                app.devices[deviceIndex].children[0].children[pointIndex].label = newDisplayName;
+              }
+
+              // Update MSTP device points if applicable
+              app.devices[deviceIndex].children.forEach(child => {
+                if (child.label && child.label.includes("MSTP") && child.children) {
+                  child.children.forEach(mstpDevice => {
+                    if (mstpDevice.deviceId.toString() === deviceId) {
+                      let mstpPointIndex = mstpDevice.children[0].children.findIndex(point =>
+                        point.pointName === pointName);
+                      if (mstpPointIndex !== -1) {
+                        mstpDevice.children[0].children[mstpPointIndex].label = newDisplayName;
+                      }
+                    }
+                  });
+                }
+              });
+            }
+          },
+          // NEW: Update display name in read devices tree
+          updatePointDisplayNameInReadDevicesTree(deviceKey, pointName, newDisplayName) {
+            let app = this;
+            let [ipAddress, deviceId] = deviceKey.split('-');
+
+            if (!app.readDevices) return;
+
+            // Find the device in read devices tree
+            let readDeviceIndex = app.readDevices.findIndex(device =>
+              device.deviceId.toString() === deviceId);
+
+            if (readDeviceIndex !== -1) {
+              let pointIndex = app.readDevices[readDeviceIndex].children[0].children.findIndex(point =>
+                point.pointName === pointName);
+              if (pointIndex !== -1) {
+                app.readDevices[readDeviceIndex].children[0].children[pointIndex].label = newDisplayName;
+              }
+            }
+          },
+          // NEW: Update display name in pointsToRead data structure
+          updatePointsToReadDisplayName(deviceKey, pointName, newDisplayName) {
+            let app = this;
+
+            if (app.pointsToRead && app.pointsToRead[deviceKey]) {
+              // Find the point by objectName (since pointsToRead uses objectName as key)
+              for (let objectName in app.pointsToRead[deviceKey]) {
+                let point = app.pointsToRead[deviceKey][objectName];
+                if (point && point.objectName === pointName) {
+                  point.displayName = newDisplayName;
+                  break;
+                }
+              }
+            }
           },
           getDeviceFromDeviceList(ip, id) {
             let app = this;
@@ -896,7 +1058,30 @@
             app.$forceUpdate();
           },
           refreshReadListTree() {
-            this.addToReadDevices(this.pointsToRead);
+            // Enhanced refresh that maintains display names
+            let app = this;
+
+            // First apply any saved display names to the current pointsToRead
+            app.applyStoredDisplayNames();
+
+            // Then rebuild the read list tree
+            app.addToReadDevices(app.pointsToRead);
+          },
+          // NEW: Apply stored display names from backend to current data
+          applyStoredDisplayNames() {
+            let app = this;
+
+            if (!app.pointsToRead) return;
+
+            // Send current pointsToRead to backend to apply any stored display names
+            let msg = { applyDisplayNames: true };
+            // This will be handled by the backend node to apply stored display names
+            app.nodeService.applyDisplayNames(app.pointsToRead).then(function (result) {
+              if (result) {
+                // Refresh the main tree with updated display names
+                app.getData();
+              }
+            });
           },
           calculateMstpCount(slotProps) {
             let count = 0;
@@ -912,6 +1097,7 @@
             let count = 0;
             return count;
           },
+
         },
         components: {
           "p-tree": primevue.tree,
@@ -968,6 +1154,13 @@
       var pointMenu = document.querySelector(".point-context-menu");
       window.addEventListener("click", (event) => {
         pointMenu.style.display = "none";
+      });
+
+      var mstpFolderMenu = document.querySelector(".mstp-folder-context-menu");
+      window.addEventListener("click", (event) => {
+        if (menu) menu.style.display = "none";
+        if (pointMenu) pointMenu.style.display = "none";
+        if (mstpFolderMenu) mstpFolderMenu.style.display = "none";
       });
 
       function handleCheckboxClick() {
@@ -1113,6 +1306,18 @@
     </ul>
     <!-- End Point Context Menu -->
 
+    <!-- Start MSTP Folder Context Menu -->
+    <ul
+      class="red-ui-menu red-ui-menu-dropdown red-ui-menu-dropdown-direction-right red-ui-menu-dropdown-noicons red-ui-menu-dropdown-submenus mstp-folder-context-menu">
+      <li class="context-menu-item" @click="handleMstpFolderContextMenuClick('updateAllDevices')">
+        <a class="red-ui-menu-label">
+          <i class="pi pi-refresh context-menu-icon"></i>
+          <span class="context-menu-item-text">Update All Devices</span>
+        </a>
+      </li>
+    </ul>
+    <!-- End MSTP Folder Context Menu -->
+
     <!--
                 *
                 *
@@ -1194,6 +1399,7 @@
             filterMode="lenient"
             filterPlaceholder="No results found."
             v-if="hasData()">
+
             <template #device="slotProps">
               <div @contextmenu="onDeviceRightClick(slotProps, $event)" class="p-treenode-label">
                 <div v-if="isDeviceActive(slotProps)" class="deviceLabelParent">
@@ -1233,6 +1439,20 @@
               </div>
             </template>
 
+            
+            <template #mstpfolder="slotProps">
+              <div @contextmenu="onMstpFolderRightClick(slotProps, $event)" class="p-treenode-label">
+                <div class="deviceLabelParent">
+                  <b class="mstpLabel">
+                    <span>{{slotProps.node.label}}</span>
+                    <span class="mstpDeviceCount" >
+                      &nbsp; {{slotProps.node.children ? slotProps.node.children.length : 0}} &nbsp;
+                    </span>
+                  </b>
+                </div>
+              </div>
+            </template>
+
             <template #point="slotProps" v-model:class="pointContent">
               <div @contextmenu="onPointRightClick(slotProps, $event)">
                 <b class="pointLabel">{{slotProps.node.label}}</b>
@@ -1253,6 +1473,7 @@
                 </button>
               </div>
             </template>
+
           </p-tree>
           <div v-else style="text-align: center; padding-top: 20px;">
             <a>Building Tree...</a>

@@ -20,6 +20,7 @@ const { BacnetDevice } = require("./bacnet_device");
 const { Mutex } = require("async-mutex");
 const { treeBuilder } = require("./treeBuilder.js");
 
+
 class BacnetClient extends EventEmitter {
   //client constructor
   constructor(config) {
@@ -28,6 +29,7 @@ class BacnetClient extends EventEmitter {
     that.config = config;
     that.deviceList = [];
     that.networkTree = {};
+    that.renderList = [];
     that.lastWhoIs = null;
     that.client = null;
     that.lastNetworkPoll = null;
@@ -201,7 +203,8 @@ class BacnetClient extends EventEmitter {
       const cachedData = await Read_Config_Async();
       const parsedData = JSON.parse(cachedData);
       if (parsedData && typeof parsedData == "object") {
-        if (parsedData.renderList) that.renderList = parsedData.renderList;
+        // renderList is no longer cached - will be rebuilt by tree builder
+        // if (parsedData.renderList) that.renderList = parsedData.renderList;
         if (parsedData.deviceList) {
           parsedData.deviceList.forEach(function (device) {
             let newBacnetDevice = new BacnetDevice(true, device);
@@ -209,12 +212,13 @@ class BacnetClient extends EventEmitter {
           });
         }
         if (parsedData.pointList) that.networkTree = parsedData.pointList;
-        if (parsedData.renderListCount) that.renderListCount = parsedData.renderListCount;
+        // renderListCount is no longer cached - will be recalculated by tree builder
+        // if (parsedData.renderListCount) that.renderListCount = parsedData.renderListCount;
       }
     }
   }
 
-  testFunction(address, port, type, instance, property) {
+  testFunction(address, port, type, instance, property, nodeWarnCallback) {
     let that = this;
     console.log("test function ");
 
@@ -229,6 +233,11 @@ class BacnetClient extends EventEmitter {
       console.log("1 - readPropertyMultiple:  ");
 
       console.log(value);
+
+      if (nodeWarnCallback) {
+        nodeWarnCallback(value);
+      }
+
       if (value) {
         // If the result has value, resolve the promise
         console.log(value.values[0]);
@@ -720,35 +729,30 @@ class BacnetClient extends EventEmitter {
     const that = this;
     const roundDecimal = readConfig.precision;
     const devicesToRead = Object.keys(readConfig.pointsToRead);
-    const bacnetResults = {};
-    let pendingRequests = 0;
+    let completedDevices = 0;
 
     try {
-      // Process all devices in sequence
-      for (let deviceIndex = 0; deviceIndex < devicesToRead.length; deviceIndex++) {
-        const key = devicesToRead[deviceIndex];
+      // Create array of device processing promises
+      const devicePromises = devicesToRead.map(async (key, deviceIndex) => {
         const device = that.findDeviceByKey(key);
-        if (!device) continue;
+        if (!device) return null;
 
         const deviceName = that.computeDeviceName(device);
         const deviceKey = that.createDeviceKey(device);
         const deviceObject = that.networkTree[deviceKey];
         const maxObjectCount = that.estimateMaxObjectSize(device.getMaxApdu());
 
-        if (!bacnetResults[deviceName]) {
-          bacnetResults[deviceName] = {};
-        }
+        const bacnetResults = {};
+        bacnetResults[deviceName] = {};
 
         // Process points for the current device
         const pointsToRead = readConfig.pointsToRead[key];
         const pointNames = Object.keys(pointsToRead);
         let totalPoints = pointNames.length - 1;
         let requestArray = [];
-        let processedPoints = 0; // Counter for processed points
 
         // Process each point for the device in batches
         for (let i = 0; i < pointNames.length; i++) {
-
           const pointName = pointNames[i];
           if (pointName === "deviceName") {
             continue;
@@ -771,7 +775,7 @@ class BacnetClient extends EventEmitter {
           }
 
           // Process the batch when the request array is full or the last point is reached
-          if (requestArray.length === maxObjectCount) {
+          if (requestArray.length === maxObjectCount || i === pointNames.length - 1) {
             if (device.getProtocolServiceSupport("ReadPropertyMultiple") == true) {
               await that.processBatch(device, requestArray, deviceName, bacnetResults, that, roundDecimal);
             } else {
@@ -779,38 +783,43 @@ class BacnetClient extends EventEmitter {
             }
 
             requestArray = [];
-            // Increment the processed points counter
-            processedPoints += maxObjectCount;
-          } else if (i === pointNames.length - 1) {
-            if (device.getProtocolServiceSupport("ReadPropertyMultiple") == true) {
-              await that.processBatch(device, requestArray, deviceName, bacnetResults, that, roundDecimal);
-            } else {
-              await that.processIndividualPoints(device, requestArray, deviceName, bacnetResults, that, roundDecimal);
-            }
-
-            requestArray = [];
-            // Increment the processed points counter
-            processedPoints += i;
-          }
-
-          // Check if all points for the device have been processed
-          if (processedPoints >= totalPoints) {
-            pendingRequests++;
-
-            // Emit the `values` event for the current device
-            that.emit(
-              "values",
-              bacnetResults,
-              outputType,
-              objectPropertyType,
-              readNodeName,
-              pendingRequests,
-              devicesToRead.length
-            );
-            delete bacnetResults[deviceName];
           }
         }
-      }
+
+        // Return results for this device
+        return {
+          deviceName,
+          results: bacnetResults,
+          deviceIndex: deviceIndex + 1,
+          totalDevices: devicesToRead.length
+        };
+      });
+
+      // Process all devices in parallel and emit results as they complete
+      const results = await Promise.allSettled(devicePromises);
+
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled' && result.value) {
+          completedDevices++;
+          const { deviceName, results: bacnetResults, deviceIndex, totalDevices } = result.value;
+
+          // Emit the `values` event for this device immediately
+          that.emit(
+            "values",
+            bacnetResults,
+            outputType,
+            objectPropertyType,
+            readNodeName,
+            completedDevices,
+            totalDevices
+          );
+        } else {
+          // Handle failed device (offline/error)
+          completedDevices++;
+          that.logOut(`Device ${devicesToRead[index]} failed:`, result.reason);
+        }
+      });
+
     } catch (error) {
       that.logOut("doRead error: ", error);
     }
@@ -847,6 +856,7 @@ class BacnetClient extends EventEmitter {
           if (isNumber(val)) {
             pointRef.presentValue = roundDecimalPlaces(val, roundDecimal);
             pointRef.error = "none";
+            pointRef.status = "online";
             if (pointRef.meta.objectId.type == 19 || pointRef.meta.objectId.type == 13 || pointRef.meta.objectId.type == 14) {
               if (pointRef.stateTextArray && typeof pointRef.stateTextArray[0].value !== "object") {
                 if (val != 0) {
@@ -860,14 +870,18 @@ class BacnetClient extends EventEmitter {
             if (typeof val !== "object") {
               pointRef.presentValue = val;
               pointRef.error = "none";
+              pointRef.status = "online";
             } else if (val.errorClass && val.errorClass) {
               pointRef.error = getBacnetErrorString(val.errorClass, val.errorClass);
+              pointRef.status = "offline";
+            } else {
+              pointRef.error = "none";
+              pointRef.status = "online";
             }
           }
 
           pointRef.meta["device"] = deviceMetaInfo;
           pointRef.timestamp = Date.now();
-          pointRef.status = "online";
 
           // Store the point data in results
           bacnetResults[deviceName][pointNameRef] = pointRef;
@@ -899,6 +913,8 @@ class BacnetClient extends EventEmitter {
 
           if (isNumber(val)) {
             pointRef.presentValue = roundDecimalPlaces(val, roundDecimal);
+            pointRef.error = "none";
+            pointRef.status = "online";
 
             if (pointRef.meta.objectId.type == 19 || pointRef.meta.objectId.type == 13 || pointRef.meta.objectId.type == 14) {
               if (pointRef.stateTextArray && typeof pointRef.stateTextArray[0].value !== "object") {
@@ -910,13 +926,21 @@ class BacnetClient extends EventEmitter {
               }
             }
           } else {
-            pointRef.presentValue = val;
+            if (typeof val !== "object") {
+              pointRef.presentValue = val;
+              pointRef.error = "none";
+              pointRef.status = "online";
+            } else if (val.errorClass && val.errorClass) {
+              pointRef.error = getBacnetErrorString(val.errorClass, val.errorClass);
+              pointRef.status = "offline";
+            } else {
+              pointRef.error = "none";
+              pointRef.status = "online";
+            }
           }
 
           pointRef.meta["device"] = deviceMetaInfo;
           pointRef.timestamp = Date.now();
-          pointRef.status = "online";
-          pointRef.error = "none";
 
           // Store the point data in results
           bacnetResults[deviceName][pointName] = pointRef;
@@ -1681,7 +1705,7 @@ class BacnetClient extends EventEmitter {
         if (json.body.renderListCount) {
           that.renderListCount = json.body.renderListCount;
         }
-        resolve();
+        resolve(true);
       } catch (e) {
         reject(e);
       }

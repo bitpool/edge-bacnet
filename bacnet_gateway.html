@@ -136,6 +136,16 @@
         body: JSON.stringify({ k: deviceKey, p: pointName, n: pointDisplayName }),
       }).then((res) => res.json());
     }
+    applyDisplayNames(pointsToRead) {
+      return fetch(RED.settings.httpNodeRoot + "bitpool-bacnet-data/applyDisplayNames", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ pointsToRead: pointsToRead }),
+      }).then((res) => res.json());
+    }
     importReadList(payload) {
       return fetch(RED.settings.httpNodeRoot + "bitpool-bacnet-data/importReadList", {
         method: "POST",
@@ -396,25 +406,130 @@
         });
       });
 
+      function setDataModelUpdateStatus(status, type, autoClear) {
+        const statusElement = $("#data-model-update-status");
+        statusElement.text(status);
+
+        // Remove existing status classes
+        statusElement.removeClass("status-success status-error status-warning status-info");
+
+        // Add appropriate styling based on type
+        switch (type) {
+          case "success":
+            statusElement.addClass("status-success");
+            break;
+          case "error":
+            statusElement.addClass("status-error");
+            break;
+          case "warning":
+            statusElement.addClass("status-warning");
+            break;
+          case "info":
+          default:
+            statusElement.addClass("status-info");
+            break;
+        }
+
+        // Auto-clear success messages after 5 seconds
+        if (autoClear !== false && type === "success") {
+          setTimeout(() => {
+            statusElement.text("");
+            statusElement.removeClass("status-success");
+          }, 5000);
+        }
+      }
+
       //Import complete Data model
       $("#file-upload-database").on("change", function (event) {
         const input = event.target.files[0];
+
+        if (!input) {
+          setDataModelUpdateStatus("No file selected", "warning");
+          return;
+        }
+
+        // Validate file type
+        if (!input.name.toLowerCase().endsWith('.json')) {
+          setDataModelUpdateStatus("Please select a valid JSON file", "error");
+          return;
+        }
+
+        // Check file size (warn if larger than 10MB)
+        const fileSizeMB = (input.size / (1024 * 1024)).toFixed(2);
+        if (input.size > 10 * 1024 * 1024) {
+          setDataModelUpdateStatus(`Large file detected (${fileSizeMB}MB). Import may take several minutes...`, "warning");
+        }
+
+        // Confirmation dialog for potentially destructive operation
+        if (!confirm(`Are you sure you want to import this data model?\n\nFile: ${input.name}\nSize: ${fileSizeMB}MB\n\nThis will replace the existing data model and cannot be undone.`)) {
+          // Reset the file input
+          $(this).val('');
+          setDataModelUpdateStatus("Import cancelled", "info");
+          return;
+        }
+
         const reader = new FileReader();
 
+        reader.onloadstart = function () {
+          setDataModelUpdateStatus("Reading file...", "info");
+        };
+
+        reader.onprogress = function (e) {
+          if (e.lengthComputable) {
+            const percentLoaded = Math.round((e.loaded / e.total) * 100);
+            setDataModelUpdateStatus(`Reading file... ${percentLoaded}%`, "info");
+          }
+        };
+
         reader.onload = function (e) {
-          const text = e.target.result;
+          setDataModelUpdateStatus("Parsing JSON data...", "info");
 
-          let jsonPayload = JSON.parse(text);
+          try {
+            const text = e.target.result;
+            let jsonPayload = JSON.parse(text);
 
-          $.ajax({
-            type: "POST",
-            url: RED.settings.httpNodeRoot + "bitpool-bacnet-data/updateDataModel",
-            dataType: "json",
-            contentType: "application/json",
-            data: JSON.stringify(jsonPayload),
-            success: function (result) { },
-            timeout: 0,
-          });
+            setDataModelUpdateStatus("Uploading data model to server...", "info");
+
+            $.ajax({
+              type: "POST",
+              url: RED.settings.httpNodeRoot + "bitpool-bacnet-data/updateDataModel",
+              dataType: "json",
+              contentType: "application/json",
+              data: JSON.stringify(jsonPayload),
+              success: function (data, status, xhr) {
+                setDataModelUpdateStatus(`Data model imported successfully! (${fileSizeMB}MB processed)`, "success");
+                // Clear the file input
+                $("#file-upload-database").val('');
+              },
+              error: function (xhr, status, error) {
+                let errorMsg = "Failed to import data model";
+                if (xhr.responseText) {
+                  try {
+                    const errorResponse = JSON.parse(xhr.responseText);
+                    errorMsg += ": " + (errorResponse.message || errorResponse.error || xhr.responseText);
+                  } catch (e) {
+                    errorMsg += ": " + xhr.responseText;
+                  }
+                } else {
+                  errorMsg += ": " + (error || status || "Unknown error");
+                }
+                setDataModelUpdateStatus(errorMsg, "error");
+                // Clear the file input
+                $("#file-upload-database").val('');
+              },
+              timeout: 0,
+            });
+          } catch (parseError) {
+            setDataModelUpdateStatus("Invalid JSON file: " + parseError.message, "error");
+            // Clear the file input
+            $("#file-upload-database").val('');
+          }
+        };
+
+        reader.onerror = function () {
+          setDataModelUpdateStatus("Error reading file", "error");
+          // Clear the file input
+          $("#file-upload-database").val('');
         };
 
         reader.readAsText(input);
@@ -422,16 +537,82 @@
 
       // Export complete Data model
       $("#file-export-database").click(function (params) {
+        // Confirmation dialog
+        if (!confirm("Are you sure you want to export the complete data model?\n\nThis may take some time for large databases.")) {
+          setDataModelUpdateStatus("Export cancelled", "info");
+          return;
+        }
+
+        setDataModelUpdateStatus("Retrieving data model from server...", "info");
+
+        const startTime = Date.now();
+
         $.ajax({
           url: RED.settings.httpNodeRoot + "bitpool-bacnet-data/getDataModel",
           success: function (deviceList) {
-            let data = "text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(deviceList));
-            let aEle = document.getElementById("exportJSON");
-            aEle.setAttribute("href", "data:" + data);
-            aEle.setAttribute("download", "edge-bacnet-datastore.json");
-            aEle.click();
+            try {
+              setDataModelUpdateStatus("Preparing download...", "info");
+
+              // Calculate data size
+              const jsonString = JSON.stringify(deviceList);
+              const dataSize = new Blob([jsonString]).size;
+              const dataSizeMB = (dataSize / (1024 * 1024)).toFixed(2);
+
+              // Create a Blob with the JSON data
+              const blob = new Blob([jsonString], { type: 'application/json' });
+
+              // Create an object URL from the Blob
+              const url = URL.createObjectURL(blob);
+
+              // Generate filename with timestamp
+              const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+              const filename = `edge-bacnet-datastore-${timestamp}.json`;
+
+              // Set the URL to the link and trigger download
+              let aEle = document.getElementById("exportJSON");
+              aEle.setAttribute("href", url);
+              aEle.setAttribute("download", filename);
+              aEle.click();
+
+              // Calculate duration
+              const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+
+              setDataModelUpdateStatus(`Export completed successfully! (${dataSizeMB}MB, ${duration}s)`, "success");
+
+              // Release the object URL when done
+              setTimeout(() => {
+                URL.revokeObjectURL(url);
+              }, 2000);
+
+            } catch (error) {
+              console.error("Error exporting data model:", error);
+              setDataModelUpdateStatus("Failed to create download file: " + error.message, "error");
+            }
           },
-          timeout: 0,
+          error: function (xhr, status, error) {
+            console.error("AJAX error retrieving data model:", status, error);
+            let errorMsg = "Failed to retrieve data model from server";
+
+            if (xhr.status === 0) {
+              errorMsg += " (Connection timeout or server unavailable)";
+            } else if (xhr.status === 404) {
+              errorMsg += " (Endpoint not found)";
+            } else if (xhr.status === 500) {
+              errorMsg += " (Internal server error)";
+            } else if (xhr.responseText) {
+              try {
+                const errorResponse = JSON.parse(xhr.responseText);
+                errorMsg += ": " + (errorResponse.message || errorResponse.error);
+              } catch (e) {
+                errorMsg += ": " + xhr.responseText;
+              }
+            } else {
+              errorMsg += ": " + (error || status || "Unknown error");
+            }
+
+            setDataModelUpdateStatus(errorMsg, "error");
+          },
+          timeout: 60000, // 60 second timeout for large exports
         });
       });
 
@@ -818,6 +999,39 @@
     .database-file-label-div {
       padding-top: 15px;
     }
+    /* Status indicator styles */
+    .status-success {
+      color: #28a745 !important;
+      font-weight: 500;
+      background-color: #d4edda;
+      border: 1px solid #c3e6cb;
+      border-radius: 4px;
+      padding: 8px 12px;
+    }
+    .status-error {
+      color: #dc3545 !important;
+      font-weight: 500;
+      background-color: #f8d7da;
+      border: 1px solid #f5c6cb;
+      border-radius: 4px;
+      padding: 8px 12px;
+    }
+    .status-warning {
+      color: #856404 !important;
+      font-weight: 500;
+      background-color: #fff3cd;
+      border: 1px solid #ffeaa7;
+      border-radius: 4px;
+      padding: 8px 12px;
+    }
+    .status-info {
+      color: #0c5460 !important;
+      font-weight: 500;
+      background-color: #d1ecf1;
+      border: 1px solid #bee5eb;
+      border-radius: 4px;
+      padding: 8px 12px;
+    }
   </style>
 
   <div class="form-row node-input-read-tabs-row">
@@ -1070,6 +1284,7 @@
         <input id="file-export-database" class="inputStyle" style="width: 258px; display: none;" />
         <a id="exportJSON" style="display: none"></a>
       </div>
+      <div id="data-model-update-status" class="data-model-update-status" style="margin-top: 10px;"></div>
     </div>
   </div>
 </script>

@@ -186,7 +186,11 @@
             </div>
           </template>
           <p-column v-for="col in visibleColumns" :key="col.field" :field="col.field" :header="col.header" sortable
-            filter></p-column>
+            filter>
+            <template #body="slotProps" v-if="col.field === 'objectType'">
+              {{ getObjectTypeString(slotProps.data.objectType) }}
+            </template>
+          </p-column>
           <template #paginatorstart>
 
           </template>
@@ -331,6 +335,36 @@
         },
       },
       methods: {
+        getObjectTypeString(objectType) {
+          switch (objectType) {
+            case 0:
+              return "Analog Input";
+            case 1:
+              return "Analog Output";
+            case 2:
+              return "Analog Value";
+            case 3:
+              return "Binary Input";
+            case 4:
+              return "Binary Output";
+            case 5:
+              return "Binary Value";
+            case 8:
+              return "Device";
+            case 10:
+              return "File";
+            case 13:
+              return "Multistate Input";
+            case 14:
+              return "Multistate Output";
+            case 19:
+              return "Multistate Value";
+            case 40:
+              return "Character String";
+            default:
+              return "";
+          }
+        },
         statusItemClicked(e) {
           // Get the filter category from the clicked item's text content
           const clickedItem = e.currentTarget;

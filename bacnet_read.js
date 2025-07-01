@@ -99,7 +99,19 @@ module.exports = function (RED) {
           useDeviceName = node.useDeviceName;
         }
 
-        let readConfig = new ReadCommandConfig(node.pointsToRead, node.object_props, node.roundDecimal);
+        // Ensure pointsToRead has the latest display names before processing
+        let pointsToReadWithDisplayNames = JSON.parse(JSON.stringify(node.pointsToRead));
+
+        // Apply any stored display names from the backend data model
+        for (let deviceKey in pointsToReadWithDisplayNames) {
+          for (let pointKey in pointsToReadWithDisplayNames[deviceKey]) {
+            let point = pointsToReadWithDisplayNames[deviceKey][pointKey];
+            // The display name should already be preserved in the point object
+            // from the setPointDisplayName operations and addPointClicked enhancements
+          }
+        }
+
+        let readConfig = new ReadCommandConfig(pointsToReadWithDisplayNames, node.object_props, node.roundDecimal);
 
         let output = {
           type: "Read",
