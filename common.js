@@ -4,6 +4,7 @@
 
 const { randomUUID } = require("crypto");
 const os = require("os");
+const path = require("path");
 const baEnum = require("./resources/node-bacstack-ts/dist/index.js").enum;
 const fs = require("fs");
 const fs2 = require("fs").promises;
@@ -189,27 +190,16 @@ const roundDecimalPlaces = function (value, decimals) {
   return value;
 };
 
-// STORE CONFIG FUNCTION ==========================================================
-//
-// ================================================================================
-
-/*
-
-async function Store_Config(data) {
-  try {
-    await fs.writeFile("edge-bacnet-datastore.cfg", data, { encoding: "utf8", flag: "w" }, (err) => {
-      if (err) {
-        console.log("Store_Config writeFile error: ", err);
-      }
-    });
-  } catch (e) {
-    //do nothing
+const getStoragePath = (fileName) => {
+  const storagePath = process.env.BACNET_STORAGE_PATH;
+  if (storagePath) {
+    if (!fs.existsSync(storagePath)) {
+      fs.mkdirSync(storagePath, { recursive: true });
+    }
+    return path.join(storagePath, fileName);
   }
-}
-
-*/
-
-// refactor:
+  return fileName;
+};
 
 let storeQueue = [];
 let isStoreProcessing = false;
@@ -235,9 +225,9 @@ async function queueConfigStore(data) {
 }
 
 async function Store_Config(data) {
-  const mainFile = "edge-bacnet-datastore.cfg";
-  const tempFile = "edge-bacnet-datastore.cfg.tmp";
-  const backupFile = "edge-bacnet-datastore.cfg.bak";
+  const mainFile = getStoragePath("edge-bacnet-datastore.cfg");
+  const tempFile = getStoragePath("edge-bacnet-datastore.cfg.tmp");
+  const backupFile = getStoragePath("edge-bacnet-datastore.cfg.bak");
 
   try {
     // First validate the JSON to ensure it's valid before writing
@@ -295,54 +285,10 @@ async function Store_Config(data) {
   }
 }
 
-// READ CONFIG SYNC FUNCTION ======================================================
-//
-// ================================================================================
-
-function Read_Config_Sync() {
-  const mainFile = "edge-bacnet-datastore.cfg";
-  const backupFile = "edge-bacnet-datastore.cfg.bak";
-  const defaultData = "{}";
-
-  try {
-    // Try to read the main file
-    let data = fsSync.readFileSync(mainFile, { encoding: "utf8" });
-
-    // Validate JSON
-    try {
-      JSON.parse(data);
-      return data;
-    } catch (jsonError) {
-      console.error("Main file contains invalid JSON, attempting backup recovery");
-
-      // Try to read backup file
-      try {
-        const backupData = fsSync.readFileSync(backupFile, { encoding: "utf8" });
-        JSON.parse(backupData); // Validate backup JSON
-
-        // Restore from backup
-        fsSync.copyFileSync(backupFile, mainFile);
-        console.log("Successfully restored from backup file");
-        return backupData;
-      } catch (backupError) {
-        console.error("Backup recovery failed, creating new file");
-        fsSync.writeFileSync(mainFile, defaultData, { encoding: "utf8" });
-        return defaultData;
-      }
-    }
-  } catch (error) {
-    console.error("Error reading config:", error);
-    fsSync.writeFileSync(mainFile, defaultData, { encoding: "utf8" });
-    return defaultData;
-  }
-}
-
-// refactor:
-
 async function Read_Config_Async() {
   // todo rename function, not using sync
-  const mainFile = "edge-bacnet-datastore.cfg";
-  const backupFile = "edge-bacnet-datastore.cfg.bak";
+  const mainFile = getStoragePath("edge-bacnet-datastore.cfg");
+  const backupFile = getStoragePath("edge-bacnet-datastore.cfg.bak");
   const defaultData = "{}";
 
   try {
@@ -366,14 +312,10 @@ async function Read_Config_Async() {
         await fs.copyFile(backupFile, mainFile);
         console.log("Successfully restored from backup file");
 
-        console.log("log2");
-
         return backupData;
       } catch (backupError) {
         console.error("Backup recovery failed, creating new file");
         await Store_Config(defaultData);
-
-        console.log("log3");
 
         return defaultData;
       }
@@ -381,8 +323,6 @@ async function Read_Config_Async() {
   } catch (error) {
     console.error("Error reading config:", error);
     await Store_Config(defaultData);
-
-    console.log("log4");
 
     return defaultData;
   }
@@ -393,7 +333,7 @@ async function Read_Config_Async() {
 // ================================================================================
 async function Store_Config_Server(data) {
   try {
-    await fs.writeFile("edge-bacnet-server-datastore.cfg", data, (err) => {
+    await fs.writeFile(getStoragePath("edge-bacnet-server-datastore.cfg"), data, (err) => {
       if (err) {
         //console.log("Store_Config_Server writeFile error: ", err);
       }
@@ -407,7 +347,7 @@ async function Store_Config_Server(data) {
 function Read_Config_Sync_Server() {
   var data = "{}";
   try {
-    data = fs.readFileSync("edge-bacnet-server-datastore.cfg", { encoding: "utf8", flag: "r" });
+    data = fs.readFileSync(getStoragePath("edge-bacnet-server-datastore.cfg"), { encoding: "utf8", flag: "r" });
   } catch (err) {
     if (err.errno == -4058) {
       data = "{}";
@@ -485,7 +425,6 @@ module.exports = {
   roundDecimalPlaces,
   queueConfigStore,
   Store_Config,
-  Read_Config_Sync,
   Read_Config_Async,
   Store_Config_Server,
   Read_Config_Sync_Server,

@@ -131,10 +131,7 @@
           getData(initial) {
             let app = this;
             this.nodeService.getNetworkData().then(function (result) {
-              //remove after below fixed
               app.devices = result.renderList;
-              //end remove
-
               app.deviceList = result.deviceList;
               app.pointList = result.pointList;
               app.pollFrequency = parseInt(result.pollFrequency);
@@ -665,21 +662,24 @@
               // Find the device in the device list
               let device = app.getDeviceFromDeviceList(mstpDevice.ipAddr, mstpDevice.deviceId);
               if (device) {
-                app.nodeService.updatePointsForDevice(device).then(function (result) {
-                  updatedCount++;
-                }).catch(function (error) {
-                  // Handle error silently
-                });
+                app.nodeService
+                  .updatePointsForDevice(device)
+                  .then(function (result) {
+                    updatedCount++;
+                  })
+                  .catch(function (error) {
+                    // Handle error silently
+                  });
               }
             });
 
             // Show user feedback
             if (mstpDevices.length > 0) {
               app.$toast?.add({
-                severity: 'info',
-                summary: 'Update Started',
+                severity: "info",
+                summary: "Update Started",
                 detail: `Updating points for ${mstpDevices.length} devices in ${slotProps.node.label}`,
-                life: 3000
+                life: 3000,
               });
             }
           },
@@ -687,14 +687,14 @@
             let app = this;
             let device = app.getDeviceFromDeviceList(slotProps.node.ipAddr, slotProps.node.deviceId);
             if (device) {
-              app.nodeService.purgeDevice(device).then(function (result) { });
+              app.nodeService.purgeDevice(device).then(function (result) {});
             }
           },
           updatePointsForDevice(slotProps) {
             let app = this;
             let device = app.getDeviceFromDeviceList(slotProps.node.ipAddr, slotProps.node.deviceId);
             if (device) {
-              app.nodeService.updatePointsForDevice(device).then(function (result) { });
+              app.nodeService.updatePointsForDevice(device).then(function (result) {});
             }
           },
           updatePoint(slotProps) {
@@ -705,7 +705,7 @@
             });
             const deviceKey = `${app.getDeviceAddress(device.address)}-${device.deviceId}`;
             if (device) {
-              app.nodeService.updatePoint(deviceKey, pointKey).then(function (result) { });
+              app.nodeService.updatePoint(deviceKey, pointKey).then(function (result) {});
             }
           },
           setDeviceName() {
@@ -765,27 +765,26 @@
           // NEW: Update display name in main devices tree
           updatePointDisplayNameInDevicesTree(deviceKey, pointName, newDisplayName) {
             let app = this;
-            let [ipAddress, deviceId] = deviceKey.split('-');
+            let [ipAddress, deviceId] = deviceKey.split("-");
 
             // Find the device in main tree
-            let deviceIndex = app.devices ? app.devices.findIndex(device =>
-              device.ipAddr === ipAddress && device.deviceId.toString() === deviceId) : -1;
+            let deviceIndex = app.devices
+              ? app.devices.findIndex((device) => device.ipAddr === ipAddress && device.deviceId.toString() === deviceId)
+              : -1;
 
             if (deviceIndex !== -1) {
               // Update direct device points
-              let pointIndex = app.devices[deviceIndex].children[0].children.findIndex(point =>
-                point.pointName === pointName);
+              let pointIndex = app.devices[deviceIndex].children[0].children.findIndex((point) => point.pointName === pointName);
               if (pointIndex !== -1) {
                 app.devices[deviceIndex].children[0].children[pointIndex].label = newDisplayName;
               }
 
               // Update MSTP device points if applicable
-              app.devices[deviceIndex].children.forEach(child => {
+              app.devices[deviceIndex].children.forEach((child) => {
                 if (child.label && child.label.includes("MSTP") && child.children) {
-                  child.children.forEach(mstpDevice => {
+                  child.children.forEach((mstpDevice) => {
                     if (mstpDevice.deviceId.toString() === deviceId) {
-                      let mstpPointIndex = mstpDevice.children[0].children.findIndex(point =>
-                        point.pointName === pointName);
+                      let mstpPointIndex = mstpDevice.children[0].children.findIndex((point) => point.pointName === pointName);
                       if (mstpPointIndex !== -1) {
                         mstpDevice.children[0].children[mstpPointIndex].label = newDisplayName;
                       }
@@ -798,17 +797,17 @@
           // NEW: Update display name in read devices tree
           updatePointDisplayNameInReadDevicesTree(deviceKey, pointName, newDisplayName) {
             let app = this;
-            let [ipAddress, deviceId] = deviceKey.split('-');
+            let [ipAddress, deviceId] = deviceKey.split("-");
 
             if (!app.readDevices) return;
 
             // Find the device in read devices tree
-            let readDeviceIndex = app.readDevices.findIndex(device =>
-              device.deviceId.toString() === deviceId);
+            let readDeviceIndex = app.readDevices.findIndex((device) => device.deviceId.toString() === deviceId);
 
             if (readDeviceIndex !== -1) {
-              let pointIndex = app.readDevices[readDeviceIndex].children[0].children.findIndex(point =>
-                point.pointName === pointName);
+              let pointIndex = app.readDevices[readDeviceIndex].children[0].children.findIndex(
+                (point) => point.pointName === pointName
+              );
               if (pointIndex !== -1) {
                 app.readDevices[readDeviceIndex].children[0].children[pointIndex].label = newDisplayName;
               }
@@ -1097,7 +1096,6 @@
             let count = 0;
             return count;
           },
-
         },
         components: {
           "p-tree": primevue.tree,
@@ -1399,7 +1397,6 @@
             filterMode="lenient"
             filterPlaceholder="No results found."
             v-if="hasData()">
-
             <template #device="slotProps">
               <div @contextmenu="onDeviceRightClick(slotProps, $event)" class="p-treenode-label">
                 <div v-if="isDeviceActive(slotProps)" class="deviceLabelParent">
@@ -1439,13 +1436,12 @@
               </div>
             </template>
 
-            
             <template #mstpfolder="slotProps">
               <div @contextmenu="onMstpFolderRightClick(slotProps, $event)" class="p-treenode-label">
                 <div class="deviceLabelParent">
                   <b class="mstpLabel">
                     <span>{{slotProps.node.label}}</span>
-                    <span class="mstpDeviceCount" >
+                    <span class="mstpDeviceCount">
                       &nbsp; {{slotProps.node.children ? slotProps.node.children.length : 0}} &nbsp;
                     </span>
                   </b>
@@ -1473,7 +1469,6 @@
                 </button>
               </div>
             </template>
-
           </p-tree>
           <div v-else style="text-align: center; padding-top: 20px;">
             <a>Building Tree...</a>

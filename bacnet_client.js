@@ -11,7 +11,6 @@ const {
   parseBacnetError,
   getBacnetErrorString,
   Read_Config_Async,
-  Read_Config_Sync,
   isNumber,
   decodeBitArray,
 } = require("./common");
@@ -19,7 +18,6 @@ const { ToadScheduler, SimpleIntervalJob, Task } = require("toad-scheduler");
 const { BacnetDevice } = require("./bacnet_device");
 const { Mutex } = require("async-mutex");
 const { treeBuilder } = require("./treeBuilder.js");
-
 
 class BacnetClient extends EventEmitter {
   //client constructor
@@ -43,7 +41,6 @@ class BacnetClient extends EventEmitter {
     that.portRangeMatrix = config.portRangeMatrix;
 
     try {
-
       that.roundDecimal = config.roundDecimal;
       that.apduSize = config.apduSize;
       that.maxSegments = config.maxSegments;
@@ -118,13 +115,11 @@ class BacnetClient extends EventEmitter {
             }
           }, "4000");
         }, "15000");
-
       } catch (e) {
         that.logOut("Issue initializing client: ", e);
       }
 
       try {
-
         //who is callback
         that.client.on("iAm", (device) => {
           if (device.address !== that.config.localIpAdrress) {
@@ -791,7 +786,7 @@ class BacnetClient extends EventEmitter {
           deviceName,
           results: bacnetResults,
           deviceIndex: deviceIndex + 1,
-          totalDevices: devicesToRead.length
+          totalDevices: devicesToRead.length,
         };
       });
 
@@ -799,27 +794,18 @@ class BacnetClient extends EventEmitter {
       const results = await Promise.allSettled(devicePromises);
 
       results.forEach((result, index) => {
-        if (result.status === 'fulfilled' && result.value) {
+        if (result.status === "fulfilled" && result.value) {
           completedDevices++;
           const { deviceName, results: bacnetResults, deviceIndex, totalDevices } = result.value;
 
           // Emit the `values` event for this device immediately
-          that.emit(
-            "values",
-            bacnetResults,
-            outputType,
-            objectPropertyType,
-            readNodeName,
-            completedDevices,
-            totalDevices
-          );
+          that.emit("values", bacnetResults, outputType, objectPropertyType, readNodeName, completedDevices, totalDevices);
         } else {
           // Handle failed device (offline/error)
           completedDevices++;
           that.logOut(`Device ${devicesToRead[index]} failed:`, result.reason);
         }
       });
-
     } catch (error) {
       that.logOut("doRead error: ", error);
     }
@@ -905,7 +891,6 @@ class BacnetClient extends EventEmitter {
     for (const request of requestArray) {
       const { objectId, pointRef, pointName } = request;
       try {
-
         const result = await that.updatePoint(device, pointRef);
 
         if (result.objectId.type == objectId.type && result.objectId.instance == objectId.instance) {
@@ -1005,7 +990,7 @@ class BacnetClient extends EventEmitter {
 
       return true;
     } catch (e) {
-      throw e
+      throw e;
     }
   }
 
@@ -1031,7 +1016,7 @@ class BacnetClient extends EventEmitter {
     let settings = {
       maxSegments: maxSegments,
       maxApdu: maxApdu,
-    }
+    };
 
     return new Promise((resolve, reject) => {
       that.client.readProperty(

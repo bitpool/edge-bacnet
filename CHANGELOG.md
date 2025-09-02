@@ -1,65 +1,80 @@
 # Changelog
 
-## [1.6.3] - 00-06-2025
+## [1.6.4] - 02-09-2025
 
-Minor feature: 
-  - Device List - new right click option to MSTP NET folders - Update All Devices. Specifically updates the mstp device listed in that selected network 
-  - Inspector - Added statistic percentages as MQTT output in the Inspector node
-  - Inspector - Added online / offline stats and Total points to read as status on node
-  - Test Functions - Outputs results to both node-red console and node-red debug window now
+Minor feature:
+
+- Small update to file read / write logic for database files. Some deployments require a different storage location outside of the default. If a nodejs environment variable of BACNET_STORAGE_PATH is defined and set for that deployment, it will prefix that location to the file path, otherwise functionality will remain the same.
+
+Bug fix:
+
+- Some mstp devices were not showing in device list UI tree.
+
+## [1.6.3] - 01-06-2025
+
+Minor feature:
+
+- Device List - new right click option to MSTP NET folders - Update All Devices. Specifically updates the mstp device listed in that selected network
+- Inspector - Added statistic percentages as MQTT output in the Inspector node
+- Inspector - Added online / offline stats and Total points to read as status on node
+- Test Functions - Outputs results to both node-red console and node-red debug window now
 
 Minor update / refactor:
-  - Datamodel - Importing and Exporting datamodel displays process status and related stats (file size etc) while importing or exporting, informing the user of current state
-  - Device List - UI tree no longer stored in datamodel, as it is generated dynamically on a schedule. This significantly reduces datamodel file size, read / write time, system start up processes. 
-  - Datamodel - writes to file system for persistance and backup was being executed more often than needed. Process schedule is now on a larger interval, and write algorithm refactored and optimized. 
-  - Device List - right click -> Set Point Name feature refactored, due to many scenarios where it wasnt executing as expected.
-  - BACnet read output - error and status field setting optimized
-  - Inspector - updated ObjectType column values to show object type enum string instead of integer
+
+- Datamodel - Importing and Exporting datamodel displays process status and related stats (file size etc) while importing or exporting, informing the user of current state
+- Device List - UI tree no longer stored in datamodel, as it is generated dynamically on a schedule. This significantly reduces datamodel file size, read / write time, system start up processes.
+- Datamodel - writes to file system for persistance and backup was being executed more often than needed. Process schedule is now on a larger interval, and write algorithm refactored and optimized.
+- Device List - right click -> Set Point Name feature refactored, due to many scenarios where it wasnt executing as expected.
+- BACnet read output - error and status field setting optimized
+- Inspector - updated ObjectType column values to show object type enum string instead of integer
 
 Bug fixes:
-  - Inspector - incorrect percentages, statistics and values in the statistics bar. Fixed and tested to represent site status more accurately 
-  - Inpsector - not flagging offline points in error statistic and table filter. Now correctly identifies "offline" points as an Error type
-  - BACnet read output - was not updating error and status correctly for full object payloads. 
-  - BACnet Server - was not outputting sucessfull write update MQTT msg after node-red deploy. 
 
-Updating: 
-  - There shouldnt be a need for users to remove nodes or do any specific action when updating to this version, however backing up a datamodel export is advised.
+- Inspector - incorrect percentages, statistics and values in the statistics bar. Fixed and tested to represent site status more accurately
+- Inpsector - not flagging offline points in error statistic and table filter. Now correctly identifies "offline" points as an Error type
+- BACnet read output - was not updating error and status correctly for full object payloads.
+- BACnet Server - was not outputting sucessfull write update MQTT msg after node-red deploy.
 
+Updating:
+
+- There shouldnt be a need for users to remove nodes or do any specific action when updating to this version, however backing up a datamodel export is advised.
 
 ## [1.6.2] - 07-05-2025
 
-Minor feature: 
-  - Added "Enable device discovery" check box to gateway settings, discovery tab. 
-    - This check box controls whether on not the auto point discovery and property discovery is enabled. 
-    - This can be used to turn off unecessary network traffic once you have discovered all of the desired devices and points.
-    - IMPORTANT - if you are updating a existing deployment, the new property will be unticked, however new installs / dragging from the pallete will by default have the option checked. So if you want to keep this enabled on an existing deployment, please check the setting. 
-    - Note - This does not turn off the whoIs task schedule.
-    - A user can use Right Click -> Update points on desired deviced in the read node tree if you would like to manually discover devices. 
+Minor feature:
 
-Minor update: 
-  - Adjusted initial whoIs broadcast delay from 5seconds to 15seconds after node-red is started with a deployed gateway. This is to ensure large cached files are completely read and loaded.
+- Added "Enable device discovery" check box to gateway settings, discovery tab.
+  - This check box controls whether on not the auto point discovery and property discovery is enabled.
+  - This can be used to turn off unecessary network traffic once you have discovered all of the desired devices and points.
+  - IMPORTANT - if you are updating a existing deployment, the new property will be unticked, however new installs / dragging from the pallete will by default have the option checked. So if you want to keep this enabled on an existing deployment, please check the setting.
+  - Note - This does not turn off the whoIs task schedule.
+  - A user can use Right Click -> Update points on desired deviced in the read node tree if you would like to manually discover devices.
 
-Bug fixes: 
-  - Inspector:
-    - Table resized to avoid scroll bars
-    - Percentage rounding to nearest 2 decimal places rather than whole integer for more detailed data. 
-    - Loading animation added
-    - NAN years ago - removed as invalid time differential 
-    - Last seen for device points adjusted to be more accurate
+Minor update:
 
-  
+- Adjusted initial whoIs broadcast delay from 5seconds to 15seconds after node-red is started with a deployed gateway. This is to ensure large cached files are completely read and loaded.
+
+Bug fixes:
+
+- Inspector:
+  - Table resized to avoid scroll bars
+  - Percentage rounding to nearest 2 decimal places rather than whole integer for more detailed data.
+  - Loading animation added
+  - NAN years ago - removed as invalid time differential
+  - Last seen for device points adjusted to be more accurate
 
 ## [1.6.1] - 14-04-2025
 
-Bug fixes: 
-  - Inspector stats were calculating incorrectly in certain scenarios
-  - Inspector downloaded HTML files had incorrect stat percentages
-  - Inspector Last_Polled_Time stat was always "UNKNOWN", now shows correct date time.
+Bug fixes:
 
-Minor updates: 
-  - Inspector BACnet main stats now output on msg.type = getBacnetStats inject. Can be set on a scheduled inject. 
-  - Updated Examples with Inspector
+- Inspector stats were calculating incorrectly in certain scenarios
+- Inspector downloaded HTML files had incorrect stat percentages
+- Inspector Last_Polled_Time stat was always "UNKNOWN", now shows correct date time.
 
+Minor updates:
+
+- Inspector BACnet main stats now output on msg.type = getBacnetStats inject. Can be set on a scheduled inject.
+- Updated Examples with Inspector
 
 ## [1.6.0] - 09-04-2025
 
@@ -75,92 +90,98 @@ New features:
   - API routes available:
 
     - /inspector
+
       - view UI in web browser
 
     - /inspector-downloadhtml
+
       - downloads the html of the inspector in its current state
 
     - /inspector-downloadhtml?filter=tableKey&value=value1,value2
-      - downloads the html of the inspector, but with a applied filter to the table. 
-      - tableKey in the above example can be any of the table columns, only 1 tableKey may be filtered on: 
+
+      - downloads the html of the inspector, but with a applied filter to the table.
+      - tableKey in the above example can be any of the table columns, only 1 tableKey may be filtered on:
         deviceID, objectType, objectInstance, presentValue, dataModelStatus, pointName, discoveredBACnetPointName, displayName, deviceName, ipAddress, area, key, topic, lastSeen, error
       - value=value1,value2 etc can be any value that the tableKey can contain. This parameter can accept many comma separated values
-      - an example filter request may look like: 
+      - an example filter request may look like:
         /inspector-downloadhtml?filter=dataModelStatus&value=error,missing
 
     - /getModelStats
+
       - returns JSON data with analysis of the BACnet model
       - contains point status, metrics, and detailed information
 
     - /pointstoread
+
       - downloads CSV file with all points in the read list
       - format: [siteName]_PointsToRead_[timestamp].csv
 
     - /getpointerrors
       - downloads CSV file with all points that have errors
       - format: [siteName]_PointErrors_[timestamp].csv
-      
     - /getmodelstatscsv
       - downloads CSV file with all model stats data in CSV format
       - format: [siteName]_ModelStats_[timestamp].csv
-      
     - /publishedpointslist
+
       - downloads CSV file with all published points and their current values
       - format: [siteName]_PublishedPointsList_[timestamp].csv
       - outputs mqtt topic and payloads with statistics about the current state of the bacnet network
       - output topics:
-          EDGE_DEVICE_{IP_ID}/STATUS/LAST_POINT_PUSHED_TIME
-          payload: Timestamp of when the last point was pushed (ISO string)
-          EDGE_DEVICE_{IP_ID}/STATUS/LAST_STAT_CALC_TIME
-          payload: Current timestamp (ISO string)
-          EDGE_DEVICE_{IP_ID}/STATUS/UPTIME
-          payload: System uptime formatted as string (e.g., "Uptime: 3 days, 5 hours, 12 minutes, 45 seconds")
-          EDGE_DEVICE_{IP_ID}/STATUS/ONLINE_POINTS
-          payload: Number of online points
-          EDGE_DEVICE_{IP_ID}/STATUS/OFFLINE_POINTS
-          payload: Number of offline points
-          EDGE_DEVICE_{IP_ID}/STATUS/TOTAL_POLLED_POINTS
-          payload: Total number of polled points
-          EDGE_DEVICE_{IP_ID}/STATUS/AVERAGE_TIME_SINCE_COV_IN_SECONDS
-          payload: Average time since last change of value in seconds
-          EDGE_DEVICE_{IP_ID}/STATUS/TOTAL_POINTS_TO_READ
-          payload: Total number of points to read
-          EDGE_DEVICE_{IP_ID}/STATUS/DISCOVERED_POINT_COUNT
-          payload: Number of discovered points
-          EDGE_DEVICE_{IP_ID}/STATUS/DISCOVERED_DEVICE_COUNT
-          payload: Number of discovered devices
+        EDGE*DEVICE*{IP*ID}/STATUS/LAST_POINT_PUSHED_TIME
+        payload: Timestamp of when the last point was pushed (ISO string)
+        EDGE_DEVICE*{IP*ID}/STATUS/LAST_STAT_CALC_TIME
+        payload: Current timestamp (ISO string)
+        EDGE_DEVICE*{IP*ID}/STATUS/UPTIME
+        payload: System uptime formatted as string (e.g., "Uptime: 3 days, 5 hours, 12 minutes, 45 seconds")
+        EDGE_DEVICE*{IP*ID}/STATUS/ONLINE_POINTS
+        payload: Number of online points
+        EDGE_DEVICE*{IP*ID}/STATUS/OFFLINE_POINTS
+        payload: Number of offline points
+        EDGE_DEVICE*{IP*ID}/STATUS/TOTAL_POLLED_POINTS
+        payload: Total number of polled points
+        EDGE_DEVICE*{IP*ID}/STATUS/AVERAGE_TIME_SINCE_COV_IN_SECONDS
+        payload: Average time since last change of value in seconds
+        EDGE_DEVICE*{IP*ID}/STATUS/TOTAL_POINTS_TO_READ
+        payload: Total number of points to read
+        EDGE_DEVICE*{IP*ID}/STATUS/DISCOVERED_POINT_COUNT
+        payload: Number of discovered points
+        EDGE_DEVICE*{IP_ID}/STATUS/DISCOVERED_DEVICE_COUNT
+        payload: Number of discovered devices
 
-          where {IP_ID} is the IP address of the device with periods removed (e.g., 192.168.1.100 becomes 192168110).
-          each of these topics includes the site name as a tag in the message metadata with format geoAddr={siteName}.
+        where {IP_ID} is the IP address of the device with periods removed (e.g., 192.168.1.100 becomes 192168110).
+        each of these topics includes the site name as a tag in the message metadata with format geoAddr={siteName}.
 
-  - Additional input options: 
+  - Additional input options:
+
     - reset - resets the complete data model used for all of the inspector analytics
+
       - msg input format: msg.reset = true
 
     - sendMqttStats - outputs additional mqtt statistics
-      - msg input format:  msg.type = sendMqttStats
-      - output topics: 
-        EDGE_DEVICE_{siteName}/BACNETSTATS/ok
+
+      - msg input format: msg.type = sendMqttStats
+      - output topics:
+        EDGE*DEVICE*{siteName}/BACNETSTATS/ok
         payload: Number of points with OK status
-        EDGE_DEVICE_{siteName}/BACNETSTATS/error
+        EDGE*DEVICE*{siteName}/BACNETSTATS/error
         payload: Number of points with error status
-        EDGE_DEVICE_{siteName}/BACNETSTATS/missing
+        EDGE*DEVICE*{siteName}/BACNETSTATS/missing
         payload: Number of missing points
-        EDGE_DEVICE_{siteName}/BACNETSTATS/warnings
+        EDGE*DEVICE*{siteName}/BACNETSTATS/warnings
         payload: Number of points with warnings
-        EDGE_DEVICE_{siteName}/BACNETSTATS/moved
+        EDGE*DEVICE*{siteName}/BACNETSTATS/moved
         payload: Number of points that have moved (e.g changed object instance)
-        EDGE_DEVICE_{siteName}/BACNETSTATS/deviceIdChange
+        EDGE*DEVICE*{siteName}/BACNETSTATS/deviceIdChange
         payload: Number of points with changed device IDs
-        EDGE_DEVICE_{siteName}/BACNETSTATS/deviceIdConflict
+        EDGE*DEVICE*{siteName}/BACNETSTATS/deviceIdConflict
         payload: Number of points with conflicting device IDs
-        EDGE_DEVICE_{siteName}/BACNETSTATS/unmapped
+        EDGE*DEVICE*{siteName}/BACNETSTATS/unmapped
         payload: Number of unmapped points
-        EDGE_DEVICE_{siteName}/BACNETSTATS/offlinePercentage
+        EDGE*DEVICE*{siteName}/BACNETSTATS/offlinePercentage
         payload: Percentage of points that are offline
 
         where {siteName} is the site name configured in the inspector node.
-
 
 - Right click -> Update Point on a individual point in the device tree. (Read node UI)
 
@@ -184,6 +205,7 @@ New features:
 Refactor:
 
 - Reading and Writing to the cache file of the datamodel.
+
   - write operations are now locked to 1 operation at a time
   - a rolling secondary backup file is now created, which can be used in case of corruption of the primary file
 
