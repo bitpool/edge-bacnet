@@ -212,14 +212,10 @@ module.exports = function (RED) {
       }
     }
 
-    if (
-      node.bacnetServerEnabled == true &&
-      node.bacnetClient &&
-      node.bacnetServer
-    ) {
+    if (node.bacnetServerEnabled == true && node.bacnetClient && node.bacnetServer) {
       try {
         // Clean up any existing listeners to prevent stale references
-        node.bacnetServer.removeAllListeners('writeProperty');
+        node.bacnetServer.removeAllListeners("writeProperty");
 
         // Store the event handler function so we can clean it up later
         node.writePropertyHandler = (topic, newValue) => {
@@ -269,7 +265,7 @@ module.exports = function (RED) {
         } else if (msg.doUpdatePriorityDevices == true && msg.priorityDevices !== null) {
           node.bacnetClient
             .updatePriorityQueue(msg.priorityDevices)
-            .then(function (result) { })
+            .then(function (result) {})
             .catch(function (error) {
               logOut("Error updating priorityQueue: ", error);
             });
@@ -283,7 +279,7 @@ module.exports = function (RED) {
 
           node.bacnetClient
             .applyDisplayNames(msg.pointsToRead)
-            .then(function (result) { })
+            .then(function (result) {})
             .catch(function (error) {
               logOut("Error in applyDisplayNames: ", error);
             });
@@ -306,7 +302,7 @@ module.exports = function (RED) {
       node.on("close", function () {
         // Clean up the writeProperty event listener
         if (node.bacnetServer && node.writePropertyHandler) {
-          node.bacnetServer.removeListener('writeProperty', node.writePropertyHandler);
+          node.bacnetServer.removeListener("writeProperty", node.writePropertyHandler);
           node.writePropertyHandler = null;
         }
 
@@ -794,7 +790,6 @@ module.exports = function (RED) {
             if (points[point] && "presentValue" in points[point]) {
               let pointName = getPointName(points[point], point);
               let topic = getTopicString("sendSimpleWithStatus", useDeviceName, readNodeName, device, pointName);
-
               msgg.topic = topic;
               let payload = {
                 presentValue: points[point]["presentValue"],

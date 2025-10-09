@@ -67,9 +67,23 @@ class Client extends events_1.EventEmitter {
     }
     // Helper utils
     _getInvokeId() {
+        // Try up to 256 times to find an unused invoke ID
+        for (let attempts = 0; attempts < 256; attempts++) {
+            const id = this._invokeCounter++;
+            if (id >= 256) this._invokeCounter = 1;
+
+            const invokeId = id - 1;
+
+            // If this invoke ID is not currently in use, return it
+            if (!this._invokeStore[invokeId]) {
+                return invokeId;
+            }
+        }
+
+        // Edge case: if all 256 invoke IDs are in use, fall back to original behavior
+        // This prevents infinite loops while maintaining backwards compatibility
         const id = this._invokeCounter++;
-        if (id >= 256)
-            this._invokeCounter = 1;
+        if (id >= 256) this._invokeCounter = 1;
         return id - 1;
     }
     _invokeCallback(id, err, result) {

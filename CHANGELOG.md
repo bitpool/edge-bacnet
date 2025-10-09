@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.5] - 09-10-2025
+
+Bug fix:
+
+- Specific users found issues of spiking values. Results after a read query are now force ordered. An adjustment made to the bacnet stack _getInvokeId function as it was running out of array space to process a high volume of request responses.
+
+
 ## [1.6.4] - 02-09-2025
 
 Minor feature:

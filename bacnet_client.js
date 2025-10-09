@@ -827,16 +827,12 @@ class BacnetClient extends EventEmitter {
       };
 
       // Process the results of the batch
-      results.value.values.forEach((pointResult) => {
-        const cacheRef = requestArray.find(
-          (ele) =>
-            ele.pointRef.meta.objectId.type === pointResult.objectId.type &&
-            ele.pointRef.meta.objectId.instance === pointResult.objectId.instance
-        );
+      results.value.values.forEach((pointResult, index) => {
+        const cacheRef = requestArray[index];
+        const pointRef = cacheRef.pointRef;
+        const pointNameRef = cacheRef.pointName;
 
-        if (cacheRef) {
-          const pointRef = cacheRef.pointRef;
-          const pointNameRef = cacheRef.pointName;
+        if (pointResult.values[0].value.length > 0) {
           const val = pointResult.values[0].value[0].value;
 
           if (isNumber(val)) {
@@ -865,13 +861,12 @@ class BacnetClient extends EventEmitter {
               pointRef.status = "online";
             }
           }
-
-          pointRef.meta["device"] = deviceMetaInfo;
-          pointRef.timestamp = Date.now();
-
-          // Store the point data in results
-          bacnetResults[deviceName][pointNameRef] = pointRef;
         }
+        pointRef.meta["device"] = deviceMetaInfo;
+        pointRef.timestamp = Date.now();
+
+        // Store the point data in results
+        bacnetResults[deviceName][pointNameRef] = pointRef;
       });
     } catch (err) {
       that.logOut("Error processing batch:", err);
@@ -1217,6 +1212,32 @@ class BacnetClient extends EventEmitter {
     };
     return new Promise((resolve, reject) => {
       that.client.readPropertyMultiple(addressObject, requestArray, readOptions, (error, value) => {
+        if (value && value.values) {
+          const reorderedValues = requestArray.map((req) => {
+            const foundValue = value.values.find(
+              (val) => val.objectId.type === req.objectId.type && val.objectId.instance === req.objectId.instance
+            );
+            return (
+              foundValue || {
+                objectId: req.objectId,
+                values: [
+                  {
+                    value: [
+                      {
+                        value: {
+                          errorClass: baEnum.ErrorClass.PROPERTY,
+                          errorCode: baEnum.ErrorCode.UNKNOWN_PROPERTY,
+                        },
+                      },
+                    ],
+                  },
+                ],
+              }
+            );
+          });
+          value.values = reorderedValues;
+        }
+
         resolve({
           error: error,
           value: value,
