@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.6] - 20-11-2025
+
+Minor update:
+
+- Added all stored point properties as columns to "Export point list" CSV in read node Properties tab.
+- Adjustment to point polling, setting stricter maxApdu sizes 
+
 ## [1.6.5] - 09-10-2025
 
 Bug fix:

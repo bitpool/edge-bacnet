@@ -222,9 +222,31 @@ class BacnetClient extends EventEmitter {
       port: port,
     };
 
+    // Try to find the device to use device-specific options
+    let device = null;
+    if (type === 8) {
+      // Device object - instance is the device ID
+      device = that.deviceList.find(ele => ele.getDeviceId() === instance);
+    } else {
+      // For non-device objects, we can't determine the device from just address/instance
+      // This is a limitation of testFunction's current signature
+    }
+
+    // Use device-specific options if we found the device, otherwise use safer defaults
+    let readOptions;
+    if (device) {
+      readOptions = that.getDeviceSpecificOptions(device);
+    } else {
+      // Conservative defaults for unknown devices (assume small MSTP)
+      readOptions = {
+        maxSegments: 0,  // No segmentation
+        maxApdu: 2       // 206 octets - safe for most MSTP devices
+      };
+    }
+
     const propertiesArray = [{ objectId: { type: type, instance: instance }, properties: [{ id: property }] }];
 
-    that.client.readPropertyMultiple(addressObject, propertiesArray, that.readPropertyMultipleOptions, (err, value) => {
+    that.client.readPropertyMultiple(addressObject, propertiesArray, readOptions, (err, value) => {
       console.log("1 - readPropertyMultiple:  ");
 
       console.log(value);
@@ -248,7 +270,7 @@ class BacnetClient extends EventEmitter {
       addressObject,
       { type: type, instance: instance },
       property,
-      that.readPropertyMultipleOptions,
+      readOptions,
       (err, value) => {
         console.log("2 - readProperty:  ");
 
@@ -316,12 +338,13 @@ class BacnetClient extends EventEmitter {
       address: device.getAddress(),
       port: device.getPort(),
     };
+    const readOptions = that.getDeviceSpecificOptions(device);
     return new Promise((resolve, reject) => {
       that.client.readProperty(
         addressObject,
         { type: baEnum.ObjectType.DEVICE, instance: device.getDeviceId() },
         baEnum.PropertyIdentifier.PROTOCOL_SERVICES_SUPPORTED,
-        that.readPropertyMultipleOptions,
+        readOptions,
         (err, value) => {
           if (err) {
             reject(err);
@@ -339,7 +362,7 @@ class BacnetClient extends EventEmitter {
     let that = this;
     let address = device.getAddress().address;
     let deviceId = device.getDeviceId();
-    let foundParentIndex = that.deviceList.findIndex((ele) => ele.getAddress() == address);
+    let foundParentIndex = that.deviceList.findIndex((ele) => that.getDeviceAddress(ele) == address);
     if (foundParentIndex !== -1) {
       that.deviceList[foundParentIndex].addChildDevice(deviceId);
       device.setParentDeviceId(that.deviceList[foundParentIndex].getDeviceId());
@@ -939,11 +962,44 @@ class BacnetClient extends EventEmitter {
 
   async updateManyPoints(device, points) {
     try {
-      const results = await this._readObjectWithRequestArray(device, points, this.readPropertyMultipleOptions);
+      // Use device-specific options instead of global options
+      const deviceOptions = this.getDeviceSpecificOptions(device);
+      const results = await this._readObjectWithRequestArray(device, points, deviceOptions);
       return results;
     } catch (error) {
       throw error;
     }
+  }
+
+  getDeviceSpecificOptions(device) {
+    let maxSegments = this.readPropertyMultipleOptions.maxSegments;
+    let maxApdu = this.readPropertyMultipleOptions.maxApdu;
+
+    // Adjust for devices with no segmentation support
+    if (device.getSegmentation() == 3) {
+      maxSegments = 0;
+    }
+
+    // Adjust maxApdu based on device capability
+    const deviceMaxApdu = device.getMaxApdu();
+    if (deviceMaxApdu <= 50) {
+      maxApdu = 0; // 50 octets
+    } else if (deviceMaxApdu <= 128) {
+      maxApdu = 1; // 128 octets  
+    } else if (deviceMaxApdu <= 206) {
+      maxApdu = 2; // 206 octets
+    } else if (deviceMaxApdu <= 480) {
+      maxApdu = 3; // 480 octets
+    } else if (deviceMaxApdu <= 1024) {
+      maxApdu = 4; // 1024 octets
+    } else {
+      maxApdu = 5; // 1476 octets
+    }
+
+    return {
+      maxSegments: maxSegments,
+      maxApdu: maxApdu
+    };
   }
 
   updatePointWithRetry(device, point, retryCount = 1) {
@@ -997,21 +1053,8 @@ class BacnetClient extends EventEmitter {
       port: device.getPort(),
     };
 
-    let maxSegments = that.readPropertyMultipleOptions.maxSegments;
-    let maxApdu = that.readPropertyMultipleOptions.maxApdu;
-
-    if (device.getSegmentation() == 3) {
-      maxSegments = 0;
-    }
-
-    if (device.getMaxApdu() == 480) {
-      maxApdu = 3;
-    }
-
-    let settings = {
-      maxSegments: maxSegments,
-      maxApdu: maxApdu,
-    };
+    // Use device-specific options
+    const settings = that.getDeviceSpecificOptions(device);
 
     return new Promise((resolve, reject) => {
       that.client.readProperty(
@@ -1032,8 +1075,15 @@ class BacnetClient extends EventEmitter {
   }
 
   estimateMaxObjectSize(apduSize) {
-    if (apduSize < 500) {
-      return 20;
+    // Be more conservative for very small MSTP devices
+    if (apduSize <= 50) {
+      return 1;  // Only 1 object at a time for 50-byte devices
+    } else if (apduSize <= 128) {
+      return 3;  // 3 objects for 128-byte devices
+    } else if (apduSize <= 206) {
+      return 5;  // 5 objects for 206-byte devices
+    } else if (apduSize < 500) {
+      return 10; // Reduced from 20 for safety
     } else if (apduSize > 500 && apduSize < 1000) {
       //return Math.round(((apduSize - 30) / 7));
       return 50;
@@ -1254,12 +1304,13 @@ class BacnetClient extends EventEmitter {
       port: device.getPort(),
     };
     let deviceId = device.getDeviceId();
+    const readOptions = that.getDeviceSpecificOptions(device);
 
     that.client.readProperty(
       addressObject,
       { type: baEnum.ObjectType.DEVICE, instance: deviceId },
       baEnum.PropertyIdentifier.OBJECT_NAME,
-      that.readPropertyMultipleOptions,
+      readOptions,
       callback
     );
   }
@@ -1304,10 +1355,8 @@ class BacnetClient extends EventEmitter {
 
   _readObjectFull(device, type, instance) {
     const that = this;
-    const readOptions = {
-      maxSegments: that.readPropertyMultipleOptions.maxSegments,
-      maxApdu: that.readPropertyMultipleOptions.maxApdu,
-    };
+    // Use device-specific options for reading all properties
+    const readOptions = that.getDeviceSpecificOptions(device);
 
     const readIndividualPropsOptions = {
       maxSegments: 0,
@@ -1405,10 +1454,8 @@ class BacnetClient extends EventEmitter {
 
   _readObjectLite(device, type, instance) {
     const that = this;
-    const readOptions = {
-      maxSegments: that.readPropertyMultipleOptions.maxSegments,
-      maxApdu: that.readPropertyMultipleOptions.maxApdu,
-    };
+    // Use device-specific options
+    const readOptions = that.getDeviceSpecificOptions(device);
 
     const readIndividualPropsOptions = {
       maxSegments: 0,
@@ -1573,10 +1620,8 @@ class BacnetClient extends EventEmitter {
   scanDevice(device) {
     let that = this;
     return new Promise((resolve, reject) => {
-      const readOptions = {
-        maxSegments: that.readPropertyMultipleOptions.maxSegments,
-        maxApdu: that.readPropertyMultipleOptions.maxApdu,
-      };
+      // Use device-specific options
+      const readOptions = that.getDeviceSpecificOptions(device);
       this._readObjectList(device, readOptions, (err, result) => {
         if (!err) {
           try {

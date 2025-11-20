@@ -433,8 +433,20 @@
           },
           exportPointListCsv() {
             let app = this;
-            let csvContent = "ipAddress,deviceId,deviceName,pointName,objectType" + "\r\n";
+            let csvContent = "ipAddress,deviceId,deviceName,pointName,objectType,presentValue,description,units,objectName,displayName,systemStatus,modificationDate,programState,recordCount,hasPriorityArray,vendorName" + "\r\n";
             const keys = Object.keys(app.pointList);
+
+            // Helper function to safely get property value and escape for CSV
+            const getCsvValue = (value) => {
+              if (value === null || value === undefined) return "";
+              const stringValue = String(value);
+              // Escape double quotes and wrap in quotes if contains comma, newline, or double quote
+              if (stringValue.includes(',') || stringValue.includes('\n') || stringValue.includes('"')) {
+                return '"' + stringValue.replace(/"/g, '""') + '"';
+              }
+              return stringValue;
+            };
+
             for (key in keys) {
               const guid = keys[key];
               const ipAddress = guid.split("-")[0];
@@ -452,16 +464,39 @@
                 const points = Object.keys(deviceObject);
                 if (points.length > 0) {
                   for (point in points) {
+                    const pointData = deviceObject[points[point]] || {};
                     csvContent +=
-                      ipAddress +
+                      getCsvValue(ipAddress) +
                       "," +
-                      deviceId +
+                      getCsvValue(deviceId) +
                       "," +
-                      deviceName +
+                      getCsvValue(deviceName) +
                       "," +
-                      points[point] +
+                      getCsvValue(points[point]) +
                       "," +
-                      deviceObject[points[point]].meta.objectId.type +
+                      getCsvValue(pointData.meta?.objectId?.type) +
+                      "," +
+                      getCsvValue(pointData.presentValue) +
+                      "," +
+                      getCsvValue(pointData.description) +
+                      "," +
+                      getCsvValue(pointData.units) +
+                      "," +
+                      getCsvValue(pointData.objectName) +
+                      "," +
+                      getCsvValue(pointData.displayName) +
+                      "," +
+                      getCsvValue(pointData.systemStatus) +
+                      "," +
+                      getCsvValue(pointData.modificationDate) +
+                      "," +
+                      getCsvValue(pointData.programState) +
+                      "," +
+                      getCsvValue(pointData.recordCount) +
+                      "," +
+                      getCsvValue(pointData.hasPriorityArray) +
+                      "," +
+                      getCsvValue(pointData.vendorName) +
                       "\r\n";
 
                     if (parseInt(point) == points.length - 1 && parseInt(key) == keys.length - 1) {
@@ -687,14 +722,14 @@
             let app = this;
             let device = app.getDeviceFromDeviceList(slotProps.node.ipAddr, slotProps.node.deviceId);
             if (device) {
-              app.nodeService.purgeDevice(device).then(function (result) {});
+              app.nodeService.purgeDevice(device).then(function (result) { });
             }
           },
           updatePointsForDevice(slotProps) {
             let app = this;
             let device = app.getDeviceFromDeviceList(slotProps.node.ipAddr, slotProps.node.deviceId);
             if (device) {
-              app.nodeService.updatePointsForDevice(device).then(function (result) {});
+              app.nodeService.updatePointsForDevice(device).then(function (result) { });
             }
           },
           updatePoint(slotProps) {
@@ -705,7 +740,7 @@
             });
             const deviceKey = `${app.getDeviceAddress(device.address)}-${device.deviceId}`;
             if (device) {
-              app.nodeService.updatePoint(deviceKey, pointKey).then(function (result) {});
+              app.nodeService.updatePoint(deviceKey, pointKey).then(function (result) { });
             }
           },
           setDeviceName() {
