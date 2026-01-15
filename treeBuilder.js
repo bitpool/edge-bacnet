@@ -355,6 +355,12 @@ class treeBuilder {
     this.addPointProperty(pointProperties, "Modification Date", point.modificationDate);
     this.addPointProperty(pointProperties, "Program State", point.programState);
     this.addPointProperty(pointProperties, "Record Count", point.recordCount);
+    
+    // Add device-specific properties (type 8)
+    this.addPointProperty(pointProperties, "Vendor Name", point.vendorName);
+    this.addPointProperty(pointProperties, "Model Name", point.modelName);
+    this.addPointProperty(pointProperties, "Firmware Revision", point.firmwareRevision);
+    this.addPointProperty(pointProperties, "Application Software Version", point.applicationSoftwareVersion);
 
     // Return the array of point properties
     return pointProperties;

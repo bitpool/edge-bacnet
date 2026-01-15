@@ -362,7 +362,7 @@ class BacnetClient extends EventEmitter {
     let that = this;
     let address = device.getAddress().address;
     let deviceId = device.getDeviceId();
-    let foundParentIndex = that.deviceList.findIndex((ele) => that.getDeviceAddress(ele) == address);
+    let foundParentIndex = that.deviceList.findIndex((ele) => that.getDeviceAddress(ele) == address && !ele.getIsMstpDevice());
     if (foundParentIndex !== -1) {
       that.deviceList[foundParentIndex].addChildDevice(deviceId);
       device.setParentDeviceId(that.deviceList[foundParentIndex].getDeviceId());
@@ -1368,8 +1368,8 @@ class BacnetClient extends EventEmitter {
       port: device.getPort(),
     };
 
-    // Define all properties to be read
-    const allProperties = [
+    // Define default properties for non-device objects
+    const defaultProperties = [
       { id: baEnum.PropertyIdentifier.PRESENT_VALUE },
       { id: baEnum.PropertyIdentifier.DESCRIPTION },
       { id: baEnum.PropertyIdentifier.UNITS },
@@ -1384,8 +1384,66 @@ class BacnetClient extends EventEmitter {
       { id: baEnum.PropertyIdentifier.VENDOR_NAME },
     ];
 
+    // Use device-specific properties for type 8, otherwise use default
+    const propertiesToRead = type === 8 ? BacnetDevice.getDeviceObjectProperties() : defaultProperties;
+
+    // Function to read properties individually
+    const readPropertiesIndividually = (resolve, reject) => {
+      const promises = propertiesToRead.map(
+        (property) =>
+          new Promise((propertyResolve) => {
+            that.client.readProperty(
+              addressObject,
+              { type: type, instance: instance },
+              property.id,
+              readIndividualPropsOptions,
+              (err, value) => {
+                if (err) {
+                  propertyResolve(null);
+                } else {
+                  propertyResolve({
+                    id: property.id,
+                    index: value.property.index,
+                    value: value.values,
+                  });
+                }
+              }
+            );
+          })
+      );
+
+      Promise.all(promises)
+        .then((resultArray) => {
+          // Filter out null results
+          const validResults = resultArray.filter((result) => result !== null);
+
+          resolve({
+            error: null,
+            value: {
+              values: [
+                {
+                  objectId: {
+                    type: type,
+                    instance: instance,
+                  },
+                  values: validResults,
+                },
+              ],
+            },
+          });
+        })
+        .catch(reject);
+    };
+
     return new Promise((resolve, reject) => {
-      // Try to read all properties at once
+      // For Device objects (type 8), skip ALL attempt - many MSTP devices don't support it
+      // Go straight to reading individual properties for better reliability
+      if (type === 8) {
+        readPropertiesIndividually(resolve, reject);
+        return;
+      }
+
+      // For other object types, try to read all properties at once first
       that
         ._readObject(addressObject, type, instance, [{ id: baEnum.PropertyIdentifier.ALL }], readOptions)
         .then((result) => {
@@ -1394,61 +1452,13 @@ class BacnetClient extends EventEmitter {
             resolve(result);
           } else {
             // If not, proceed to read individual properties
-            readPropertiesIndividually();
+            readPropertiesIndividually(resolve, reject);
           }
         })
         .catch(() => {
           // On error, proceed to read individual properties
-          readPropertiesIndividually();
+          readPropertiesIndividually(resolve, reject);
         });
-
-      // Function to read properties individually
-      const readPropertiesIndividually = () => {
-        const promises = allProperties.map(
-          (property, index) =>
-            new Promise((propertyResolve) => {
-              that.client.readProperty(
-                addressObject,
-                { type: type, instance: instance },
-                property.id,
-                readIndividualPropsOptions,
-                (err, value) => {
-                  if (err) {
-                    propertyResolve(null);
-                  } else {
-                    propertyResolve({
-                      id: property.id,
-                      index: value.property.index,
-                      value: value.values,
-                    });
-                  }
-                }
-              );
-            })
-        );
-
-        Promise.all(promises)
-          .then((resultArray) => {
-            // Filter out null results
-            const validResults = resultArray.filter((result) => result !== null);
-
-            resolve({
-              error: null,
-              value: {
-                values: [
-                  {
-                    objectId: {
-                      type: type,
-                      instance: instance,
-                    },
-                    values: validResults,
-                  },
-                ],
-              },
-            });
-          })
-          .catch(reject);
-      };
     });
   }
 
@@ -2102,10 +2112,23 @@ class BacnetClient extends EventEmitter {
                           }
                           break;
                         case baEnum.PropertyIdentifier.VENDOR_NAME:
-                          if (object.value) {
-                            if (object.value[0].value && typeof object.value[0].value == "string") {
-                              values[objectId].vendorName = object.value[0].value;
-                            }
+                          if (object.value && object.value[0] && object.value[0].value && typeof object.value[0].value == "string") {
+                            values[objectId].vendorName = object.value[0].value;
+                          }
+                          break;
+                        case baEnum.PropertyIdentifier.MODEL_NAME:
+                          if (object.value && object.value[0] && object.value[0].value && typeof object.value[0].value == "string") {
+                            values[objectId].modelName = object.value[0].value;
+                          }
+                          break;
+                        case baEnum.PropertyIdentifier.FIRMWARE_REVISION:
+                          if (object.value && object.value[0] && object.value[0].value && typeof object.value[0].value == "string") {
+                            values[objectId].firmwareRevision = object.value[0].value;
+                          }
+                          break;
+                        case baEnum.PropertyIdentifier.APPLICATION_SOFTWARE_VERSION:
+                          if (object.value && object.value[0] && object.value[0].value && typeof object.value[0].value == "string") {
+                            values[objectId].applicationSoftwareVersion = object.value[0].value;
                           }
                           break;
                       }

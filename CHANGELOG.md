@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.6.7] - 15-01-2026
+
+Bug fix: 
+
+- Fix UI tree rendering issue with MSTP folders
+
+Minor update: 
+
+- Styling
+- Added properties to device points and minor change to device point polling
+
 ## [1.6.6] - 20-11-2025
 
 Minor update:

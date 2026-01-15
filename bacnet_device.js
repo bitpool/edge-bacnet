@@ -1,4 +1,31 @@
+const bacnet = require("./resources/node-bacstack-ts/dist/index.js");
+const baEnum = bacnet.enum;
+
+// Device Object (type 8) properties - critical properties guaranteed per ASHRAE 135
+// These are the minimum required properties that all BACnet devices must support
+const DEVICE_OBJECT_PROPERTIES = [
+    { id: baEnum.PropertyIdentifier.OBJECT_IDENTIFIER },
+    { id: baEnum.PropertyIdentifier.OBJECT_NAME },
+    { id: baEnum.PropertyIdentifier.OBJECT_TYPE },
+    { id: baEnum.PropertyIdentifier.SYSTEM_STATUS },
+    { id: baEnum.PropertyIdentifier.VENDOR_NAME },
+    { id: baEnum.PropertyIdentifier.VENDOR_IDENTIFIER },
+    { id: baEnum.PropertyIdentifier.MODEL_NAME },
+    { id: baEnum.PropertyIdentifier.FIRMWARE_REVISION },
+    { id: baEnum.PropertyIdentifier.APPLICATION_SOFTWARE_VERSION },
+    { id: baEnum.PropertyIdentifier.DESCRIPTION },
+];
+
 class BacnetDevice {
+    /**
+     * Returns the standardized list of properties to read for Device objects (type 8).
+     * These are critical properties guaranteed to exist on all BACnet devices per ASHRAE 135.
+     * @returns {Array} Array of property identifier objects
+     */
+    static getDeviceObjectProperties() {
+        return DEVICE_OBJECT_PROPERTIES;
+    }
+
     constructor(fromImport, config) {
         let that = this;
 
