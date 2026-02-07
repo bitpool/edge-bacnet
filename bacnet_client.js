@@ -1944,11 +1944,10 @@ class BacnetClient extends EventEmitter {
       for (const point of pointList) {
         await requestMutex.acquire();
         let result;
+        result = await this._readObjectFull(device, point.value.type, point.value.instance);
+
         if (device.getIsInitialQuery()) {
-          result = await this._readObjectLite(device, point.value.type, point.value.instance);
           device.setIsInitialQuery(false);
-        } else {
-          result = await this._readObjectFull(device, point.value.type, point.value.instance);
         }
 
         if (!result.error) {
