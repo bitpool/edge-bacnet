@@ -1559,10 +1559,14 @@ class BacnetClient extends EventEmitter {
           port: device.getPort(),
         };
 
+        let objectType = point.meta.objectId.type;
+        let resolvedAppTag = that._resolveAppTag(objectType, options.appTag);
+        let resolvedValue = that._coerceWriteValue(value, resolvedAppTag);
+
         let writeObject = {
           address: addressObject,
           objectId: {
-            type: point.meta.objectId.type,
+            type: objectType,
             instance: point.meta.objectId.instance,
           },
           values: {
@@ -1572,8 +1576,8 @@ class BacnetClient extends EventEmitter {
             },
             value: [
               {
-                type: options.appTag,
-                value: value,
+                type: resolvedAppTag,
+                value: resolvedValue,
               },
             ],
           },
@@ -1606,7 +1610,8 @@ class BacnetClient extends EventEmitter {
           point.options,
           (err, value) => {
             if (err) {
-              that.logOut(err);
+              let objType = that.getObjectType(point.objectId.type) || point.objectId.type;
+              that.logOut("writeProperty error for " + objType + ":" + point.objectId.instance + " - ", err);
             }
           }
         );
@@ -2273,6 +2278,40 @@ class BacnetClient extends EventEmitter {
           //Return circle for all other types
           return "pi readPointIcon";
       }
+    }
+  }
+
+  _resolveAppTag(objectType, userAppTag) {
+    // If user explicitly set an app tag (not auto), use it
+    if (userAppTag !== -1) return userAppTag;
+
+    // Auto-detect based on BACnet object type
+    switch (objectType) {
+      case 3:  // BI
+      case 4:  // BO
+      case 5:  // BV
+        return 9; // ENUMERATED
+      case 13: // MI
+      case 14: // MO
+      case 19: // MV
+        return 2; // UNSIGNED_INT
+      default:
+        return 4; // REAL
+    }
+  }
+
+  _coerceWriteValue(value, appTag) {
+    switch (appTag) {
+      case 9: // ENUMERATED - binary objects expect 0 (inactive) or 1 (active)
+        if (value === true || value === 1 || value === "1" ||
+            value === "true" || value === "active" || value === "on") {
+          return 1;
+        }
+        return 0;
+      case 2: // UNSIGNED_INT - multistate objects expect positive integers
+        return parseInt(value) || 0;
+      default:
+        return value;
     }
   }
 
