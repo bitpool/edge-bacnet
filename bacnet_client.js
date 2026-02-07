@@ -36,6 +36,7 @@ class BacnetClient extends EventEmitter {
     that.manualMutex = new Mutex();
     that.pollInProgress = false;
     that.buildJsonInProgress = false;
+    that.cacheLoaded = false;
     that.scanMatrix = [];
     that.renderListCount = 0;
     that.portRangeMatrix = config.portRangeMatrix;
@@ -80,6 +81,8 @@ class BacnetClient extends EventEmitter {
 
         //query device task
         const queryDevices = new Task("simple task", () => {
+          if (!that.cacheLoaded) return;
+
           if (!that.pollInProgress && that.enable_device_discovery) {
             that.queryDevices();
           }
@@ -194,22 +197,26 @@ class BacnetClient extends EventEmitter {
 
   async readCachedFile() {
     let that = this;
-    if (that.config.cacheFileEnabled) {
-      const cachedData = await Read_Config_Async();
-      const parsedData = JSON.parse(cachedData);
-      if (parsedData && typeof parsedData == "object") {
-        // renderList is no longer cached - will be rebuilt by tree builder
-        // if (parsedData.renderList) that.renderList = parsedData.renderList;
-        if (parsedData.deviceList) {
-          parsedData.deviceList.forEach(function (device) {
-            let newBacnetDevice = new BacnetDevice(true, device);
-            that.deviceList.push(newBacnetDevice);
-          });
+    try {
+      if (that.config.cacheFileEnabled) {
+        const cachedData = await Read_Config_Async();
+        const parsedData = JSON.parse(cachedData);
+        if (parsedData && typeof parsedData == "object") {
+          // renderList is no longer cached - will be rebuilt by tree builder
+          // if (parsedData.renderList) that.renderList = parsedData.renderList;
+          if (parsedData.deviceList) {
+            parsedData.deviceList.forEach(function (device) {
+              let newBacnetDevice = new BacnetDevice(true, device);
+              that.deviceList.push(newBacnetDevice);
+            });
+          }
+          if (parsedData.pointList) that.networkTree = parsedData.pointList;
+          // renderListCount is no longer cached - will be recalculated by tree builder
+          // if (parsedData.renderListCount) that.renderListCount = parsedData.renderListCount;
         }
-        if (parsedData.pointList) that.networkTree = parsedData.pointList;
-        // renderListCount is no longer cached - will be recalculated by tree builder
-        // if (parsedData.renderListCount) that.renderListCount = parsedData.renderListCount;
       }
+    } finally {
+      that.cacheLoaded = true;
     }
   }
 
@@ -674,6 +681,8 @@ class BacnetClient extends EventEmitter {
 
       // //query device task
       const queryDevices = new Task("simple task", () => {
+        if (!that.cacheLoaded) return;
+
         if (!that.pollInProgress && that.enable_device_discovery) {
           that.queryDevices();
         }
@@ -1938,7 +1947,7 @@ class BacnetClient extends EventEmitter {
       const promiseArray = [];
 
       if (typeof pointList === "undefined" || pointList.length === 0) {
-        throw new Error("Unable to build network tree, empty point list");
+        return { deviceList: this.deviceList, pointList: this.networkTree };
       }
 
       for (const point of pointList) {
