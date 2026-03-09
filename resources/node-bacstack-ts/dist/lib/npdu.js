@@ -25,7 +25,7 @@ const decodeTarget = (buffer, offset) => {
 const encodeTarget = (buffer, target) => {
     buffer.buffer[buffer.offset++] = (target.net & 0xFF00) >> 8;
     buffer.buffer[buffer.offset++] = (target.net & 0x00FF) >> 0;
-    if (target.net === 0xFFFF || !target.adr) {
+    if (target.net === 0xFFFF || !target.adr || target.adr.length === 0) {
         buffer.buffer[buffer.offset++] = 0;
     }
     else {

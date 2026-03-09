@@ -67,7 +67,8 @@ class BacnetClientConfig {
     cacheFileEnabled,
     sanitise_device_schedule,
     portRangeMatrix,
-    enable_device_discovery
+    enable_device_discovery,
+    maxConcurrentRequests
   ) {
     this.apduTimeout = apduTimeout;
     this.localIpAdrress = localIpAdrress;
@@ -87,6 +88,12 @@ class BacnetClientConfig {
     this.sanitise_device_schedule = sanitise_device_schedule;
     this.portRangeMatrix = this.generatePortRangeArray(portRangeMatrix);
     this.enable_device_discovery = enable_device_discovery;
+    // Clamp maxConcurrentRequests between 1 and 250
+    // BACnet protocol limits invoke IDs to 256, so 250 is the safe maximum
+    let clampedMaxConcurrent = parseInt(maxConcurrentRequests) || 250;
+    if (clampedMaxConcurrent < 1) clampedMaxConcurrent = 1;
+    if (clampedMaxConcurrent > 250) clampedMaxConcurrent = 250;
+    this.maxConcurrentRequests = clampedMaxConcurrent;
   }
 
   generatePortRangeArray(rangeMatrix) {

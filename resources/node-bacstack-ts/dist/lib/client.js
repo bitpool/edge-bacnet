@@ -36,8 +36,13 @@ const BVLC_HEADER_LENGTH = 4;
 class Client extends events_1.EventEmitter {
     constructor(options) {
         super();
-        this._invokeCounter = 1;
         this._invokeStore = {};
+        // Per-device invoke ID counters: keyed by device address string.
+        // BACnet (ASHRAE 135 §5.4) scopes invoke IDs per originator-destination pair,
+        // so each device gets its own independent 0-255 counter rather than sharing one
+        // global counter across all devices, which would exhaust after only 256 total
+        // in-flight requests regardless of how many devices are being polled.
+        this._deviceInvokeCounters = {};
         this._lastSequenceNumber = 0;
         this._segmentStore = [];
         options = options || {};
@@ -50,7 +55,8 @@ class Client extends events_1.EventEmitter {
             interface: options.interface,
             transport: options.transport,
             broadcastAddress: options.broadcastAddress || '255.255.255.255',
-            apduTimeout: options.apduTimeout || 3000
+            apduTimeout: options.apduTimeout || 3000,
+            maxConcurrentRequests: options.maxConcurrentRequests || 250
         };
 
         this._transport = this._settings.transport || new transport_1.Transport({
@@ -66,41 +72,136 @@ class Client extends events_1.EventEmitter {
         this._transport.open();
     }
     // Helper utils
-    _getInvokeId() {
-        // Try up to 256 times to find an unused invoke ID
+    /**
+     * Returns the number of requests currently awaiting responses
+     * @returns {number} Active request count
+     */
+    getActiveRequestCount() {
+        return Object.keys(this._invokeStore).length;
+    }
+    /**
+     * Check if a new request can be sent without risking invoke ID exhaustion
+     * @returns {boolean} True if safe to send a new request
+     */
+    canSendRequest() {
+        return this.getActiveRequestCount() < this._settings.maxConcurrentRequests;
+    }
+    /**
+     * Returns the max concurrent requests setting
+     * @returns {number}
+     */
+    getMaxConcurrentRequests() {
+        return this._settings.maxConcurrentRequests;
+    }
+    /**
+     * Derives a stable, unique string key for a BACnet device from its address.
+     *
+     * BACnet (ASHRAE 135 §5.4) scopes invoke IDs per originator-destination pair.
+     * For IP devices the IP address is the discriminator.
+     * For MSTP devices routed through a BBMD/router, multiple devices share the
+     * same router IP but have distinct network+MAC addresses — those are used as
+     * the key so their invoke ID spaces remain independent.
+     *
+     * @param {string|object} addressOrObject - The address passed to a service method,
+     *   or the addressObject reconstructed from an incoming NPDU.
+     * @returns {string} A stable device key suitable for indexing _deviceInvokeCounters.
+     */
+    _makeDeviceKey(addressOrObject) {
+        if (addressOrObject === null || addressOrObject === undefined) return 'default';
+        // Plain string IP address
+        if (typeof addressOrObject === 'string') return addressOrObject;
+        // Guard against port numbers accidentally being passed as the address
+        if (typeof addressOrObject === 'number') return 'default';
+        if (typeof addressOrObject === 'object') {
+            // MSTP routed device — has net (network number) and adr (MAC address array).
+            // These fields appear both in outgoing address objects and in the sourceAddress
+            // decoded by _handleNpdu from the NPDU header of incoming MSTP responses.
+            if (addressOrObject.net !== undefined && addressOrObject.adr !== undefined) {
+                let adrHex;
+                if (Buffer.isBuffer(addressOrObject.adr)) {
+                    adrHex = addressOrObject.adr.toString('hex');
+                } else if (Array.isArray(addressOrObject.adr)) {
+                    adrHex = Buffer.from(addressOrObject.adr).toString('hex');
+                } else {
+                    adrHex = String(addressOrObject.adr);
+                }
+                return `mstp:${addressOrObject.net}:${adrHex}`;
+            }
+            // Wrapper object like {address: <ip-or-mstp-object>, port: N}
+            if (addressOrObject.address !== undefined) {
+                return this._makeDeviceKey(addressOrObject.address);
+            }
+            // Object from _handleNpdu with an ip field but no net/adr (pure IP)
+            if (addressOrObject.ip !== undefined) {
+                return addressOrObject.ip;
+            }
+        }
+        return String(addressOrObject);
+    }
+    /**
+     * Returns a free invoke ID scoped to the given device key.
+     *
+     * Each device now gets its own independent 0-255 counter, matching the
+     * BACnet spec (ASHRAE 135 §5.4).  Previously a single shared counter meant
+     * exhaustion after only 256 total in-flight requests across ALL devices,
+     * causing the fallback branch to return an already-in-use ID and silently
+     * overwrite the existing callback — the direct source of value mismatches.
+     *
+     * @param {string} deviceKey - Result of _makeDeviceKey() for the target device.
+     * @returns {number} An invoke ID (0-255) not currently in use for that device.
+     */
+    _getInvokeId(deviceKey) {
+        if (!this._deviceInvokeCounters[deviceKey]) {
+            this._deviceInvokeCounters[deviceKey] = 1;
+        }
         for (let attempts = 0; attempts < 256; attempts++) {
-            const id = this._invokeCounter++;
-            if (id >= 256) this._invokeCounter = 1;
-
+            const id = this._deviceInvokeCounters[deviceKey]++;
+            if (id >= 256) this._deviceInvokeCounters[deviceKey] = 1;
             const invokeId = id - 1;
-
-            // If this invoke ID is not currently in use, return it
-            if (!this._invokeStore[invokeId]) {
+            if (!this._invokeStore[`${deviceKey}:${invokeId}`]) {
                 return invokeId;
             }
         }
-
-        // Edge case: if all 256 invoke IDs are in use, fall back to original behavior
-        // This prevents infinite loops while maintaining backwards compatibility
-        const id = this._invokeCounter++;
-        if (id >= 256) this._invokeCounter = 1;
+        // All 256 IDs in use for this device — caller should throttle before this point.
+        // Return the next counter value so at least we don't spin forever; the
+        // _waitForRequestSlot mechanism in bacnet_client.js prevents reaching here
+        // under normal operation.
+        const id = this._deviceInvokeCounters[deviceKey]++;
+        if (id >= 256) this._deviceInvokeCounters[deviceKey] = 1;
+        debug('All 256 invoke IDs exhausted for device', deviceKey, '- reusing ID which may cause value mismatch');
         return id - 1;
     }
-    _invokeCallback(id, err, result) {
-        const callback = this._invokeStore[id];
+    /**
+     * Fires the stored callback for the given device+invokeId pair.
+     * Using a compound key prevents a response from device A triggering the
+     * callback registered for device B when both happen to share the same
+     * numeric invoke ID value.
+     */
+    _invokeCallback(deviceKey, id, err, result) {
+        const storeKey = `${deviceKey}:${id}`;
+        const callback = this._invokeStore[storeKey];
         if (callback)
             return callback(err, result);
-        debug('InvokeId ', id, ' not found -> drop package');
+        debug('InvokeId', id, 'for device', deviceKey, 'not found -> drop package');
     }
-    _addCallback(id, callback) {
+    /**
+     * Registers a callback for the given device+invokeId, with a timeout guard.
+     * The compound store key means callbacks are isolated per device, so a late
+     * response from a slow MSTP device cannot accidentally resolve a callback
+     * that belongs to a different device.
+     */
+    _addCallback(deviceKey, id, callback) {
+        const storeKey = `${deviceKey}:${id}`;
         const timeout = setTimeout(() => {
-            delete this._invokeStore[id];
+            delete this._invokeStore[storeKey];
             callback(new Error('ERR_TIMEOUT'));
+            this.emit('requestComplete', { activeCount: this.getActiveRequestCount(), timedOut: true });
         }, this._settings.apduTimeout);
-        this._invokeStore[id] = (err, data) => {
+        this._invokeStore[storeKey] = (err, data) => {
             clearTimeout(timeout);
-            delete this._invokeStore[id];
+            delete this._invokeStore[storeKey];
             callback(err, data);
+            this.emit('requestComplete', { activeCount: this.getActiveRequestCount(), timedOut: false });
         };
     }
     _getBuffer() {
@@ -110,17 +211,17 @@ class Client extends events_1.EventEmitter {
         };
     }
     // Service Handlers
-    _processError(invokeId, buffer, offset, length) {
+    _processError(deviceKey, invokeId, buffer, offset, length) {
         try {
             const result = baServices.error.decode(buffer, offset);
             if (!result)
                 return debug('Couldn`t decode Error');
-            this._invokeCallback(invokeId, new Error('BacnetError - Class:' + result.class + ' - Code:' + result.code));
+            this._invokeCallback(deviceKey, invokeId, new Error('BacnetError - Class:' + result.class + ' - Code:' + result.code));
         } catch (e) {
         }
     }
-    _processAbort(invokeId, reason) {
-        this._invokeCallback(invokeId, new Error('BacnetAbort - Reason:' + reason));
+    _processAbort(deviceKey, invokeId, reason) {
+        this._invokeCallback(deviceKey, invokeId, new Error('BacnetAbort - Reason:' + reason));
     }
     _segmentAckResponse(receiver, port, negative, server, originalInvokeId, sequencenumber, actualWindowSize) {
         const buffer = this._getBuffer();
@@ -402,6 +503,10 @@ class Client extends events_1.EventEmitter {
 
     _handlePdu(address, type, buffer, offset, length, addressObject, destAddressObject, port) {
         let result;
+        // Derive the device key from the source address.  For MSTP devices routed
+        // through a BBMD the addressObject carries the NPDU source (net + adr) which
+        // uniquely identifies the MSTP node.  For plain IP the IP string is used.
+        const deviceKey = this._makeDeviceKey(addressObject);
         // Handle different PDU types
         switch (type & baEnum.PDU_TYPE_MASK) {
             case baEnum.PduTypes.UNCONFIRMED_REQUEST:
@@ -412,12 +517,12 @@ class Client extends events_1.EventEmitter {
                 result = baApdu.decodeSimpleAck(buffer, offset);
                 offset += result.len;
                 length -= result.len;
-                this._invokeCallback(result.invokeId, null, { result: result, buffer: buffer, offset: offset + result.len, length: length - result.len });
+                this._invokeCallback(deviceKey, result.invokeId, null, { result: result, buffer: buffer, offset: offset + result.len, length: length - result.len });
                 break;
             case baEnum.PduTypes.COMPLEX_ACK:
                 result = baApdu.decodeComplexAck(buffer, offset);
                 if ((type & baEnum.PduConReqBits.SEGMENTED_MESSAGE) === 0) {
-                    this._invokeCallback(result.invokeId, null, { result: result, buffer: buffer, offset: offset + result.len, length: length - result.len });
+                    this._invokeCallback(deviceKey, result.invokeId, null, { result: result, buffer: buffer, offset: offset + result.len, length: length - result.len });
                 } else {
                     this._processSegment(addressObject, result.type, result.service, result.invokeId, baEnum.MaxSegmentsAccepted.SEGMENTS_0, baEnum.MaxApduLengthAccepted.OCTETS_50, false, result.sequencenumber, result.proposedWindowNumber, buffer, offset + result.len, length - result.len, port);
                 }
@@ -429,12 +534,12 @@ class Client extends events_1.EventEmitter {
                 break;
             case baEnum.PduTypes.ERROR:
                 result = baApdu.decodeError(buffer, offset);
-                this._processError(result.invokeId, buffer, offset + result.len, length - result.len);
+                this._processError(deviceKey, result.invokeId, buffer, offset + result.len, length - result.len);
                 break;
             case baEnum.PduTypes.REJECT:
             case baEnum.PduTypes.ABORT:
                 result = baApdu.decodeAbort(buffer, offset);
-                this._processAbort(result.invokeId, result.reason);
+                this._processAbort(deviceKey, result.invokeId, result.reason);
                 break;
             case baEnum.PduTypes.CONFIRMED_REQUEST:
                 result = baApdu.decodeConfirmedServiceRequest(buffer, offset);
@@ -639,11 +744,12 @@ class Client extends events_1.EventEmitter {
 
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
 
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId(),
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey),
             arrayIndex: options.arrayIndex || baEnum.ASN1_ARRAY_ALL
         };
         const buffer = this._getBuffer();
@@ -653,7 +759,7 @@ class Client extends events_1.EventEmitter {
         baServices.readProperty.encode(buffer, objectId.type, objectId.instance, propertyId, settings.arrayIndex);
         baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err, data) => {
+        this._addCallback(deviceKey, settings.invokeId, (err, data) => {
             try {
                 if (err)
                     return next(err);
@@ -699,11 +805,12 @@ class Client extends events_1.EventEmitter {
 
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
 
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId(),
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey),
             arrayIndex: options.arrayIndex || baEnum.ASN1_ARRAY_ALL,
             priority: options.priority
         };
@@ -713,7 +820,7 @@ class Client extends events_1.EventEmitter {
         baServices.writeProperty.encode(buffer, objectId.type, objectId.instance, propertyId, settings.arrayIndex, settings.priority, values);
         baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err) => next(err));
+        this._addCallback(deviceKey, settings.invokeId, (err) => next(err));
     }
     /**
      * The readPropertyMultiple command reads multiple properties in multiple objects from a device.
@@ -746,11 +853,12 @@ class Client extends events_1.EventEmitter {
 
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
 
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address, null, DEFAULT_HOP_COUNT, baEnum.NetworkLayerMessageType.WHO_IS_ROUTER_TO_NETWORK, 0);
@@ -759,7 +867,7 @@ class Client extends events_1.EventEmitter {
         baServices.readPropertyMultiple.encode(buffer, propertiesArray);
         baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err, data) => {
+        this._addCallback(deviceKey, settings.invokeId, (err, data) => {
             try {
                 if (err)
                     return next(err);
@@ -811,11 +919,12 @@ class Client extends events_1.EventEmitter {
 
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
 
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
@@ -823,7 +932,7 @@ class Client extends events_1.EventEmitter {
         baServices.writePropertyMultiple.encodeObject(buffer, values);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err) => next(err));
+        this._addCallback(deviceKey, settings.invokeId, (err) => next(err));
     }
     /**
      * The deviceCommunicationControl command enables or disables network communication of the target device.
@@ -849,10 +958,11 @@ class Client extends events_1.EventEmitter {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId(),
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey),
             password: options.password
         };
         const buffer = this._getBuffer();
@@ -861,7 +971,7 @@ class Client extends events_1.EventEmitter {
         baServices.deviceCommunicationControl.encode(buffer, timeDuration, enableDisable, settings.password);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err) => next(err));
+        this._addCallback(deviceKey, settings.invokeId, (err) => next(err));
     }
     /**
      * The reinitializeDevice command initiates a restart of the target device.
@@ -886,10 +996,11 @@ class Client extends events_1.EventEmitter {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId(),
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey),
             password: options.password
         };
         const buffer = this._getBuffer();
@@ -898,7 +1009,7 @@ class Client extends events_1.EventEmitter {
         baServices.reinitializeDevice.encode(buffer, state, settings.password);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err) => next(err));
+        this._addCallback(deviceKey, settings.invokeId, (err) => next(err));
     }
     /**
      * The writeFile command writes a file buffer to a specific position of a file object.
@@ -926,10 +1037,11 @@ class Client extends events_1.EventEmitter {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
@@ -937,7 +1049,7 @@ class Client extends events_1.EventEmitter {
         baServices.atomicWriteFile.encode(buffer, false, objectId, position, fileBuffer);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err, data) => {
+        this._addCallback(deviceKey, settings.invokeId, (err, data) => {
             if (err)
                 return next(err);
             const result = baServices.atomicWriteFile.decodeAcknowledge(data.buffer, data.offset);
@@ -972,10 +1084,11 @@ class Client extends events_1.EventEmitter {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
@@ -983,7 +1096,7 @@ class Client extends events_1.EventEmitter {
         baServices.atomicReadFile.encode(buffer, true, objectId, position, count);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err, data) => {
+        this._addCallback(deviceKey, settings.invokeId, (err, data) => {
             if (err)
                 return next(err);
             const result = baServices.atomicReadFile.decodeAcknowledge(data.buffer, data.offset);
@@ -1018,10 +1131,11 @@ class Client extends events_1.EventEmitter {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
@@ -1029,7 +1143,7 @@ class Client extends events_1.EventEmitter {
         baServices.readRange.encode(buffer, objectId, baEnum.PropertyIdentifier.LOG_BUFFER, baEnum.ASN1_ARRAY_ALL, baEnum.ReadRangeType.BY_POSITION, idxBegin, new Date(), quantity);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err, data) => {
+        this._addCallback(deviceKey, settings.invokeId, (err, data) => {
             if (err)
                 return next(err);
             const result = baServices.readRange.decodeAcknowledge(data.buffer, data.offset, data.length);
@@ -1066,10 +1180,11 @@ class Client extends events_1.EventEmitter {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
@@ -1077,7 +1192,7 @@ class Client extends events_1.EventEmitter {
         baServices.subscribeCov.encode(buffer, subscribeId, objectId, cancel, issueConfirmedNotifications, lifetime);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err) => next(err));
+        this._addCallback(deviceKey, settings.invokeId, (err) => next(err));
     }
     /**
      * The subscribeProperty command subscribes to a specific property of an object for "Change of Value" notifications.
@@ -1109,10 +1224,11 @@ class Client extends events_1.EventEmitter {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
@@ -1120,16 +1236,17 @@ class Client extends events_1.EventEmitter {
         baServices.subscribeProperty.encode(buffer, subscribeId, objectId, cancel, issueConfirmedNotifications, 0, monitoredProperty, false, 0x0f);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err) => next(err));
+        this._addCallback(deviceKey, settings.invokeId, (err) => next(err));
     }
     createObject(addressObject, objectId, values, options, next) {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
@@ -1137,7 +1254,7 @@ class Client extends events_1.EventEmitter {
         baServices.createObject.encode(buffer, objectId, values);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err) => next(err));
+        this._addCallback(deviceKey, settings.invokeId, (err) => next(err));
     }
     /**
      * The deleteObject command removes an object instance from a target device.
@@ -1163,10 +1280,11 @@ class Client extends events_1.EventEmitter {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
@@ -1174,16 +1292,17 @@ class Client extends events_1.EventEmitter {
         baServices.deleteObject.encode(buffer, objectId);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err) => next(err));
+        this._addCallback(deviceKey, settings.invokeId, (err) => next(err));
     }
     removeListElement(addressObject, objectId, reference, values, options, next) {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
@@ -1191,16 +1310,17 @@ class Client extends events_1.EventEmitter {
         baServices.addListElement.encode(buffer, objectId, reference.id, reference.index, values);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err) => next(err));
+        this._addCallback(deviceKey, settings.invokeId, (err) => next(err));
     }
     addListElement(addressObject, objectId, reference, values, options, next) {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
@@ -1208,7 +1328,7 @@ class Client extends events_1.EventEmitter {
         baServices.addListElement.encode(buffer, objectId, reference.id, reference.index, values);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err) => next(err));
+        this._addCallback(deviceKey, settings.invokeId, (err) => next(err));
     }
     /**
      * DEPRECATED The getAlarmSummary command returns a list of all active alarms on the target device.
@@ -1231,17 +1351,18 @@ class Client extends events_1.EventEmitter {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
         baApdu.encodeConfirmedServiceRequest(buffer, baEnum.PduTypes.CONFIRMED_REQUEST, baEnum.ConfirmedServiceChoice.GET_ALARM_SUMMARY, settings.maxSegments, settings.maxApdu, settings.invokeId, 0, 0);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err, data) => {
+        this._addCallback(deviceKey, settings.invokeId, (err, data) => {
             if (err)
                 return next(err);
             const result = baServices.alarmSummary.decode(data.buffer, data.offset, data.length);
@@ -1274,10 +1395,11 @@ class Client extends events_1.EventEmitter {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
@@ -1285,7 +1407,7 @@ class Client extends events_1.EventEmitter {
         baAsn1.encodeContextObjectId(buffer, 0, objectId.type, objectId.instance);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err, data) => {
+        this._addCallback(deviceKey, settings.invokeId, (err, data) => {
             if (err)
                 return next(err);
             const result = baServices.eventInformation.decode(data.buffer, data.offset, data.length);
@@ -1298,10 +1420,11 @@ class Client extends events_1.EventEmitter {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
@@ -1309,7 +1432,7 @@ class Client extends events_1.EventEmitter {
         baServices.alarmAcknowledge.encode(buffer, 57, objectId, eventState, ackText, evTimeStamp, ackTimeStamp);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err) => next(err));
+        this._addCallback(deviceKey, settings.invokeId, (err) => next(err));
     }
     /**
      * The confirmedPrivateTransfer command invokes a confirmed proprietary/non-standard service.
@@ -1335,10 +1458,11 @@ class Client extends events_1.EventEmitter {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
@@ -1346,7 +1470,7 @@ class Client extends events_1.EventEmitter {
         baServices.privateTransfer.encode(buffer, vendorId, serviceNumber, data);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err) => next(err));
+        this._addCallback(deviceKey, settings.invokeId, (err) => next(err));
     }
     /**
      * The unconfirmedPrivateTransfer command invokes an unconfirmed proprietary/non-standard service.
@@ -1400,10 +1524,11 @@ class Client extends events_1.EventEmitter {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
@@ -1411,7 +1536,7 @@ class Client extends events_1.EventEmitter {
         baServices.getEnrollmentSummary.encode(buffer, acknowledgmentFilter, options.enrollmentFilter, options.eventStateFilter, options.eventTypeFilter, options.priorityFilter, options.notificationClassFilter);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err, data) => {
+        this._addCallback(deviceKey, settings.invokeId, (err, data) => {
             if (err)
                 return next(err);
             const result = baServices.getEnrollmentSummary.decodeAcknowledge(data.buffer, data.offset, data.length);
@@ -1434,10 +1559,11 @@ class Client extends events_1.EventEmitter {
         next = next || options;
         let address = addressObject.address ? addressObject.address : addressObject;
         let port = addressObject.port ? addressObject.port : this._settings.port;
+        const deviceKey = this._makeDeviceKey(addressObject);
         const settings = {
             maxSegments: options.maxSegments || baEnum.MaxSegmentsAccepted.SEGMENTS_65,
             maxApdu: options.maxApdu || baEnum.MaxApduLengthAccepted.OCTETS_1476,
-            invokeId: options.invokeId || this._getInvokeId()
+            invokeId: (options.invokeId !== undefined && options.invokeId !== null) ? options.invokeId : this._getInvokeId(deviceKey)
         };
         const buffer = this._getBuffer();
         baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE | baEnum.NpduControlBits.EXPECTING_REPLY, address);
@@ -1445,7 +1571,7 @@ class Client extends events_1.EventEmitter {
         baServices.eventNotifyData.encode(buffer, eventNotification);
         //baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_UNICAST_NPDU, buffer.offset);
         this.sendBvlc(address, port, buffer);
-        this._addCallback(settings.invokeId, (err) => next(err));
+        this._addCallback(deviceKey, settings.invokeId, (err) => next(err));
     }
     // Public Device Functions
     readPropertyResponse(receiver, invokeId, objectId, property, value) {

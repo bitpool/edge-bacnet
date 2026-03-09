@@ -38,6 +38,7 @@ module.exports = function (RED) {
     this.cacheFileEnabled = config.cacheFileEnabled;
     this.sanitise_device_schedule = config.sanitise_device_schedule;
     this.enable_device_discovery = config.enable_device_discovery;
+    this.maxConcurrentRequests = config.maxConcurrentRequests;
 
     //client and config store
     this.bacnetConfig = nodeContext.get("bacnetConfig");
@@ -67,7 +68,8 @@ module.exports = function (RED) {
         node.cacheFileEnabled,
         node.sanitise_device_schedule,
         node.portRangeRegisters.filter((ele) => ele.enabled === true),
-        node.enable_device_discovery
+        node.enable_device_discovery,
+        node.maxConcurrentRequests
       );
 
       if (typeof node.bacnetClient !== "undefined") {

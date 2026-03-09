@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.6.8] - 10-03-2026
+
+Bug fix: 
+
+- Spiking values. Large polling sites were experiencing intermittent spiking values, due to a overloaded invokeId stack. This stack has been refactored to be per device, instead of global. 
+
+- Fixed byteLength errors
+
+- Merged github PR's 36 and 37:
+  - Fix startup error spam: empty point list during initialization
+  - Fix boolean write failures with auto application tag detection
+
+Minor update: 
+
+- Added concurrency management. Max Concurrent Requests option in the gateway node, which throttles how many concurrent requests can be made at any given point.  
+
 ## [1.6.7] - 15-01-2026
 
 Bug fix: 

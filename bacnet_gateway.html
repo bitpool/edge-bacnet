@@ -165,6 +165,7 @@
       local_device_address: { value: "", required: true },
       local_interface_name: { value: "", required: false },
       apduTimeout: { value: 6000 },
+      maxConcurrentRequests: { value: 250 },
       roundDecimal: { value: 2 },
       local_device_port: { value: 47808, required: true },
       apduSize: { value: "5", required: true },
@@ -837,6 +838,13 @@
     oneditsave: function () {
       let node = this;
 
+      // Validate and clamp maxConcurrentRequests (1-250)
+      // BACnet protocol limits invoke IDs to 256, so 250 is the safe max
+      let maxConcurrent = parseInt(document.getElementById("node-input-maxConcurrentRequests").value) || 250;
+      if (maxConcurrent < 1) maxConcurrent = 1;
+      if (maxConcurrent > 250) maxConcurrent = 250;
+      document.getElementById("node-input-maxConcurrentRequests").value = maxConcurrent;
+
       document.getElementById("node-input-discover_polling_schedule").value = getTimePeriodInSeconds(
         document.getElementById("node-input-discover_polling_schedule_value").value,
         document.getElementById("node-input-discover_polling_schedule_options").value
@@ -1090,6 +1098,13 @@
         <input type="text" id="node-input-apduTimeout" placeholder="10000" />
       </div>
 
+      <div class="form-row bp-row">
+        <label for="node-input-maxConcurrentRequests"
+          ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.maxConcurrentRequests"></span>Max Concurrent Requests</label
+        >
+        <input type="number" id="node-input-maxConcurrentRequests" placeholder="250" min="1" max="250" />
+      </div>
+
       <div class="form-row bp-row" style="display: none;">
         <label for="node-input-apduSize"
           ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.apduSize"></span>Max Apdu Size</label
@@ -1310,6 +1325,7 @@
   <h3><strong>Discovery Tab</strong></h3>
   <ul class="node-ports">
     <li>APDU Timeout - BACnet msg timeout option</li>
+    <li>Max Concurrent Requests - Maximum number of simultaneous BACnet requests (1-250). Lower values reduce invoke ID exhaustion on large MSTP networks. Default: 250</li>
     <li>Max APDU Size - BACnet max apdu size</li>
     <li>Max Segments - BACnet max segments</li>
     <li>
@@ -1339,6 +1355,72 @@
   <ul class="node-ports">
     <li>Enabled - toggles whether or not the local BACnet server is started or not.</li>
     <li>Clear Server Points - a schedule for the locally generated BACnet points to get cleared from the node object store</li>
+  </ul>
+
+  <h3><strong>Performance Tuning &amp; Throttling</strong></h3>
+  <p>
+    For large BACnet networks, especially those with many MS/TP devices, proper tuning is essential to prevent 
+    communication issues like value spiking, timeouts, and data corruption.
+  </p>
+
+  <h4>Understanding the BACnet Invoke ID Limit</h4>
+  <p>
+    The BACnet protocol uses an 8-bit "invoke ID" to match requests with responses. This limits the number of 
+    simultaneous outstanding requests to <strong>256</strong>. When polling many devices/points rapidly, this 
+    limit can be exhausted, causing responses to be matched with the wrong requests (value spiking).
+  </p>
+
+  <h4>Key Settings for Large Networks</h4>
+  <table style="width:100%; border-collapse: collapse; margin: 10px 0;">
+    <tr style="background-color: #f0f0f0;">
+      <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Setting</th>
+      <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Recommended</th>
+      <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Description</th>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ddd; padding: 8px;"><strong>Max Concurrent Requests</strong></td>
+      <td style="border: 1px solid #ddd; padding: 8px;">64-100 (MSTP)<br>150-200 (IP only)</td>
+      <td style="border: 1px solid #ddd; padding: 8px;">Limits simultaneous in-flight requests. Lower for slow MSTP networks.</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ddd; padding: 8px;"><strong>APDU Timeout</strong></td>
+      <td style="border: 1px solid #ddd; padding: 8px;">8000-15000ms (MSTP)<br>3000-6000ms (IP only)</td>
+      <td style="border: 1px solid #ddd; padding: 8px;">How long to wait for a response. MSTP token-passing adds latency.</td>
+    </tr>
+  </table>
+
+  <h4>Tuning Guidelines by Network Type</h4>
+  <ul class="node-ports">
+    <li>
+      <strong>BACnet/IP Only (few devices):</strong> Default settings usually work. Max Concurrent: 200-250, Timeout: 3000-6000ms
+    </li>
+    <li>
+      <strong>BACnet/IP with MS/TP routers (moderate):</strong> Max Concurrent: 100-150, Timeout: 6000-10000ms
+    </li>
+    <li>
+      <strong>Large MS/TP Networks (100+ devices):</strong> Max Concurrent: 64-100, Timeout: 10000-15000ms
+    </li>
+    <li>
+      <strong>Very Large Networks (500+ devices):</strong> Max Concurrent: 50-75, Timeout: 12000-20000ms. 
+      Consider segmenting polling across multiple read nodes with staggered schedules.
+    </li>
+  </ul>
+
+  <h4>Symptoms of Poor Tuning</h4>
+  <ul class="node-ports">
+    <li><strong>Value Spiking:</strong> Random incorrect values appearing briefly → Lower Max Concurrent Requests</li>
+    <li><strong>Many Timeouts:</strong> Points frequently showing offline → Increase APDU Timeout</li>
+    <li><strong>Slow Discovery:</strong> Devices/points taking too long to appear → May need higher Max Concurrent (if not MSTP-bound)</li>
+    <li><strong>Network Congestion:</strong> Other BACnet traffic affected → Lower Max Concurrent Requests and increase polling intervals</li>
+  </ul>
+
+  <h4>Best Practices</h4>
+  <ul class="node-ports">
+    <li>Start with conservative settings (lower Max Concurrent, higher Timeout) and tune up gradually</li>
+    <li>For MS/TP networks, remember that token-passing adds 50-200ms latency per device hop</li>
+    <li>Use longer polling intervals (5-15 minutes) for stable values; shorter (30s-1min) for critical points only</li>
+    <li>Monitor for timeout errors in the console (enable "Log BACnet Errors to Console")</li>
+    <li>If experiencing issues, reduce Max Concurrent Requests by 25% and test again</li>
   </ul>
 
   <h3><strong>Examples</strong></h3>

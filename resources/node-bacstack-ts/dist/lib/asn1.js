@@ -73,7 +73,7 @@ const encodeBacnetDouble = (buffer, value) => {
 };
 const decodeUnsigned = (buffer, offset, length) => ({
     len: length,
-    value: buffer.readUIntBE(offset, length)
+    value: length === 0 ? 0 : buffer.readUIntBE(offset, length)
 });
 exports.decodeUnsigned = decodeUnsigned;
 const decodeEnumerated = (buffer, offset, lenValue) => {
@@ -815,7 +815,7 @@ const decodeReadAccessResult = (buffer, offset, apduLen) => {
 exports.decodeReadAccessResult = decodeReadAccessResult;
 const decodeSigned = (buffer, offset, length) => ({
     len: length,
-    value: buffer.readIntBE(offset, length)
+    value: length === 0 ? 0 : buffer.readIntBE(offset, length)
 });
 exports.decodeSigned = decodeSigned;
 const decodeReal = (buffer, offset) => ({

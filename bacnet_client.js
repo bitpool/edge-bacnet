@@ -36,9 +36,13 @@ class BacnetClient extends EventEmitter {
     that.manualMutex = new Mutex();
     that.pollInProgress = false;
     that.buildJsonInProgress = false;
+    that.cacheLoaded = false;
     that.scanMatrix = [];
     that.renderListCount = 0;
     that.portRangeMatrix = config.portRangeMatrix;
+    that._requestQueue = [];           // Queue of waiting request resolvers
+    that._processingQueue = false;     // Flag to prevent concurrent queue processing
+    that._maxQueueSize = 10000;        // Maximum queued requests before rejecting (sized for large sites)
 
     try {
       that.roundDecimal = config.roundDecimal;
@@ -67,6 +71,7 @@ class BacnetClient extends EventEmitter {
           port: config.port,
           broadcastAddress: config.broadCastAddr,
           portRangeMatrix: config.portRangeMatrix,
+          maxConcurrentRequests: config.maxConcurrentRequests,
         });
         that.setMaxListeners(1);
 
@@ -80,6 +85,8 @@ class BacnetClient extends EventEmitter {
 
         //query device task
         const queryDevices = new Task("simple task", () => {
+          if (!that.cacheLoaded) return;
+
           if (!that.pollInProgress && that.enable_device_discovery) {
             that.queryDevices();
           }
@@ -192,24 +199,83 @@ class BacnetClient extends EventEmitter {
     }
   }
 
+  /**
+   * Waits until a request slot is available (throttling).
+   * Uses a queue to ensure only one waiter proceeds per available slot.
+   * Rejects if the queue is full (backpressure mechanism).
+   *
+   * The previous implementation used a `while` loop inside `processQueue` which
+   * called `nextResolve()` multiple times synchronously.  Because Promise
+   * resolutions are scheduled as microtasks, none of those continuations ran
+   * before the next `canSendRequest()` check — so the while-loop could release
+   * dozens of waiters simultaneously even when only one slot was free.  The fix
+   * is to release exactly ONE waiter per `requestComplete` event, letting the
+   * microtask queue drain before the next slot check.
+   */
+  _waitForRequestSlot() {
+    let that = this;
+    return new Promise((resolve, reject) => {
+      // Fast path: a slot is available right now
+      if (that.client.canSendRequest()) {
+        resolve();
+        return;
+      }
+
+      // Backpressure: refuse to queue more work than the limit allows
+      if (that._requestQueue.length >= that._maxQueueSize) {
+        reject(new Error('ERR_REQUEST_QUEUE_FULL: Too many pending requests. Reduce polling frequency or increase Max Concurrent Requests.'));
+        return;
+      }
+
+      // Park this request until a slot opens
+      that._requestQueue.push(resolve);
+
+      if (!that._processingQueue) {
+        that._processingQueue = true;
+
+        const processQueue = () => {
+          // Release exactly ONE waiter per call.  The 'requestComplete' event
+          // fires each time a slot is freed, so we will naturally be called
+          // again once the released request registers its own callback in the
+          // invoke store and eventually completes.
+          if (that._requestQueue.length > 0 && that.client.canSendRequest()) {
+            const nextResolve = that._requestQueue.shift();
+            nextResolve();
+          }
+
+          if (that._requestQueue.length === 0) {
+            that._processingQueue = false;
+            that.client.removeListener('requestComplete', processQueue);
+          }
+        };
+
+        that.client.on('requestComplete', processQueue);
+      }
+    });
+  }
+
   async readCachedFile() {
     let that = this;
-    if (that.config.cacheFileEnabled) {
-      const cachedData = await Read_Config_Async();
-      const parsedData = JSON.parse(cachedData);
-      if (parsedData && typeof parsedData == "object") {
-        // renderList is no longer cached - will be rebuilt by tree builder
-        // if (parsedData.renderList) that.renderList = parsedData.renderList;
-        if (parsedData.deviceList) {
-          parsedData.deviceList.forEach(function (device) {
-            let newBacnetDevice = new BacnetDevice(true, device);
-            that.deviceList.push(newBacnetDevice);
-          });
+    try {
+      if (that.config.cacheFileEnabled) {
+        const cachedData = await Read_Config_Async();
+        const parsedData = JSON.parse(cachedData);
+        if (parsedData && typeof parsedData == "object") {
+          // renderList is no longer cached - will be rebuilt by tree builder
+          // if (parsedData.renderList) that.renderList = parsedData.renderList;
+          if (parsedData.deviceList) {
+            parsedData.deviceList.forEach(function (device) {
+              let newBacnetDevice = new BacnetDevice(true, device);
+              that.deviceList.push(newBacnetDevice);
+            });
+          }
+          if (parsedData.pointList) that.networkTree = parsedData.pointList;
+          // renderListCount is no longer cached - will be recalculated by tree builder
+          // if (parsedData.renderListCount) that.renderListCount = parsedData.renderListCount;
         }
-        if (parsedData.pointList) that.networkTree = parsedData.pointList;
-        // renderListCount is no longer cached - will be recalculated by tree builder
-        // if (parsedData.renderListCount) that.renderListCount = parsedData.renderListCount;
       }
+    } finally {
+      that.cacheLoaded = true;
     }
   }
 
@@ -331,7 +397,7 @@ class BacnetClient extends EventEmitter {
     }
   }
 
-  getProtocolSupported(device) {
+  async getProtocolSupported(device) {
     //return protocols support for device
     let that = this;
     let addressObject = {
@@ -339,6 +405,10 @@ class BacnetClient extends EventEmitter {
       port: device.getPort(),
     };
     const readOptions = that.getDeviceSpecificOptions(device);
+
+    // Wait for a request slot before proceeding
+    await that._waitForRequestSlot();
+
     return new Promise((resolve, reject) => {
       that.client.readProperty(
         addressObject,
@@ -674,6 +744,8 @@ class BacnetClient extends EventEmitter {
 
       // //query device task
       const queryDevices = new Task("simple task", () => {
+        if (!that.cacheLoaded) return;
+
         if (!that.pollInProgress && that.enable_device_discovery) {
           that.queryDevices();
         }
@@ -1046,7 +1118,7 @@ class BacnetClient extends EventEmitter {
   }
 
   //used in the doRead querying work flow
-  updatePoint(device, point) {
+  async updatePoint(device, point) {
     let that = this;
     let addressObject = {
       address: device.getAddress(),
@@ -1055,6 +1127,9 @@ class BacnetClient extends EventEmitter {
 
     // Use device-specific options
     const settings = that.getDeviceSpecificOptions(device);
+
+    // Wait for a request slot before proceeding
+    await that._waitForRequestSlot();
 
     return new Promise((resolve, reject) => {
       that.client.readProperty(
@@ -1226,12 +1301,15 @@ class BacnetClient extends EventEmitter {
 
       send(index);
 
-      function send(index) {
+      async function send(index) {
         let readOptions = {
           maxSegments: that.readPropertyMultipleOptions.maxSegments,
           maxApdu: that.readPropertyMultipleOptions.maxApdu,
           arrayIndex: index,
         };
+
+        // Wait for a request slot before proceeding
+        await that._waitForRequestSlot();
 
         that.client.readProperty(
           addressObject,
@@ -1254,12 +1332,16 @@ class BacnetClient extends EventEmitter {
     });
   }
 
-  _readObjectWithRequestArray(device, requestArray, readOptions) {
+  async _readObjectWithRequestArray(device, requestArray, readOptions) {
     let that = this;
     let addressObject = {
       address: device.getAddress(),
       port: device.getPort(),
     };
+
+    // Wait for a request slot before proceeding
+    await that._waitForRequestSlot();
+
     return new Promise((resolve, reject) => {
       that.client.readPropertyMultiple(addressObject, requestArray, readOptions, (error, value) => {
         if (value && value.values) {
@@ -1335,8 +1417,12 @@ class BacnetClient extends EventEmitter {
     }
   }
 
-  _readObject(addressObject, type, instance, properties, readOptions) {
+  async _readObject(addressObject, type, instance, properties, readOptions) {
     let that = this;
+
+    // Wait for a request slot before proceeding
+    await that._waitForRequestSlot();
+
     return new Promise((resolve, reject) => {
       const requestArray = [
         {
@@ -1559,10 +1645,14 @@ class BacnetClient extends EventEmitter {
           port: device.getPort(),
         };
 
+        let objectType = point.meta.objectId.type;
+        let resolvedAppTag = that._resolveAppTag(objectType, options.appTag);
+        let resolvedValue = that._coerceWriteValue(value, resolvedAppTag);
+
         let writeObject = {
           address: addressObject,
           objectId: {
-            type: point.meta.objectId.type,
+            type: objectType,
             instance: point.meta.objectId.instance,
           },
           values: {
@@ -1572,8 +1662,8 @@ class BacnetClient extends EventEmitter {
             },
             value: [
               {
-                type: options.appTag,
-                value: value,
+                type: resolvedAppTag,
+                value: resolvedValue,
               },
             ],
           },
@@ -1606,7 +1696,8 @@ class BacnetClient extends EventEmitter {
           point.options,
           (err, value) => {
             if (err) {
-              that.logOut(err);
+              let objType = that.getObjectType(point.objectId.type) || point.objectId.type;
+              that.logOut("writeProperty error for " + objType + ":" + point.objectId.instance + " - ", err);
             }
           }
         );
@@ -1938,7 +2029,7 @@ class BacnetClient extends EventEmitter {
       const promiseArray = [];
 
       if (typeof pointList === "undefined" || pointList.length === 0) {
-        throw new Error("Unable to build network tree, empty point list");
+        return { deviceList: this.deviceList, pointList: this.networkTree };
       }
 
       for (const point of pointList) {
@@ -2273,6 +2364,40 @@ class BacnetClient extends EventEmitter {
           //Return circle for all other types
           return "pi readPointIcon";
       }
+    }
+  }
+
+  _resolveAppTag(objectType, userAppTag) {
+    // If user explicitly set an app tag (not auto), use it
+    if (userAppTag !== -1) return userAppTag;
+
+    // Auto-detect based on BACnet object type
+    switch (objectType) {
+      case 3: // BI
+      case 4: // BO
+      case 5: // BV
+        return 9; // ENUMERATED
+      case 13: // MI
+      case 14: // MO
+      case 19: // MV
+        return 2; // UNSIGNED_INT
+      default:
+        return 4; // REAL
+    }
+  }
+
+  _coerceWriteValue(value, appTag) {
+    switch (appTag) {
+      case 9: // ENUMERATED - binary objects expect 0 (inactive) or 1 (active)
+        if (value === true || value === 1 || value === "1" ||
+            value === "true" || value === "active" || value === "on") {
+          return 1;
+        }
+        return 0;
+      case 2: // UNSIGNED_INT - multistate objects expect positive integers
+        return parseInt(value) || 0;
+      default:
+        return value;
     }
   }
 

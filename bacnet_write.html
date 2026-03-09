@@ -8,7 +8,7 @@
     color: "#00aeef",
     defaults: {
       name: { value: "" },
-      applicationTag: { value: "4" },
+      applicationTag: { value: "-1" },
       priority: { value: "16" },
       pointsToWrite: { value: [] },
       writeDevices: { value: [] },
@@ -943,6 +943,7 @@
           ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.applicationTag"></span> Application Tag</label
         >
         <select id="node-input-applicationTag">
+          <option value="-1">AUTO</option>
           <option value="0">NULL</option>
           <option value="1">BOOLEAN</option>
           <option value="2">UNSIGNED_INT</option>
