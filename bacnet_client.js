@@ -1648,6 +1648,7 @@ class BacnetClient extends EventEmitter {
         let objectType = point.meta.objectId.type;
         let resolvedAppTag = that._resolveAppTag(objectType, options.appTag);
         let resolvedValue = that._coerceWriteValue(value, resolvedAppTag);
+        let resolvedPropertyId = that._resolveWritePropertyId(point.propertyId);
 
         let writeObject = {
           address: addressObject,
@@ -1657,7 +1658,7 @@ class BacnetClient extends EventEmitter {
           },
           values: {
             property: {
-              id: 85,
+              id: resolvedPropertyId,
               index: point.meta.arrayIndex,
             },
             value: [
@@ -1691,7 +1692,7 @@ class BacnetClient extends EventEmitter {
         that.client.writeProperty(
           point.address,
           point.objectId,
-          baEnum.PropertyIdentifier.PRESENT_VALUE,
+          point.values.property.id,
           point.values.value,
           point.options,
           (err, value) => {
@@ -2384,6 +2385,62 @@ class BacnetClient extends EventEmitter {
       default:
         return 4; // REAL
     }
+  }
+
+  _resolveWritePropertyId(propertyId) {
+
+    // Default to Present_Value to preserve existing behavior when no property is supplied.
+    if (propertyId === null || typeof propertyId === "undefined") {
+      return baEnum.PropertyIdentifier.PRESENT_VALUE;
+    }
+
+    // Allow raw numeric BACnet property identifiers.
+    if (typeof propertyId === "number" && Number.isInteger(propertyId)) {
+      return propertyId;
+    }
+
+    if (typeof propertyId === "string") {
+      const trimmed = propertyId.trim();
+      const upper = trimmed.toUpperCase();
+
+      // First try a direct enum lookup using the uppercase string exactly as given.
+      // Example: "present_value" -> "PRESENT_VALUE"
+      const exactResolvedPropertyId = baEnum.PropertyIdentifier[upper];
+      if (typeof exactResolvedPropertyId === "number") {
+        return exactResolvedPropertyId;
+      }
+
+      // Final fallback: compare without separators so camelCase/PascalCase can still match
+      // BACnet enum names that use underscores.
+      // Example:
+      //   user input "presentValue" -> "PRESENTVALUE"
+      //   enum key   "PRESENT_VALUE" -> "PRESENTVALUE"
+      //
+      const underscored = upper.replace(/[\s-]+/g, "_");
+      const underscoredResolvedPropertyId = baEnum.PropertyIdentifier[underscored];
+      if (typeof underscoredResolvedPropertyId === "number") {
+        return underscoredResolvedPropertyId;
+      }
+
+      // Separator-insensitiver fallback:  PresentValue -> PRESENT_VALUE
+      // This strips off separators in both the user input and the enum key
+      // to try to find a match
+      const compact = upper.replace(/[\s_-]+/g, "");
+
+      // The key should already be in uppercase but just in case, let's force it.
+      // This protects against somebody doing something different in the future.
+      const matchedKey = Object.keys(baEnum.PropertyIdentifier).find(
+          (key) => key.toUpperCase().replace(/_/g, "") === compact
+      );
+
+      if (matchedKey) {
+        return baEnum.PropertyIdentifier[matchedKey];
+      }
+
+      throw new Error(`Invalid BACnet property name: ${propertyId}`);
+    }
+
+    throw new Error(`Invalid BACnet property id type: ${typeof propertyId}`);
   }
 
   _coerceWriteValue(value, appTag) {
