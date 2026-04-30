@@ -19,4 +19,9 @@ COPY --chown=node-red:node-red tests/integration/flows.json /data/flows.json
 # correctly at runtime. Don't change WORKDIR — the base image's entrypoint
 # (./entrypoint.sh) is relative to /usr/src/node-red.
 USER node-red
-RUN cd /data && npm install --no-audit --no-fund /tmp/edge-bacnet
+# --install-links forces npm to TAR + COPY the local package (and resolve its
+# runtime deps into /data/node_modules) instead of symlinking to /tmp/edge-bacnet.
+# Without this, Node-RED loads edge-bacnet from /tmp via the symlink, looks for
+# toad-scheduler etc. relative to /tmp/edge-bacnet/node_modules (which doesn't
+# exist), and fails to register the palette.
+RUN cd /data && npm install --no-audit --no-fund --install-links /tmp/edge-bacnet
