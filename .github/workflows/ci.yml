@@ -39,68 +39,91 @@ jobs:
         run: npm run test:unit
 
   integration:
-    name: BACnet readProperty against bacnet-sim-ci
+    name: Node-RED + edge-bacnet vs bacnet-sim-ci
     runs-on: ubuntu-latest
     needs: smoke
-    # NOTE: Marked continue-on-error while the BACnet/Docker UDP path is
-    # debugged. The sim starts cleanly and binds to its container IP
-    # (verified in logs: "Using ip : 172.17.0.X/24 on port 47808"), the test
-    # client reaches the sim's REST API and discovers the device, but the
-    # readProperty UDP round-trip times out across the docker-bridge boundary
-    # in three different topologies tried on this branch (services+host,
-    # services+container, docker-run+host). Needs hands-on packet-capture
-    # debugging in a runner shell — left wired up so it can be made green
-    # incrementally without re-architecting the workflow.
-    continue-on-error: true
+    # Pattern from rise-building-technology/bacnet-sim-ci-test: a custom Docker
+    # network with explicit container IPs for both sim and client. Both run as
+    # peers on the same /24 — no docker-proxy NAT, no runner-host bridge IP
+    # confusion. The earlier services:/host-runner/docker-run-on-host topologies
+    # all lost the BACnet UDP response packet across the docker-bridge boundary.
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
+      - name: Create test network (172.20.0.0/24)
+        run: docker network create --subnet=172.20.0.0/24 bacnet-test-net
 
-      - run: npm ci
-
-      # Start the sim with `docker run` directly (mirrors the steps in the
-      # rise-building-technology/bacnet-sim-ci action, but avoids depending
-      # on a third-party action that may be restricted by org policy).
-      - name: Start BACnet simulator
+      - name: Pull and start bacnet-sim
         run: |
           set -e
           docker pull ghcr.io/rise-building-technology/bacnet-sim-ci:latest
           docker run -d \
             --name bacnet-sim \
+            --network bacnet-test-net \
+            --ip 172.20.0.10 \
             --cap-add=NET_ADMIN \
-            -p 47808:47808/udp \
-            -p 8099:8099 \
             -e BACNET_DEVICE_ID=1001 \
             -e BACNET_DEVICE_NAME=TestDevice \
-            -e NETWORK_PROFILE=local-network \
             ghcr.io/rise-building-technology/bacnet-sim-ci:latest
           for i in $(seq 1 60); do
-            if curl -sf http://localhost:8099/health/ready >/dev/null 2>&1; then
-              echo "sim ready"; break
+            if docker exec bacnet-sim curl -sf http://localhost:8099/health/ready >/dev/null 2>&1; then
+              echo "sim ready (${i}s)"
+              docker exec bacnet-sim curl -s http://localhost:8099/api/devices
+              break
             fi
             if [ "$i" -eq 60 ]; then
-              echo "ERROR: sim failed to start within 60s"; docker logs bacnet-sim; exit 1
+              echo "ERROR: sim never became ready"
+              docker logs bacnet-sim
+              exit 1
             fi
             sleep 1
           done
 
-      - name: Confirm sim devices are visible
-        run: curl -s http://localhost:8099/api/devices | python3 -m json.tool
+      - name: Build Node-RED + edge-bacnet image
+        run: docker build -f tests/integration/Dockerfile -t nodered-edgebacnet:test .
 
-      # Port 47808 on the runner host is bound to docker-proxy by the sim's
-      # port mapping, so the test client binds to 47809 instead. The sim
-      # accepts requests from any source port.
-      - name: Run integration test
-        env:
-          SIM_API_URL: http://localhost:8099
-          SIM_BACNET_PORT: "47808"
-          LOCAL_BACNET_PORT: "47809"
-        run: npm run test:integration
+      - name: Start Node-RED
+        run: |
+          docker run -d \
+            --name nodered \
+            --network bacnet-test-net \
+            --ip 172.20.0.20 \
+            nodered-edgebacnet:test
 
-      - name: Sim logs (on failure)
+      # The pre-loaded flow has a Bacnet-Gateway with discover_polling_schedule=5s
+      # and toLogIam=true. After Node-RED finishes booting and the gateway issues
+      # its first Who-Is, the sim should respond with I-Am for device 1001 and
+      # the gateway will log "BACnet device found: 1001 - 172.20.0.10".
+      - name: Wait for edge-bacnet to discover the sim (device 1001)
+        run: |
+          set -e
+          for i in $(seq 1 90); do
+            if docker logs nodered 2>&1 | grep -q "BACnet device found: 1001"; then
+              echo "==> Discovery succeeded after ${i}s"
+              docker logs nodered 2>&1 | grep "BACnet device found" | head -5
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "==> ERROR: Did not see 'BACnet device found: 1001' in node-red logs after 90s"
+          echo "--- node-red logs ---"
+          docker logs nodered
+          echo "--- bacnet-sim logs ---"
+          docker logs bacnet-sim
+          exit 1
+
+      - name: Diagnostics on failure
         if: failure()
-        run: docker logs bacnet-sim 2>&1 | tail -200 || true
+        run: |
+          echo "=== docker ps ==="
+          docker ps -a
+          echo "=== node-red logs ==="
+          docker logs nodered 2>&1 | tail -200 || true
+          echo "=== bacnet-sim logs ==="
+          docker logs bacnet-sim 2>&1 | tail -200 || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f nodered bacnet-sim 2>/dev/null || true
+          docker network rm bacnet-test-net 2>/dev/null || true
