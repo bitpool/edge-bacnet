@@ -127,8 +127,8 @@ function readProperty(client, address, port, objectId, propertyId) {
 
     // REST and BACnet should agree on the current PRESENT_VALUE. Allow a small
     // float epsilon for the round-trip through ApplicationTags.REAL.
-    const drift = Math.abs(bacnetValue - expectedRest.value);
-    ok(`BACnet value matches REST (BACnet=${bacnetValue}, REST=${expectedRest.value}, drift=${drift})`,
+    const drift = Math.abs(bacnetValue - expectedValue);
+    ok(`BACnet value matches REST (BACnet=${bacnetValue}, REST=${expectedValue}, drift=${drift})`,
        drift < 0.01);
   } finally {
     try { client.close && client.close(); } catch (_) { /* best effort */ }

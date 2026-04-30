@@ -41,12 +41,17 @@ jobs:
   integration:
     name: BACnet readProperty against bacnet-sim-ci
     runs-on: ubuntu-latest
+    # Run the job inside a container so it joins the same Docker network as
+    # the sim service. This is required for BACnet/IP UDP to reach the sim
+    # reliably — see https://github.com/Rise-Building-Technology/bacnet-sim-ci
+    # ("Test client must be on the same Docker network"). With this, the sim
+    # is reachable by service hostname (`bacnet-sim`) and BACnet UDP traffic
+    # routes directly across the bridge instead of through docker-proxy.
+    container:
+      image: node:20-bookworm
     services:
       bacnet-sim:
         image: ghcr.io/rise-building-technology/bacnet-sim-ci:latest
-        ports:
-          - 47808:47808/udp
-          - 8099:8099
         options: >-
           --cap-add=NET_ADMIN
           --health-cmd "curl -f http://localhost:8099/health/ready || exit 1"
@@ -54,24 +59,21 @@ jobs:
           --health-timeout 3s
           --health-retries 12
           --health-start-period 15s
+    env:
+      SIM_API_URL: http://bacnet-sim:8099
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
 
       - run: npm ci
 
       # The integration test handles its own readiness polling, but a quick
       # explicit check here surfaces sim-startup failures with clearer logs
       # before the test runs.
-      - name: Confirm sim is reachable from the runner
+      - name: Confirm sim is reachable
         run: |
           set -e
           for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
-            if curl -sf http://localhost:8099/health/ready; then
+            if curl -sf "${SIM_API_URL}/health/ready"; then
               echo "sim ready"
               exit 0
             fi
@@ -79,11 +81,7 @@ jobs:
             sleep 3
           done
           echo "sim never became ready; dumping device list attempt:"
-          curl -v http://localhost:8099/api/devices || true
+          curl -v "${SIM_API_URL}/api/devices" || true
           exit 1
 
       - run: npm run test:integration
-
-      - name: Sim logs (on failure)
-        if: failure()
-        run: docker ps -a && docker logs "$(docker ps -aq --filter ancestor=ghcr.io/rise-building-technology/bacnet-sim-ci:latest | head -1)" 2>&1 | tail -200
