@@ -31,7 +31,11 @@ const baEnum = bacnet.enum;
 
 const SIM_API_URL = process.env.SIM_API_URL || 'http://localhost:8099';
 const SIM_BACNET_PORT = parseInt(process.env.SIM_BACNET_PORT || '47808', 10);
-const LOCAL_BACNET_PORT = parseInt(process.env.LOCAL_BACNET_PORT || '47809', 10);
+// Default to the standard BACnet port (47808). Inside the GH Actions test
+// container we don't conflict with anything; the sim listens on 47808 inside
+// *its* container. Some BACnet servers are picky about source port and only
+// reliably respond when the request comes from 47808.
+const LOCAL_BACNET_PORT = parseInt(process.env.LOCAL_BACNET_PORT || '47808', 10);
 const READY_TIMEOUT_MS = parseInt(process.env.READY_TIMEOUT_MS || '60000', 10);
 
 let pass = 0;
@@ -101,8 +105,10 @@ function readProperty(client, address, port, objectId, propertyId) {
   const expectedRest = await getJson(
     `${SIM_API_URL}/api/devices/${device.deviceId}/objects/analog-input/1`
   );
-  ok('REST GET analog-input/1 returns a numeric value',
-     typeof expectedRest.value === 'number',
+  // Sim returns the current value under `presentValue` (not `value`).
+  const expectedValue = expectedRest.presentValue;
+  ok('REST GET analog-input/1 returns a numeric presentValue',
+     typeof expectedValue === 'number',
      JSON.stringify(expectedRest));
 
   const client = new bacnet.Client({
@@ -111,6 +117,10 @@ function readProperty(client, address, port, objectId, propertyId) {
     port: LOCAL_BACNET_PORT,
     broadcastAddress: '255.255.255.255',
   });
+  // Give the UDP socket a moment to bind before sending. bacstack's Client
+  // constructor returns synchronously but the underlying dgram socket binds
+  // asynchronously; sending immediately can race the bind.
+  await sleep(500);
 
   let bacnetValue;
   try {
