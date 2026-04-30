@@ -58,12 +58,31 @@ jobs:
 
       - run: npm ci
 
+      # Start the sim with `docker run` directly (mirrors the steps in the
+      # rise-building-technology/bacnet-sim-ci action, but avoids depending
+      # on a third-party action that may be restricted by org policy).
       - name: Start BACnet simulator
-        uses: rise-building-technology/bacnet-sim-ci@main
-        with:
-          device-id: "1001"
-          device-name: "TestDevice"
-          network-profile: "local-network"
+        run: |
+          set -e
+          docker pull ghcr.io/rise-building-technology/bacnet-sim-ci:latest
+          docker run -d \
+            --name bacnet-sim \
+            --cap-add=NET_ADMIN \
+            -p 47808:47808/udp \
+            -p 8099:8099 \
+            -e BACNET_DEVICE_ID=1001 \
+            -e BACNET_DEVICE_NAME=TestDevice \
+            -e NETWORK_PROFILE=local-network \
+            ghcr.io/rise-building-technology/bacnet-sim-ci:latest
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8099/health/ready >/dev/null 2>&1; then
+              echo "sim ready"; break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "ERROR: sim failed to start within 60s"; docker logs bacnet-sim; exit 1
+            fi
+            sleep 1
+          done
 
       - name: Confirm sim devices are visible
         run: curl -s http://localhost:8099/api/devices | python3 -m json.tool
