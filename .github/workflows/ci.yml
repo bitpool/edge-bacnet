@@ -59,7 +59,7 @@ jobs:
       - run: npm ci
 
       - name: Start BACnet simulator
-        uses: rise-building-technology/bacnet-sim-ci@v1
+        uses: rise-building-technology/bacnet-sim-ci@main
         with:
           device-id: "1001"
           device-name: "TestDevice"
