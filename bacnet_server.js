@@ -202,13 +202,19 @@ class BacnetServer extends EventEmitter {
             try {
                 handled = that.handlePrioritizedWrite(objectId, objectInstance, propId, arrayIndex, priority, newValue, valueAppTag);
             } catch (e) {
-                that.bacnetClient.errorResponse(data.address, data.service, data.invokeId, bacnet.enum.ErrorClass.PROPERTY, bacnet.enum.ErrorCode.WRITE_ACCESS_DENIED);
+                // handlePrioritizedWrite attaches errorClass/errorCode to its throws so we can map
+                // each rejection to the BACnet error the client expects. Falls back to a generic
+                // PROPERTY / WRITE_ACCESS_DENIED for unknown errors.
+                let errorClass = (e && e.errorClass !== undefined) ? e.errorClass : bacnet.enum.ErrorClass.PROPERTY;
+                let errorCode = (e && e.errorCode !== undefined) ? e.errorCode : bacnet.enum.ErrorCode.WRITE_ACCESS_DENIED;
+                that.bacnetClient.errorResponse(data.address, data.service, data.invokeId, errorClass, errorCode);
                 return;
             }
 
             if (handled === false) {
                 if (!that.modifyObject(objectId, propId, objectInstance, newValue)) {
                     that.bacnetClient.errorResponse(data.address, data.service, data.invokeId, bacnet.enum.ErrorClass.OBJECT, bacnet.enum.ErrorCode.UNKNOWN_OBJECT);
+                    return;
                 }
             }
 
@@ -453,6 +459,8 @@ class BacnetServer extends EventEmitter {
             // A full-array overwrite is not supported here.
             if (arrayIndex === undefined || arrayIndex === baEnum.ASN1_ARRAY_ALL || arrayIndex < 1 || arrayIndex > 16) {
                 let err = new Error("Priority_Array write requires array index 1..16");
+                err.errorClass = baEnum.ErrorClass.PROPERTY;
+                err.errorCode = baEnum.ErrorCode.INVALID_ARRAY_INDEX;
                 throw err;
             }
             let pa = object[baEnum.PropertyIdentifier.PRIORITY_ARRAY];
@@ -466,6 +474,8 @@ class BacnetServer extends EventEmitter {
         // RELINQUISH_DEFAULT
         if (isNull) {
             let err = new Error("Relinquish_Default cannot be NULL");
+            err.errorClass = baEnum.ErrorClass.PROPERTY;
+            err.errorCode = baEnum.ErrorCode.VALUE_OUT_OF_RANGE;
             throw err;
         }
         object[baEnum.PropertyIdentifier.RELINQUISH_DEFAULT] = [{ value: newValue, type: storeTag }];
@@ -493,22 +503,31 @@ class BacnetServer extends EventEmitter {
         let rd = object[baEnum.PropertyIdentifier.RELINQUISH_DEFAULT];
         if (!rd || !rd[0]) {
             // Seed RD from the current PV so a read with no commands active returns the same
-            // value users saw under the previous (overwrite-only) behavior.
+            // value users saw under the previous (overwrite-only) behavior. Fall back to a
+            // type-appropriate default (false for BV's BOOLEAN encoding, 0 for AV's REAL) when
+            // PV is missing or corrupt.
             let pv = object[baEnum.PropertyIdentifier.PRESENT_VALUE];
-            let seed = (pv && pv[0]) ? pv[0].value : (objectType === baEnum.ObjectType.BINARY_VALUE ? 0 : 0);
+            let seed = (pv && pv[0]) ? pv[0].value : (objectType === baEnum.ObjectType.BINARY_VALUE ? false : 0);
             object[baEnum.PropertyIdentifier.RELINQUISH_DEFAULT] = [{ value: seed, type: appTag }];
         }
 
         // Ensure PROPERTY_LIST advertises the priority-related properties so clients can discover them.
+        // Build the list from the object's own property keys when absent, so legacy cached objects
+        // that pre-date PROPERTY_LIST get an accurate one (not just a stub of [PA, RD]).
         let pl = object[baEnum.PropertyIdentifier.PROPERTY_LIST];
-        if (Array.isArray(pl)) {
-            let has = (id) => pl.some(e => e && e.value === id);
-            if (!has(baEnum.PropertyIdentifier.PRIORITY_ARRAY)) {
-                pl.push({ value: baEnum.PropertyIdentifier.PRIORITY_ARRAY, type: 9 });
-            }
-            if (!has(baEnum.PropertyIdentifier.RELINQUISH_DEFAULT)) {
-                pl.push({ value: baEnum.PropertyIdentifier.RELINQUISH_DEFAULT, type: 9 });
-            }
+        if (!Array.isArray(pl)) {
+            pl = Object.keys(object)
+                .map((k) => parseInt(k, 10))
+                .filter((id) => Number.isInteger(id) && id !== baEnum.PropertyIdentifier.PROPERTY_LIST)
+                .map((id) => ({ value: id, type: 9 }));
+            object[baEnum.PropertyIdentifier.PROPERTY_LIST] = pl;
+        }
+        let has = (id) => pl.some(e => e && e.value === id);
+        if (!has(baEnum.PropertyIdentifier.PRIORITY_ARRAY)) {
+            pl.push({ value: baEnum.PropertyIdentifier.PRIORITY_ARRAY, type: 9 });
+        }
+        if (!has(baEnum.PropertyIdentifier.RELINQUISH_DEFAULT)) {
+            pl.push({ value: baEnum.PropertyIdentifier.RELINQUISH_DEFAULT, type: 9 });
         }
     }
 
@@ -550,6 +569,12 @@ class BacnetServer extends EventEmitter {
                         ...getCommonProperties(type, valueType),
                         ...extraProperties
                     };
+                    // For commandable objects, derive Present_Value from arbitration so that a
+                    // creation-time mismatch between payload.value and payload.relinquishDefault
+                    // does not leave PV pointing at the raw payload while PA is empty.
+                    if (that._isCommandable(type)) {
+                        that._refreshPresentValue(newObject, type);
+                    }
                     that.objectStore[type].push(newObject);
                     that.objectList.push({ value: { type: type, instance: newObject[baEnum.PropertyIdentifier.OBJECT_IDENTIFIER][0].value.instance }, type: 12 });
                     that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
