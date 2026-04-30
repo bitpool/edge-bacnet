@@ -16,7 +16,7 @@ COPY --chown=node-red:node-red tests/integration/flows.json /data/flows.json
 # Install edge-bacnet AND its runtime deps into /data/node_modules — that's the
 # standard Node-RED palette location and avoids permission issues writing to
 # /usr/src/node-red. Run as the node-red user so the resulting tree is owned
-# correctly at runtime.
+# correctly at runtime. Don't change WORKDIR — the base image's entrypoint
+# (./entrypoint.sh) is relative to /usr/src/node-red.
 USER node-red
-WORKDIR /data
-RUN npm install --no-audit --no-fund /tmp/edge-bacnet
+RUN cd /data && npm install --no-audit --no-fund /tmp/edge-bacnet
