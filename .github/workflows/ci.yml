@@ -53,10 +53,15 @@ jobs:
       - name: Create test network (172.20.0.0/24)
         run: docker network create --subnet=172.20.0.0/24 bacnet-test-net
 
+      # Pinned by digest for deterministic CI. The upstream has no tagged releases yet
+      # (only a rolling :latest), so we capture a known-good digest here. Bump after
+      # verifying a newer image works locally.
       - name: Pull and start bacnet-sim
+        env:
+          SIM_IMAGE: ghcr.io/rise-building-technology/bacnet-sim-ci@sha256:29ed481aa6015dc3508a5aec5b2cb5a69c86bdc2ef22bb7ecb0d75c0d7745963
         run: |
           set -e
-          docker pull ghcr.io/rise-building-technology/bacnet-sim-ci:latest
+          docker pull "$SIM_IMAGE"
           docker run -d \
             --name bacnet-sim \
             --network bacnet-test-net \
@@ -64,7 +69,7 @@ jobs:
             --cap-add=NET_ADMIN \
             -e BACNET_DEVICE_ID=1001 \
             -e BACNET_DEVICE_NAME=TestDevice \
-            ghcr.io/rise-building-technology/bacnet-sim-ci:latest
+            "$SIM_IMAGE"
           for i in $(seq 1 60); do
             if docker exec bacnet-sim curl -sf http://localhost:8099/health/ready >/dev/null 2>&1; then
               echo "sim ready (${i}s)"

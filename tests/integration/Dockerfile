@@ -1,7 +1,8 @@
 # Node-RED with this branch's @bitpoolos/edge-bacnet installed as a palette.
 # Built from the repo root: `docker build -f tests/integration/Dockerfile -t <tag> .`
 # The build context is the whole repo so we can `npm install` edge-bacnet from local source.
-FROM nodered/node-red:latest
+# Pinned by digest for deterministic CI. Bump after verifying a newer image works.
+FROM nodered/node-red:latest@sha256:a5cb1dcdf90a7148b02b9dba4acfe6bd98c7bf3bff1e845dcdecfd7af3a95a29
 
 USER root
 # Copy the source we want to install (the .dockerignore at the repo root keeps
