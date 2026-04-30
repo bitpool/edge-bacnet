@@ -2401,6 +2401,20 @@ class BacnetClient extends EventEmitter {
 
     if (typeof propertyId === "string") {
       const trimmed = propertyId.trim();
+
+      // Empty / whitespace-only string also defaults to Present_Value, matching the
+      // null/undefined branch above. The Write node UI uses an empty default so the
+      // placeholder ("PRESENT_VALUE") shows.
+      if (trimmed === "") {
+        return baEnum.PropertyIdentifier.PRESENT_VALUE;
+      }
+
+      // Numeric strings ("85") are treated as raw numeric BACnet property identifiers,
+      // since users see numeric IDs alongside names in the UI suggestions.
+      if (/^\d+$/.test(trimmed)) {
+        return parseInt(trimmed, 10);
+      }
+
       const upper = trimmed.toUpperCase();
 
       // First try a direct enum lookup using the uppercase string exactly as given.

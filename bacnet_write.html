@@ -10,7 +10,7 @@
       name: { value: "" },
       applicationTag: { value: "-1" },
       priority: { value: "16" },
-      propertyId: { value: "85" },
+      propertyId: { value: "" },
       pointsToWrite: { value: [] },
       writeDevices: { value: [] },
       hiddenDeployToggle: { value: false },
@@ -516,7 +516,7 @@
 
       document.getElementById("node-input-applicationTag").value = node.applicationTag;
       document.getElementById("node-input-priority").value = node.priority;
-      document.getElementById("node-input-propertyId").value = node.propertyId || "85";
+      document.getElementById("node-input-propertyId").value = node.propertyId || "";
 
       var menu = document.querySelector(".context-menu");
       window.addEventListener("click", (event) => {
@@ -991,18 +991,51 @@
         <label for="node-input-propertyId"
           ><i class="icon-tag"></i><span data-i18n="bitpool-bacnet.label.propertyId"></span> Property</label
         >
-        <select id="node-input-propertyId">
-          <option value="85">PRESENT_VALUE (85)</option>
-          <option value="81">OUT_OF_SERVICE (81)</option>
-          <option value="84">POLARITY (84)</option>
-          <option value="104">RELINQUISH_DEFAULT (104)</option>
-          <option value="22">COV_INCREMENT (22)</option>
-          <option value="45">HIGH_LIMIT (45)</option>
-          <option value="59">LOW_LIMIT (59)</option>
-          <option value="25">DEADBAND (25)</option>
-          <option value="28">DESCRIPTION (28)</option>
-          <option value="77">OBJECT_NAME (77)</option>
-        </select>
+        <input
+          type="text"
+          id="node-input-propertyId"
+          list="bacnet-property-suggestions"
+          placeholder="PRESENT_VALUE"
+          autocomplete="off" />
+        <datalist id="bacnet-property-suggestions">
+          <option value="PRESENT_VALUE">85 — most common write target</option>
+          <option value="RELINQUISH_DEFAULT">104</option>
+          <option value="OUT_OF_SERVICE">81</option>
+          <option value="POLARITY">84</option>
+          <option value="COV_INCREMENT">22</option>
+          <option value="HIGH_LIMIT">45</option>
+          <option value="LOW_LIMIT">59</option>
+          <option value="DEADBAND">25</option>
+          <option value="DESCRIPTION">28</option>
+          <option value="OBJECT_NAME">77</option>
+          <option value="ACTIVE_TEXT">4</option>
+          <option value="INACTIVE_TEXT">46</option>
+          <option value="MAX_PRES_VALUE">65</option>
+          <option value="MIN_PRES_VALUE">69</option>
+          <option value="RESOLUTION">106</option>
+          <option value="UNITS">117</option>
+          <option value="TIME_DELAY">113</option>
+          <option value="LIMIT_ENABLE">52</option>
+          <option value="EVENT_ENABLE">35</option>
+          <option value="NOTIFY_TYPE">72</option>
+          <option value="NOTIFICATION_CLASS">17</option>
+          <option value="ELAPSED_ACTIVE_TIME">33</option>
+          <option value="TIME_OF_ACTIVE_TIME_RESET">114</option>
+          <option value="TIME_OF_STATE_COUNT_RESET">115</option>
+          <option value="STATE_TEXT">110</option>
+          <option value="NUMBER_OF_STATES">74</option>
+          <option value="EVENT_TIME_STAMPS">130</option>
+          <option value="EVENT_DETECTION_ENABLE">353</option>
+          <option value="ALARM_VALUES">7</option>
+          <option value="FAULT_VALUES">39</option>
+          <option value="OBJECT_PROPERTY_REFERENCE">78</option>
+          <option value="SETPOINT">108</option>
+          <option value="SETPOINT_REFERENCE">109</option>
+          <option value="ACTION">2</option>
+          <option value="ACTION_TEXT">3</option>
+          <option value="LOCATION">58</option>
+          <option value="PROFILE_NAME">168</option>
+        </datalist>
       </div>
 
       <div class="form-row bp-row">
@@ -1060,10 +1093,11 @@
   <ol class="node-ports">
     <p>
       This tab allows the user to choose the Application Tag, BACnet Property, and Priority to be used in a Write function.
-      The Property defaults to <code>PRESENT_VALUE</code>; select a different one to write to a non-default property
-      (e.g., <code>RELINQUISH_DEFAULT</code>, <code>OUT_OF_SERVICE</code>). To override per-point, set
-      <code>propertyId</code> on individual entries in <code>msg.options.pointsToWrite</code> (accepts a numeric
-      identifier or a name like <code>"PRESENT_VALUE"</code> / <code>"presentValue"</code>). Please make sure
+      The Property field accepts any BACnet property — by name (e.g., <code>PRESENT_VALUE</code>,
+      <code>RELINQUISH_DEFAULT</code>, <code>OUT_OF_SERVICE</code>, also <code>presentValue</code> or
+      <code>relinquish_default</code>) or by numeric identifier (e.g., <code>85</code>). Common picks are offered as
+      autocomplete suggestions; leaving the field blank defaults to <code>PRESENT_VALUE</code>. To override per-point,
+      set <code>propertyId</code> on individual entries in <code>msg.options.pointsToWrite</code>. Please make sure
       the device / controller is configured correctly to accept the write command.
     </p>
   </ol>
