@@ -2,6 +2,10 @@
   "name": "@bitpoolos/edge-bacnet",
   "version": "1.6.8",
   "description": "A bacnet gateway for node-red",
+  "scripts": {
+    "test:unit": "node tests/unit/smoke.js",
+    "test:integration": "node tests/integration/sim-readproperty.js"
+  },
   "dependencies": {
     "@plus4nodered/ts-node-bacnet": "^1.0.0-beta.2",
     "@vue/server-renderer": "^3.5.13",
