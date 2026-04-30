@@ -31,8 +31,20 @@
     "device_read_schedule": "30",
     "device_read_schedule_value": "30",
     "device_read_schedule_options": "Seconds",
-    "deviceRangeRegisters": [],
-    "portRangeRegisters": [],
+    "deviceRangeRegisters": [
+      {
+        "enabled": true,
+        "start": "0",
+        "end": "4194303"
+      }
+    ],
+    "portRangeRegisters": [
+      {
+        "enabled": true,
+        "start": "47808",
+        "end": "47808"
+      }
+    ],
     "cacheFileEnabled": false,
     "sanitise_device_schedule": "60",
     "sanitise_device_schedule_value": "1",
