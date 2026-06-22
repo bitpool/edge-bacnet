@@ -1,0 +1,19 @@
+# Repo & CI metadata — not part of the published node
+.github/
+.superpowers/
+docs/
+
+# Tooling / scripts
+*.py
+
+# Dev artifacts (npm ignores .gitignore once this file exists, so restate them)
+node_modules/
+dist/
+coverage/
+test/
+*test.js
+*.log
+.idea/
+.DS_Store
+Thumbs.db
+TEST*.xml
