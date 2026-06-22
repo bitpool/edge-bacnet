@@ -71,6 +71,7 @@ jobs:
           fi
           NOTES="$(mktemp)"
           awk -v v="$VERSION" '
+            BEGIN { gsub(/\./, "\\.", v) }   # escape dots so 1.6.8 is literal, not "any char"
             $0 ~ "^## \\[" v "\\]" {grab=1; next}
             grab && /^## \[/ {exit}
             grab {print}
