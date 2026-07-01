@@ -268,10 +268,20 @@ class BacnetDevice {
     }
 
     setPointsList(newPoints) {
+        // Whitelisted object types kept in the model:
+        // DEVICE(8) AI(0) AO(1) AV(2) BI(3) BO(4) BV(5) MSI(13) MSO(14) MSV(19) CS(40)
+        const allowedTypes = new Set([8, 0, 1, 2, 3, 4, 5, 13, 14, 19, 40]);
+
         for (let index = 0; index < newPoints.length; index++) {
             let newPoint = newPoints[index];
-            if (newPoint) {
-                let foundIndex = this.pointsList.findIndex(ele => ele.value.type == newPoint.value.type && ele.value.instance == newPoint.value.instance);
+            // Guard against malformed entries (e.g. a bad object-list read with no .value):
+            // skip them here so they never enter pointsList and can't throw the dedup below.
+            if (newPoint && newPoint.value && newPoint.value.type !== undefined) {
+                let foundIndex = this.pointsList.findIndex(
+                    ele => ele && ele.value &&
+                           ele.value.type == newPoint.value.type &&
+                           ele.value.instance == newPoint.value.instance
+                );
                 if (foundIndex == -1) {
                     //not found
                     this.pointsList.push(newPoint);
@@ -279,19 +289,10 @@ class BacnetDevice {
             }
         }
 
-        this.pointsList = this.pointsList.filter((point) =>
-            point.value.type == 8 ||  //DEVICE
-            point.value.type == 0 ||  //AI
-            point.value.type == 1 ||  //AV
-            point.value.type == 2 ||  //AO
-            point.value.type == 3 ||  //BI
-            point.value.type == 4 ||  //BV
-            point.value.type == 5 ||  //BO
-            point.value.type == 13 || //MSI
-            point.value.type == 14 || //MSO
-            point.value.type == 19 || //MSV
-            point.value.type == 40    //CS 
-        );
+        // Optional chaining so a malformed element is EXCLUDED (allowedTypes.has(undefined) === false)
+        // instead of throwing and aborting the filter, which previously left pointsList unfiltered
+        // and leaked non-whitelisted types (trend-logs etc.) into the model.
+        this.pointsList = this.pointsList.filter(point => allowedTypes.has(point?.value?.type));
     }
 
     getDevicePoints() {

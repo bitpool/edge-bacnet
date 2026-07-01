@@ -1521,6 +1521,26 @@ class BacnetClient extends EventEmitter {
         .catch(reject);
     };
 
+    // Targeted middle tier: request the needed properties in ONE ReadPropertyMultiple.
+    // Used when ALL is rejected (e.g. RC FlexOne / small MSTP that don't support reading
+    // the ALL pseudo-property). Same property set as the per-property fallback, so stored
+    // data is identical - just one request instead of ~12. Falls through to the
+    // per-property reads only if this targeted read also fails.
+    const readTargetedMultiple = (resolve, reject) => {
+      that
+        ._readObject(addressObject, type, instance, propertiesToRead, readOptions)
+        .then((result) => {
+          if (result.value) {
+            resolve(result);
+          } else {
+            readPropertiesIndividually(resolve, reject);
+          }
+        })
+        .catch(() => {
+          readPropertiesIndividually(resolve, reject);
+        });
+    };
+
     return new Promise((resolve, reject) => {
       // For Device objects (type 8), skip ALL attempt - many MSTP devices don't support it
       // Go straight to reading individual properties for better reliability
@@ -1537,13 +1557,15 @@ class BacnetClient extends EventEmitter {
             // If the result has value, resolve the promise
             resolve(result);
           } else {
-            // If not, proceed to read individual properties
-            readPropertiesIndividually(resolve, reject);
+            // ALL returned no value - try the targeted multi-property RPM before
+            // falling back to the per-property storm.
+            readTargetedMultiple(resolve, reject);
           }
         })
         .catch(() => {
-          // On error, proceed to read individual properties
-          readPropertiesIndividually(resolve, reject);
+          // ALL errored - try the targeted multi-property RPM before falling back
+          // to the per-property storm.
+          readTargetedMultiple(resolve, reject);
         });
     });
   }
@@ -2237,6 +2259,12 @@ class BacnetClient extends EventEmitter {
                   that.logOut("issue resolving bacnet payload, see error:  ", e);
                   reject(e);
                 }
+              } else {
+                that.logOut(
+                  "[discovery] dropped " + bac_obj + ":" + pointProperty.objectId.instance +
+                  " on device " + device.getDeviceId() +
+                  " - no OBJECT_NAME returned (read likely rejected)"
+                );
               }
             });
           } else {
