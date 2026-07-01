@@ -7,8 +7,9 @@ docs/
 *.py
 
 # Dev artifacts (npm ignores .gitignore once this file exists, so restate them)
+# NOTE: do not add a bare "dist/" rule here — it would exclude required vendored
+# runtime files under resources/ from the published package.
 node_modules/
-dist/
 coverage/
 test/
 *test.js
