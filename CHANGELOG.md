@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.6.9] - 01-07-2026
+
+Bug fix:
+
+- Recover missing points during discovery on small MSTP devices (e.g. RC FlexOne) that reject ReadProperty(ALL). When the "read all" attempt fails, discovery now tries a single targeted ReadPropertyMultiple for the required properties before falling back to per-property reads. This avoids the request storm that could cause the device to reject reads and silently drop Analog/Binary Output points from the model.
+
+- Fixed object-type whitelist filter leaking non-whitelisted objects (e.g. trend-logs) into the model. A malformed object-list entry could throw and abort the filter, leaving the point list unfiltered. The filter is now null-safe, so it always applies and only whitelisted object types are kept.
+
+- Added a discovery log when an object is dropped because no OBJECT_NAME was returned (read likely rejected), to aid diagnosis.
+
 ## [1.6.8] - 10-03-2026
 
 Bug fix: 
