@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.6.10] - 01-07-2026
+
+Bug fix:
+
+- Packaging fix to ensure all required runtime files are included in the published package. Recommended upgrade for anyone on 1.6.9. Also carries the discovery fixes listed under 1.6.9.
+
 ## [1.6.9] - 01-07-2026
 
 Bug fix:

@@ -1,0 +1,20 @@
+# Repo & CI metadata — not part of the published node
+.github/
+.superpowers/
+docs/
+
+# Tooling / scripts
+*.py
+
+# Dev artifacts (npm ignores .gitignore once this file exists, so restate them)
+# NOTE: do not add a bare "dist/" rule here — it would exclude required vendored
+# runtime files under resources/ from the published package.
+node_modules/
+coverage/
+test/
+*test.js
+*.log
+.idea/
+.DS_Store
+Thumbs.db
+TEST*.xml
