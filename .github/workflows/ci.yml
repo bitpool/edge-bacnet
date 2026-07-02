@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Syntax + module load
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # node --check on every committed JS file. Catches the trivial breakage
+      # class (typos, unmatched braces) that has no other guard in this repo.
+      - name: Syntax check
+        run: |
+          set -euo pipefail
+          # Exclude node_modules and the vendored bacstack dist (precompiled).
+          mapfile -t files < <(git ls-files '*.js' \
+            | grep -v '^node_modules/' \
+            | grep -v '^resources/node-bacstack-ts/dist/')
+          echo "checking ${#files[@]} files"
+          for f in "${files[@]}"; do node --check "$f"; done
+
+      - name: Smoke (require-safe modules)
+        run: npm run test:unit
+
+  integration:
+    name: Node-RED + edge-bacnet vs bacnet-sim-ci
+    runs-on: ubuntu-latest
+    needs: smoke
+    # Pattern from rise-building-technology/bacnet-sim-ci-test: a custom Docker
+    # network with explicit container IPs for both sim and client. Both run as
+    # peers on the same /24 — no docker-proxy NAT, no runner-host bridge IP
+    # confusion. The earlier services:/host-runner/docker-run-on-host topologies
+    # all lost the BACnet UDP response packet across the docker-bridge boundary.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create test network (172.20.0.0/24)
+        run: docker network create --subnet=172.20.0.0/24 bacnet-test-net
+
+      # Pinned by digest for deterministic CI. The upstream has no tagged releases yet
+      # (only a rolling :latest), so we capture a known-good digest here. Bump after
+      # verifying a newer image works locally.
+      - name: Pull and start bacnet-sim
+        env:
+          SIM_IMAGE: ghcr.io/rise-building-technology/bacnet-sim-ci@sha256:29ed481aa6015dc3508a5aec5b2cb5a69c86bdc2ef22bb7ecb0d75c0d7745963
+        run: |
+          set -e
+          docker pull "$SIM_IMAGE"
+          docker run -d \
+            --name bacnet-sim \
+            --network bacnet-test-net \
+            --ip 172.20.0.10 \
+            --cap-add=NET_ADMIN \
+            -e BACNET_DEVICE_ID=1001 \
+            -e BACNET_DEVICE_NAME=TestDevice \
+            "$SIM_IMAGE"
+          for i in $(seq 1 60); do
+            if docker exec bacnet-sim curl -sf http://localhost:8099/health/ready >/dev/null 2>&1; then
+              echo "sim ready (${i}s)"
+              docker exec bacnet-sim curl -s http://localhost:8099/api/devices
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "ERROR: sim never became ready"
+              docker logs bacnet-sim
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Build Node-RED + edge-bacnet image
+        run: docker build -f tests/integration/Dockerfile -t nodered-edgebacnet:test .
+
+      - name: Start Node-RED
+        run: |
+          docker run -d \
+            --name nodered \
+            --network bacnet-test-net \
+            --ip 172.20.0.20 \
+            nodered-edgebacnet:test
+
+      # The pre-loaded flow has a Bacnet-Gateway with discover_polling_schedule=5s
+      # and toLogIam=true. After Node-RED finishes booting and the gateway issues
+      # its first Who-Is, the sim should respond with I-Am for device 1001 and
+      # the gateway will log "BACnet device found: 1001 - 172.20.0.10".
+      - name: Wait for edge-bacnet to discover the sim (device 1001)
+        run: |
+          set -e
+          for i in $(seq 1 90); do
+            if docker logs nodered 2>&1 | grep -q "BACnet device found: 1001"; then
+              echo "==> Discovery succeeded after ${i}s"
+              docker logs nodered 2>&1 | grep "BACnet device found" | head -5
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "==> ERROR: Did not see 'BACnet device found: 1001' in node-red logs after 90s"
+          echo "--- node-red logs ---"
+          docker logs nodered
+          echo "--- bacnet-sim logs ---"
+          docker logs bacnet-sim
+          exit 1
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== docker ps ==="
+          docker ps -a
+          echo "=== node-red logs ==="
+          docker logs nodered 2>&1 | tail -200 || true
+          echo "=== bacnet-sim logs ==="
+          docker logs bacnet-sim 2>&1 | tail -200 || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f nodered bacnet-sim 2>/dev/null || true
+          docker network rm bacnet-test-net 2>/dev/null || true

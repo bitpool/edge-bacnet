@@ -1,0 +1,57 @@
+[
+  {
+    "id": "f1",
+    "type": "tab",
+    "label": "Integration Test",
+    "disabled": false,
+    "info": ""
+  },
+  {
+    "id": "gateway1",
+    "type": "Bacnet-Gateway",
+    "z": "f1",
+    "name": "test-gateway",
+    "local_device_address": "0.0.0.0",
+    "local_interface_name": "",
+    "apduTimeout": 6000,
+    "maxConcurrentRequests": 250,
+    "roundDecimal": 2,
+    "local_device_port": 47808,
+    "apduSize": "5",
+    "maxSegments": "0x50",
+    "retries": "5",
+    "broadCastAddr": "172.20.0.255",
+    "toLogIam": true,
+    "discover_polling_schedule": "5",
+    "discover_polling_schedule_value": "5",
+    "discover_polling_schedule_options": "Seconds",
+    "deviceId": 9999,
+    "logErrorToConsole": true,
+    "serverEnabled": false,
+    "device_read_schedule": "30",
+    "device_read_schedule_value": "30",
+    "device_read_schedule_options": "Seconds",
+    "deviceRangeRegisters": [
+      {
+        "enabled": true,
+        "start": "0",
+        "end": "4194303"
+      }
+    ],
+    "portRangeRegisters": [
+      {
+        "enabled": true,
+        "start": "47808",
+        "end": "47808"
+      }
+    ],
+    "cacheFileEnabled": false,
+    "sanitise_device_schedule": "60",
+    "sanitise_device_schedule_value": "1",
+    "sanitise_device_schedule_options": "Hours",
+    "enable_device_discovery": true,
+    "x": 200,
+    "y": 100,
+    "wires": [[]]
+  }
+]
