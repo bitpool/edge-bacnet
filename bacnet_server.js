@@ -99,6 +99,15 @@ class BacnetServer extends EventEmitter {
                     that.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE] = cachedData.objectStore[baEnum.ObjectType.CHARACTERSTRING_VALUE];
                     that.objectStore[baEnum.ObjectType.BINARY_VALUE] = cachedData.objectStore[baEnum.ObjectType.BINARY_VALUE];
                 }
+
+                // Migrate commandable objects persisted by older versions to the 16-slot
+                // PRIORITY_ARRAY + RELINQUISH_DEFAULT shape so writes flow through arbitration.
+                [baEnum.ObjectType.ANALOG_VALUE, baEnum.ObjectType.BINARY_VALUE].forEach((t) => {
+                    let group = that.objectStore[t];
+                    if (Array.isArray(group)) {
+                        group.forEach((obj) => that._ensureCommandableShape(obj, t));
+                    }
+                });
             }
         } catch (error) {
             //do nothing
@@ -181,14 +190,45 @@ class BacnetServer extends EventEmitter {
             let objectId = data.request.objectId.type;
             let objectInstance = data.request.objectId.instance;
             let propId = data.request.value.property.id.toString();
-            let newValue = data.request.value.value[0].value;
+            let arrayIndex = data.request.value.property.index;
+            let priority = data.request.value.priority;
+            let firstValue = data.request.value.value[0];
+            let newValue = firstValue.value;
+            let valueAppTag = firstValue.type;
 
-            if (!that.modifyObject(objectId, propId, objectInstance, newValue)) {
-                that.bacnetClient.errorResponse(data.address, data.service, data.invokeId, bacnet.enum.ErrorClass.OBJECT, bacnet.enum.ErrorCode.UNKNOWN_OBJECT);
+            // Route writes that participate in BACnet command prioritization through the priority logic.
+            // Falls back to the original direct-overwrite path for non-commandable objects and properties.
+            let handled;
+            try {
+                handled = that.handlePrioritizedWrite(objectId, objectInstance, propId, arrayIndex, priority, newValue, valueAppTag);
+            } catch (e) {
+                // handlePrioritizedWrite attaches errorClass/errorCode to its throws so we can map
+                // each rejection to the BACnet error the client expects. Falls back to a generic
+                // PROPERTY / WRITE_ACCESS_DENIED for unknown errors.
+                let errorClass = (e && e.errorClass !== undefined) ? e.errorClass : bacnet.enum.ErrorClass.PROPERTY;
+                let errorCode = (e && e.errorCode !== undefined) ? e.errorCode : bacnet.enum.ErrorCode.WRITE_ACCESS_DENIED;
+                that.bacnetClient.errorResponse(data.address, data.service, data.invokeId, errorClass, errorCode);
+                return;
             }
+
+            if (handled === false) {
+                if (!that.modifyObject(objectId, propId, objectInstance, newValue)) {
+                    that.bacnetClient.errorResponse(data.address, data.service, data.invokeId, bacnet.enum.ErrorClass.OBJECT, bacnet.enum.ErrorCode.UNKNOWN_OBJECT);
+                    return;
+                }
+            }
+
+            Store_Config_Server(JSON.stringify({ objectList: that.objectList, objectStore: that.objectStore }));
+
             that.getServerPoints(objectId, objectInstance).then(function (result) {
                 that.bacnetClient.client.simpleAckResponse(data.address, data.service, data.invokeId);
-                that.emit("writeProperty", result[0].name, newValue);
+                // For commandable objects, surface the arbitrated effective value (not the raw write input).
+                let emitValue = newValue;
+                if (handled !== false) {
+                    let pv = that.getObject(objectId, baEnum.PropertyIdentifier.PRESENT_VALUE.toString(), objectInstance);
+                    if (pv && pv[0]) emitValue = pv[0].value;
+                }
+                that.emit("writeProperty", result[0].name, emitValue);
             }).catch(function (error) {
                 that.bacnetClient.errorResponse(data.address, data.service, data.invokeId, bacnet.enum.ErrorClass.OBJECT, bacnet.enum.ErrorCode.UNKNOWN_OBJECT);
                 that.logOut("Error getting server points:  ", error);
@@ -259,6 +299,239 @@ class BacnetServer extends EventEmitter {
     }
 
     /**
+     * Whether the given BACnet object type participates in command prioritization
+     * (Priority_Array + Relinquish_Default arbitration of Present_Value).
+     *
+     * Per BACnet 12.x: Analog_Value and Binary_Value are commandable; CharacterString_Value is not.
+     *
+     * @param {number} objectType
+     * @returns {boolean}
+     */
+    _isCommandable(objectType) {
+        return objectType === baEnum.ObjectType.ANALOG_VALUE
+            || objectType === baEnum.ObjectType.BINARY_VALUE;
+    }
+
+    /**
+     * Application tag used for the value type held by a commandable object's Present_Value
+     * and each slot of its Priority_Array.
+     *
+     * @param {number} objectType
+     * @returns {number} BACnet application tag
+     */
+    _appTagFor(objectType) {
+        if (objectType === baEnum.ObjectType.ANALOG_VALUE) return 4;   // REAL
+        if (objectType === baEnum.ObjectType.BINARY_VALUE) return 1;   // BOOLEAN (matches existing BV PV encoding in this file)
+        return 0;
+    }
+
+    /**
+     * Build an empty 16-slot Priority_Array (all NULLs).
+     * Each slot is shaped like a bacstack value: null + ApplicationTag.NULL (0).
+     *
+     * @returns {Array<{value: null, type: 0}>}
+     */
+    _emptyPriorityArray() {
+        let pa = new Array(16);
+        for (let i = 0; i < 16; i++) pa[i] = { value: null, type: 0 };
+        return pa;
+    }
+
+    /**
+     * Compute the effective Present_Value for a commandable object: the highest-priority
+     * (lowest index) non-NULL Priority_Array slot, falling back to Relinquish_Default
+     * when all 16 slots are NULL.
+     *
+     * @param {Object} object - object record from objectStore
+     * @returns {{value:any, type:number}}
+     */
+    _arbitratePresentValue(object) {
+        let pa = object[baEnum.PropertyIdentifier.PRIORITY_ARRAY];
+        let rd = object[baEnum.PropertyIdentifier.RELINQUISH_DEFAULT];
+        if (Array.isArray(pa)) {
+            for (let i = 0; i < pa.length; i++) {
+                let slot = pa[i];
+                if (slot && slot.value !== null && slot.value !== undefined && slot.type !== 0) {
+                    return { value: slot.value, type: slot.type };
+                }
+            }
+        }
+        if (rd && rd[0]) return { value: rd[0].value, type: rd[0].type };
+        return { value: 0, type: 0 };
+    }
+
+    /**
+     * Locate the stored object record for a given type+instance, or null.
+     *
+     * @param {number} objectType
+     * @param {number} instance
+     * @returns {Object|null}
+     */
+    _findObject(objectType, instance) {
+        let group = this.objectStore[objectType];
+        if (!Array.isArray(group)) return null;
+        for (let i = 0; i < group.length; i++) {
+            let o = group[i];
+            if (o[baEnum.PropertyIdentifier.OBJECT_IDENTIFIER][0].value.instance == instance) return o;
+        }
+        return null;
+    }
+
+    /**
+     * Re-arbitrate Present_Value for a commandable object and write it back into the
+     * object record so subsequent reads return the effective value without recomputation.
+     *
+     * @param {Object} object
+     * @param {number} objectType
+     */
+    _refreshPresentValue(object, objectType) {
+        let arb = this._arbitratePresentValue(object);
+        let tag = arb.type || this._appTagFor(objectType);
+        let pv = object[baEnum.PropertyIdentifier.PRESENT_VALUE];
+        if (!pv || !pv[0]) {
+            object[baEnum.PropertyIdentifier.PRESENT_VALUE] = [{ value: arb.value, type: tag }];
+        } else {
+            pv[0].value = arb.value;
+            pv[0].type = tag;
+        }
+    }
+
+    /**
+     * Apply a write that participates in BACnet command prioritization. Returns:
+     *   - true   : write was handled (the caller must NOT fall back to modifyObject)
+     *   - false  : the write does not target a prioritized property/object — caller should
+     *              run the original modifyObject path
+     *   - throws : write was rejected (e.g. invalid Priority_Array index)
+     *
+     * Handles three cases:
+     *   1. Write to PRESENT_VALUE on a commandable object — writes to the priority slot
+     *      indicated by the WriteProperty `priority` field (defaults to 16). NULL value
+     *      relinquishes that slot.
+     *   2. Write to PRIORITY_ARRAY on a commandable object — writes a single slot
+     *      addressed by the property array index (1..16); NULL relinquishes.
+     *   3. Write to RELINQUISH_DEFAULT on a commandable object — updates the fallback.
+     *
+     * Object-level properties (Out_Of_Service, Status_Flags, Reliability, etc.) are NOT
+     * prioritized and fall through to modifyObject.
+     *
+     * @param {number} objectType
+     * @param {number} instance
+     * @param {string} propId
+     * @param {number} arrayIndex - ASN1_ARRAY_ALL (0xFFFFFFFF) when no index was specified
+     * @param {number} priority - 1..16, or ASN1_MAX_PRIORITY default from bacstack
+     * @param {*} newValue
+     * @param {number} valueAppTag - 0 indicates a NULL write (relinquish)
+     * @returns {boolean}
+     */
+    handlePrioritizedWrite(objectType, instance, propId, arrayIndex, priority, newValue, valueAppTag) {
+        if (!this._isCommandable(objectType)) return false;
+
+        let pvId = baEnum.PropertyIdentifier.PRESENT_VALUE.toString();
+        let paId = baEnum.PropertyIdentifier.PRIORITY_ARRAY.toString();
+        let rdId = baEnum.PropertyIdentifier.RELINQUISH_DEFAULT.toString();
+
+        if (propId !== pvId && propId !== paId && propId !== rdId) return false;
+
+        let object = this._findObject(objectType, instance);
+        if (!object) return false;
+
+        // Lazily migrate older objects loaded from cache that pre-date this feature.
+        this._ensureCommandableShape(object, objectType);
+
+        let appTag = this._appTagFor(objectType);
+        let isNull = (valueAppTag === 0) || (newValue === null) || (typeof newValue === "undefined");
+
+        // Preserve the client's application tag so reads round-trip cleanly.
+        let storeTag = isNull ? 0 : (valueAppTag || appTag);
+
+        if (propId === pvId) {
+            let slot = (priority >= 1 && priority <= 16) ? priority : 16;
+            let pa = object[baEnum.PropertyIdentifier.PRIORITY_ARRAY];
+            pa[slot - 1] = isNull
+                ? { value: null, type: 0 }
+                : { value: newValue, type: storeTag };
+            this._refreshPresentValue(object, objectType);
+            return true;
+        }
+
+        if (propId === paId) {
+            // Per spec, writes to Priority_Array address a single slot via array index 1..16.
+            // A full-array overwrite is not supported here.
+            if (arrayIndex === undefined || arrayIndex === baEnum.ASN1_ARRAY_ALL || arrayIndex < 1 || arrayIndex > 16) {
+                let err = new Error("Priority_Array write requires array index 1..16");
+                err.errorClass = baEnum.ErrorClass.PROPERTY;
+                err.errorCode = baEnum.ErrorCode.INVALID_ARRAY_INDEX;
+                throw err;
+            }
+            let pa = object[baEnum.PropertyIdentifier.PRIORITY_ARRAY];
+            pa[arrayIndex - 1] = isNull
+                ? { value: null, type: 0 }
+                : { value: newValue, type: storeTag };
+            this._refreshPresentValue(object, objectType);
+            return true;
+        }
+
+        // RELINQUISH_DEFAULT
+        if (isNull) {
+            let err = new Error("Relinquish_Default cannot be NULL");
+            err.errorClass = baEnum.ErrorClass.PROPERTY;
+            err.errorCode = baEnum.ErrorCode.VALUE_OUT_OF_RANGE;
+            throw err;
+        }
+        object[baEnum.PropertyIdentifier.RELINQUISH_DEFAULT] = [{ value: newValue, type: storeTag }];
+        this._refreshPresentValue(object, objectType);
+        return true;
+    }
+
+    /**
+     * Ensure a commandable object has the new-shape PRIORITY_ARRAY (16 slots) and
+     * RELINQUISH_DEFAULT property. Used both at addObject time and lazily when a write
+     * arrives for an object that was persisted by an older version of this code.
+     *
+     * @param {Object} object
+     * @param {number} objectType
+     */
+    _ensureCommandableShape(object, objectType) {
+        if (!this._isCommandable(objectType)) return;
+        let appTag = this._appTagFor(objectType);
+
+        let pa = object[baEnum.PropertyIdentifier.PRIORITY_ARRAY];
+        if (!Array.isArray(pa) || pa.length !== 16 || !pa.every(s => s && typeof s === "object" && "value" in s && "type" in s)) {
+            object[baEnum.PropertyIdentifier.PRIORITY_ARRAY] = this._emptyPriorityArray();
+        }
+
+        let rd = object[baEnum.PropertyIdentifier.RELINQUISH_DEFAULT];
+        if (!rd || !rd[0]) {
+            // Seed RD from the current PV so a read with no commands active returns the same
+            // value users saw under the previous (overwrite-only) behavior. Fall back to a
+            // type-appropriate default (false for BV's BOOLEAN encoding, 0 for AV's REAL) when
+            // PV is missing or corrupt.
+            let pv = object[baEnum.PropertyIdentifier.PRESENT_VALUE];
+            let seed = (pv && pv[0]) ? pv[0].value : (objectType === baEnum.ObjectType.BINARY_VALUE ? false : 0);
+            object[baEnum.PropertyIdentifier.RELINQUISH_DEFAULT] = [{ value: seed, type: appTag }];
+        }
+
+        // Ensure PROPERTY_LIST advertises the priority-related properties so clients can discover them.
+        // Build the list from the object's own property keys when absent, so legacy cached objects
+        // that pre-date PROPERTY_LIST get an accurate one (not just a stub of [PA, RD]).
+        let pl = object[baEnum.PropertyIdentifier.PROPERTY_LIST];
+        if (!Array.isArray(pl)) {
+            pl = Object.keys(object)
+                .map((k) => parseInt(k, 10))
+                .filter((id) => Number.isInteger(id) && id !== baEnum.PropertyIdentifier.PROPERTY_LIST)
+                .map((id) => ({ value: id, type: 9 }));
+            object[baEnum.PropertyIdentifier.PROPERTY_LIST] = pl;
+        }
+        let has = (id) => pl.some(e => e && e.value === id);
+        if (!has(baEnum.PropertyIdentifier.PRIORITY_ARRAY)) {
+            pl.push({ value: baEnum.PropertyIdentifier.PRIORITY_ARRAY, type: 9 });
+        }
+        if (!has(baEnum.PropertyIdentifier.RELINQUISH_DEFAULT)) {
+            pl.push({ value: baEnum.PropertyIdentifier.RELINQUISH_DEFAULT, type: 9 });
+        }
+    }
+
+    /**
      * Adds a new object to the BacnetServer's object store based on the provided name and payload.
      *
      * @param {string} name - The name of the object to be added.
@@ -296,23 +569,41 @@ class BacnetServer extends EventEmitter {
                         ...getCommonProperties(type, valueType),
                         ...extraProperties
                     };
+                    // For commandable objects, derive Present_Value from arbitration so that a
+                    // creation-time mismatch between payload.value and payload.relinquishDefault
+                    // does not leave PV pointing at the raw payload while PA is empty.
+                    if (that._isCommandable(type)) {
+                        that._refreshPresentValue(newObject, type);
+                    }
                     that.objectStore[type].push(newObject);
                     that.objectList.push({ value: { type: type, instance: newObject[baEnum.PropertyIdentifier.OBJECT_IDENTIFIER][0].value.instance }, type: 12 });
                     that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
                 } else {
                     let foundObject = that.objectStore[type][foundIndex];
-                    foundObject[baEnum.PropertyIdentifier.PRESENT_VALUE][0].value = payload.value ?? payload;
+                    let nextValue = payload.value ?? payload;
+                    if (that._isCommandable(type)) {
+                        // Server-sourced updates refresh the baseline (Relinquish_Default). Active priority
+                        // commands written by remote clients continue to win until relinquished.
+                        that._ensureCommandableShape(foundObject, type);
+                        foundObject[baEnum.PropertyIdentifier.RELINQUISH_DEFAULT] = [{ value: nextValue, type: valueType }];
+                        that._refreshPresentValue(foundObject, type);
+                    } else {
+                        foundObject[baEnum.PropertyIdentifier.PRESENT_VALUE][0].value = nextValue;
+                    }
                     that.objectStore[baEnum.ObjectType.DEVICE][baEnum.PropertyIdentifier.OBJECT_LIST] = that.objectList;
                 }
             };
 
             if (objectType === "number") {
+                let initialNumeric = payload.value ?? payload;
                 addObjectToStore(baEnum.ObjectType.ANALOG_VALUE, 4, {
                     [baEnum.PropertyIdentifier.UNITS]: [{ value: payload.units ?? 95, type: 9 }],
-                    [baEnum.PropertyIdentifier.MAX_PRES_VALUE]: [{ value: payload.value ?? payload, type: 4 }],
-                    [baEnum.PropertyIdentifier.MIN_PRES_VALUE]: [{ value: payload.value ?? payload, type: 4 }],
+                    [baEnum.PropertyIdentifier.MAX_PRES_VALUE]: [{ value: initialNumeric, type: 4 }],
+                    [baEnum.PropertyIdentifier.MIN_PRES_VALUE]: [{ value: initialNumeric, type: 4 }],
                     [baEnum.PropertyIdentifier.RESOLUTION]: [{ value: payload.resolution ?? 0, type: 4 }],
-                    [baEnum.PropertyIdentifier.PRIORITY_ARRAY]: [{ value: payload.priorityArray ?? 0, type: 9 }],
+                    [baEnum.PropertyIdentifier.PRIORITY_ARRAY]: that._emptyPriorityArray(),
+                    // RD seeded from the initial value so reads with no commands active match prior behavior.
+                    [baEnum.PropertyIdentifier.RELINQUISH_DEFAULT]: [{ value: payload.relinquishDefault ?? initialNumeric, type: 4 }],
                     [baEnum.PropertyIdentifier.PROPERTY_LIST]: [
                         { value: baEnum.PropertyIdentifier.OBJECT_NAME, type: 9 },
                         { value: baEnum.PropertyIdentifier.OBJECT_TYPE, type: 9 },
@@ -324,15 +615,33 @@ class BacnetServer extends EventEmitter {
                         { value: baEnum.PropertyIdentifier.OUT_OF_SERVICE, type: 9 },
                         { value: baEnum.PropertyIdentifier.UNITS, type: 9 },
                         { value: baEnum.PropertyIdentifier.PRIORITY_ARRAY, type: 9 },
+                        { value: baEnum.PropertyIdentifier.RELINQUISH_DEFAULT, type: 9 },
                         { value: baEnum.PropertyIdentifier.MAX_PRES_VALUE, type: 9 },
                         { value: baEnum.PropertyIdentifier.MIN_PRES_VALUE, type: 9 },
                         { value: baEnum.PropertyIdentifier.RESOLUTION, type: 9 },
                     ]
                 });
             } else if (objectType === "boolean") {
+                let initialBool = !!(payload.value ?? payload);
                 addObjectToStore(baEnum.ObjectType.BINARY_VALUE, 1, {
                     [baEnum.PropertyIdentifier.ACTIVE_TEXT]: [{ value: 'ACTIVE', type: 7 }],
-                    [baEnum.PropertyIdentifier.INACTIVE_TEXT]: [{ value: 'INACTIVE', type: 7 }]
+                    [baEnum.PropertyIdentifier.INACTIVE_TEXT]: [{ value: 'INACTIVE', type: 7 }],
+                    [baEnum.PropertyIdentifier.PRIORITY_ARRAY]: that._emptyPriorityArray(),
+                    [baEnum.PropertyIdentifier.RELINQUISH_DEFAULT]: [{ value: payload.relinquishDefault ?? initialBool, type: 1 }],
+                    [baEnum.PropertyIdentifier.PROPERTY_LIST]: [
+                        { value: baEnum.PropertyIdentifier.OBJECT_NAME, type: 9 },
+                        { value: baEnum.PropertyIdentifier.OBJECT_TYPE, type: 9 },
+                        { value: baEnum.PropertyIdentifier.DESCRIPTION, type: 9 },
+                        { value: baEnum.PropertyIdentifier.OBJECT_IDENTIFIER, type: 9 },
+                        { value: baEnum.PropertyIdentifier.PRESENT_VALUE, type: 9 },
+                        { value: baEnum.PropertyIdentifier.STATUS_FLAGS, type: 9 },
+                        { value: baEnum.PropertyIdentifier.EVENT_STATE, type: 9 },
+                        { value: baEnum.PropertyIdentifier.OUT_OF_SERVICE, type: 9 },
+                        { value: baEnum.PropertyIdentifier.PRIORITY_ARRAY, type: 9 },
+                        { value: baEnum.PropertyIdentifier.RELINQUISH_DEFAULT, type: 9 },
+                        { value: baEnum.PropertyIdentifier.ACTIVE_TEXT, type: 9 },
+                        { value: baEnum.PropertyIdentifier.INACTIVE_TEXT, type: 9 },
+                    ]
                 });
             } else if (objectType === "string") {
                 addObjectToStore(baEnum.ObjectType.CHARACTERSTRING_VALUE, 7, {
