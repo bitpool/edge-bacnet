@@ -67,9 +67,35 @@ class Client extends events_1.EventEmitter {
         });
 
         // Setup code
-        this._transport.on('message', this._receiveData.bind(this));
-        this._transport.on('error', this._receiveError.bind(this));
-        this._transport.open();
+        this._bindTransport(this._transport);
+    }
+    /**
+     * Wires the transport events. The 'npdu' event is emitted only by BACnet/SC
+     * transports (sc-transport.js), which deliver decapsulated NPDUs with a
+     * VMAC string as the remote address; the UDP transport emits raw B/IP
+     * frames on 'message' handled by _receiveData. The UDP transport never
+     * emits 'npdu', so BACnet/IP behaviour is unchanged by this listener.
+     */
+    _bindTransport(transport) {
+        transport.on('message', this._receiveData.bind(this));
+        transport.on('error', this._receiveError.bind(this));
+        transport.on('npdu', (buffer, offset, msgLength, remoteAddress) => this._handleNpdu(buffer, offset, msgLength, remoteAddress, undefined));
+        transport.open();
+    }
+    /**
+     * Replaces the datalink transport at runtime (BACnet/IP <-> BACnet/SC mode
+     * switch at redeploy) while preserving this Client instance and every
+     * listener bound to it (e.g. by the local BACnet server).
+     */
+    setTransport(transport) {
+        try {
+            this._transport.close();
+        } catch (e) {
+            console.log("setTransport close error: ", e);
+        }
+        this._transport = transport;
+        this._settings.transport = transport;
+        this._bindTransport(transport);
     }
     // Helper utils
     /**
@@ -1592,19 +1618,18 @@ class Client extends events_1.EventEmitter {
     }
     iAmResponse(deviceId, segmentation, vendorId) {
         const buffer = this._getBuffer();
-        baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE, this._transport.getBroadcastAddress());
+        baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE, null);
         baApdu.encodeUnconfirmedServiceRequest(buffer, baEnum.PduTypes.UNCONFIRMED_REQUEST, baEnum.UnconfirmedServiceChoice.I_AM);
         baServices.iAmBroadcast.encode(buffer, deviceId, this._transport.getMaxPayload(), segmentation, vendorId);
-        baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_BROADCAST_NPDU, buffer.offset);
-        this._transport.send(buffer.buffer, buffer.offset, this._transport.getBroadcastAddress(), this._settings.port);
+        // null receiver = broadcast; sendBvlc applies the datalink framing
+        this.sendBvlc(null, this._settings.port, buffer);
     }
     iHaveResponse(deviceId, objectId, objectName) {
         const buffer = this._getBuffer();
-        baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE, this._transport.getBroadcastAddress());
+        baNpdu.encode(buffer, baEnum.NpduControlPriority.NORMAL_MESSAGE, null);
         baApdu.encodeUnconfirmedServiceRequest(buffer, baEnum.PduTypes.UNCONFIRMED_REQUEST, baEnum.UnconfirmedServiceChoice.I_HAVE);
         baServices.iHaveBroadcast.encode(buffer, deviceId, objectId, objectName);
-        baBvlc.encode(buffer.buffer, baEnum.BvlcResultPurpose.ORIGINAL_BROADCAST_NPDU, buffer.offset);
-        this._transport.send(buffer.buffer, buffer.offset, this._transport.getBroadcastAddress(), this._settings.port);
+        this.sendBvlc(null, this._settings.port, buffer);
     }
     simpleAckResponse(receiver, service, invokeId) {
         const buffer = this._getBuffer();
@@ -1632,6 +1657,15 @@ class Client extends events_1.EventEmitter {
             receiver = {
                 address: receiver
             };
+        }
+        // BACnet/SC datalink (ANNEX AB): an SC transport frames NPDUs itself
+        // (BVLC-SC instead of Annex-J B/IP), so hand it the raw NPDU slice.
+        // A null/absent receiver means broadcast. Returning here also collapses
+        // the per-port send loop below — BACnet/SC has no port matrix. The UDP
+        // transport has no sendNpdu method, so B/IP framing is unchanged.
+        if (typeof this._transport.sendNpdu === 'function') {
+            this._transport.sendNpdu(buffer.buffer, baEnum.BVLC_HEADER_LENGTH, buffer.offset - baEnum.BVLC_HEADER_LENGTH, receiver);
+            return;
         }
         if (receiver && receiver.forwardedFrom) {
             // Remote node address given, forward to BBMD

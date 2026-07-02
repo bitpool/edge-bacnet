@@ -5,6 +5,8 @@ docs/
 
 # Tooling / scripts
 *.py
+tools/
+scripts/
 
 # Dev artifacts (npm ignores .gitignore once this file exists, so restate them)
 # NOTE: do not add a bare "dist/" rule here — it would exclude required vendored

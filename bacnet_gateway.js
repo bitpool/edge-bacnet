@@ -40,6 +40,27 @@ module.exports = function (RED) {
     this.enable_device_discovery = config.enable_device_discovery;
     this.maxConcurrentRequests = config.maxConcurrentRequests;
 
+    //BACnet Secure Connect (ANNEX AB) datalink settings; "ip" for flows
+    //deployed before the feature existed
+    this.datalink_mode = config.datalink_mode === "sc" ? "sc" : "ip";
+    this.scConfig =
+      this.datalink_mode === "sc"
+        ? {
+            primaryHubUri: config.sc_primary_hub_uri,
+            failoverHubUri: config.sc_failover_hub_uri,
+            // pasted PEM (stored encrypted in Node-RED credentials) or a file path
+            caCert: node.credentials ? node.credentials.sc_ca_cert : null,
+            clientCert: node.credentials ? node.credentials.sc_client_cert : null,
+            privateKey: node.credentials ? node.credentials.sc_private_key : null,
+            keyPassphrase: node.credentials ? node.credentials.sc_key_passphrase : null,
+            reconnectDelay: config.sc_reconnect_delay,
+            connectWaitTimeout: config.sc_connect_wait_timeout,
+            heartbeatInterval: config.sc_heartbeat_interval,
+            verifyHostname: config.sc_verify_hostname === true,
+            allowTls12: config.sc_allow_tls12 === true,
+          }
+        : null;
+
     //client and config store
     this.bacnetConfig = nodeContext.get("bacnetConfig");
     this.bacnetClient = nodeContext.get("bacnetClient");
@@ -69,7 +90,9 @@ module.exports = function (RED) {
         node.sanitise_device_schedule,
         node.portRangeRegisters.filter((ele) => ele.enabled === true),
         node.enable_device_discovery,
-        node.maxConcurrentRequests
+        node.maxConcurrentRequests,
+        node.datalink_mode,
+        node.scConfig
       );
 
       if (typeof node.bacnetClient !== "undefined") {
@@ -107,6 +130,8 @@ module.exports = function (RED) {
     }
 
     try {
+      bindScStatusListener();
+
       // Value response event handler for READ commands
       node.bacnetClient.on("values", (values, outputType, objectPropertyType, readNodeName, deviceIndex, devicesToRead) => {
         if (typeof values !== "undefined" && Object.keys(values).length) {
@@ -114,7 +139,7 @@ module.exports = function (RED) {
           node.status({ fill: "blue", shape: "dot", text: publishText });
           if (deviceIndex == devicesToRead) {
             setTimeout(() => {
-              node.status({});
+              node.status(node.scStatusBadge || {});
             }, 3000);
           }
           let useDeviceName = outputType.useDeviceName;
@@ -314,6 +339,21 @@ module.exports = function (RED) {
     } catch (e) {
       console.log("Bacnet node event handler error: ", e);
     }
+
+    //route handler for BACnet/SC status (editor dialog readout)
+    RED.httpAdmin.get("/bitpool-bacnet-data/getScStatus", function (req, res) {
+      if (!node.bacnetClient || node.datalink_mode !== "sc") {
+        res.send({ enabled: false });
+      } else {
+        const transport = node.bacnetClient.scTransport;
+        res.send({
+          enabled: true,
+          status: node.bacnetClient.lastScStatus || { state: "connecting" },
+          detail: transport && transport.getStatus ? transport.getStatus() : null,
+          localVmac: transport && transport.getLocalVmac ? transport.getLocalVmac() : null,
+        });
+      }
+    });
 
     //route handler for network data
     RED.httpAdmin.get("/bitpool-bacnet-data/getNetworkTree", function (req, res) {
@@ -605,7 +645,32 @@ module.exports = function (RED) {
       }
     });
 
+    //BACnet/SC connection state -> node status badge. Bound wherever the
+    //other client listeners are (re)bound, since redeploys removeAllListeners.
+    function bindScStatusListener() {
+      if (node.datalink_mode !== "sc" || !node.bacnetClient) {
+        node.scStatusBadge = null;
+        return;
+      }
+      const renderScStatus = (s) => {
+        if (!s || !s.state) return;
+        const fills = { connected: "green", connecting: "yellow", reconnecting: "yellow", disconnected: "red", failed: "red" };
+        let text = `SC: ${s.state}${s.hub ? " (" + s.hub + ")" : ""}`;
+        if (s.state === "failed") text = `SC: ${s.error || "failed"}`;
+        node.scStatusBadge = { fill: fills[s.state] || "grey", shape: s.state === "connected" ? "dot" : "ring", text: text };
+        node.status(node.scStatusBadge);
+      };
+      node.bacnetClient.on("scStatus", (s) => {
+        renderScStatus(s);
+        if (s.level === "error" || s.state === "failed") logOut("BACnet/SC: ", s.message || s.error || s.code);
+        else if (s.level === "warn") logOut("BACnet/SC warning: ", s.message || s.code);
+      });
+      renderScStatus(node.bacnetClient.lastScStatus);
+    }
+
     function bindEventListeners() {
+      bindScStatusListener();
+
       // Value response event handler for READ commands
       try {
         node.bacnetClient.on("values", (values, outputType, objectPropertyType, readNodeName, deviceIndex, devicesToRead) => {
@@ -614,7 +679,7 @@ module.exports = function (RED) {
             node.status({ fill: "blue", shape: "dot", text: publishText });
             if (deviceIndex == devicesToRead) {
               setTimeout(() => {
-                node.status({});
+                node.status(node.scStatusBadge || {});
               }, 3000);
             }
             let useDeviceName = outputType.useDeviceName;
@@ -979,5 +1044,14 @@ module.exports = function (RED) {
       node.warn(message);
     }
   }
-  RED.nodes.registerType("Bacnet-Gateway", BitpoolBacnetGatewayDevice);
+  RED.nodes.registerType("Bacnet-Gateway", BitpoolBacnetGatewayDevice, {
+    credentials: {
+      // text (not password) so multi-line PEM survives the editor round-trip —
+      // same convention as Node-RED core's tls-config node; encrypted at rest
+      sc_ca_cert: { type: "text" },
+      sc_client_cert: { type: "text" },
+      sc_private_key: { type: "text" },
+      sc_key_passphrase: { type: "password" },
+    },
+  });
 };

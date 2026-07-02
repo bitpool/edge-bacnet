@@ -5,6 +5,7 @@
 const bacnet = require("./resources/node-bacstack-ts/dist/index.js");
 const baEnum = bacnet.enum;
 const { EventEmitter } = require("events");
+const { randomUUID } = require("crypto");
 const {
   getUnit,
   roundDecimalPlaces,
@@ -13,6 +14,9 @@ const {
   Read_Config_Async,
   isNumber,
   decodeBitArray,
+  Read_Sc_Identity_Sync,
+  Store_Sc_Identity,
+  Resolve_Sc_Credential,
 } = require("./common");
 const { ToadScheduler, SimpleIntervalJob, Task } = require("toad-scheduler");
 const { BacnetDevice } = require("./bacnet_device");
@@ -65,14 +69,7 @@ class BacnetClient extends EventEmitter {
       try {
         that.readCachedFile();
 
-        that.client = new bacnet.Client({
-          apduTimeout: config.apduTimeout,
-          interface: config.localIpAdrress,
-          port: config.port,
-          broadcastAddress: config.broadCastAddr,
-          portRangeMatrix: config.portRangeMatrix,
-          maxConcurrentRequests: config.maxConcurrentRequests,
-        });
+        that.client = that._createStackClient(config);
         that.setMaxListeners(1);
 
         const task = new Task("simple task", () => {
@@ -707,8 +704,163 @@ class BacnetClient extends EventEmitter {
     }
   }
 
+  /**
+   * Builds the stack client for the configured datalink. BACnet/IP (default)
+   * behaves exactly as before; BACnet/SC injects the ANNEX AB transport via
+   * the stack's options.transport hook.
+   */
+  _createStackClient(config) {
+    let that = this;
+    that.datalinkMode = config.datalinkMode === "sc" ? "sc" : "ip";
+    that.scConfigSnapshot = config.scConfig ? JSON.parse(JSON.stringify(config.scConfig)) : null;
+    const clientOptions = {
+      apduTimeout: config.apduTimeout,
+      interface: config.localIpAdrress,
+      port: config.port,
+      broadcastAddress: config.broadCastAddr,
+      portRangeMatrix: config.portRangeMatrix,
+      maxConcurrentRequests: config.maxConcurrentRequests,
+    };
+    if (that.datalinkMode === "sc") {
+      clientOptions.transport = that._buildScTransport(config);
+      // SC is one logical hub connection — no port matrix scanning
+      clientOptions.portRangeMatrix = [config.port || 47808];
+    }
+    return new bacnet.Client(clientOptions);
+  }
+
+  /**
+   * Creates the BACnet/SC transport from config + persisted identity. Returns
+   * an inert transport (nothing sent, clear status) when certificates are
+   * unreadable, so a misconfigured SC gateway never silently falls back to IP.
+   */
+  _buildScTransport(config) {
+    let that = this;
+    const scConfig = config.scConfig || {};
+    let credentials;
+    try {
+      credentials = {
+        ca: Resolve_Sc_Credential("CA certificate", scConfig.caCert),
+        cert: Resolve_Sc_Credential("Operational certificate", scConfig.clientCert),
+        key: Resolve_Sc_Credential("Private key", scConfig.privateKey),
+      };
+    } catch (e) {
+      that.logOut("BACnet/SC credential error: ", e.message);
+      that.lastScStatus = { state: "failed", error: "SC_CREDENTIAL_ERROR", message: e.message };
+      that.emit("scStatus", that.lastScStatus);
+      return that._inertScTransport();
+    }
+    const identity = that._getScIdentity();
+    const transport = new bacnet.ScTransport({
+      primaryHubUri: scConfig.primaryHubUri,
+      failoverHubUri: scConfig.failoverHubUri,
+      ca: credentials.ca,
+      cert: credentials.cert,
+      key: credentials.key,
+      keyPassphrase: scConfig.keyPassphrase || undefined,
+      vmac: identity.vmac,
+      uuid: identity.uuid,
+      verifyHostname: scConfig.verifyHostname === true,
+      allowTls12: scConfig.allowTls12 === true,
+      reconnectMs: (parseInt(scConfig.reconnectDelay) || 10) * 1000,
+      connectWaitMs: (parseInt(scConfig.connectWaitTimeout) || 10) * 1000,
+      heartbeatMs: (parseInt(scConfig.heartbeatInterval) || 60) * 1000,
+    });
+    that.scTransport = transport;
+    that._bindScTransportEvents(transport);
+    return transport;
+  }
+
+  // A transport that sends nothing — used when SC credentials cannot be read
+  _inertScTransport() {
+    const transport = new EventEmitter();
+    transport.open = () => {};
+    transport.close = () => {};
+    transport.send = () => {};
+    transport.sendNpdu = () => {};
+    transport.getBroadcastAddress = () => "FF:FF:FF:FF:FF:FF";
+    transport.getMaxPayload = () => 1482;
+    this.scTransport = null;
+    return transport;
+  }
+
+  /**
+   * Loads the persisted BACnet/SC identity, generating and storing a fresh
+   * one on first SC start. The device UUID persists for the device lifetime
+   * (AB.1.5.3); the VMAC persists too and changes only on collision.
+   */
+  _getScIdentity() {
+    let identity = Read_Sc_Identity_Sync();
+    if (!identity) {
+      identity = {
+        uuid: randomUUID(),
+        vmac: bacnet.bvlcSc.vmacToString(bacnet.bvlcSc.generateRandom48()),
+        generatedAt: new Date().toISOString(),
+      };
+      Store_Sc_Identity(identity);
+    }
+    return identity;
+  }
+
+  _bindScTransportEvents(transport) {
+    let that = this;
+    transport.on("scStatus", (status) => {
+      that.lastScStatus = status;
+      that.emit("scStatus", status);
+    });
+    transport.on("connected", () => {
+      // re-learn device addresses immediately instead of waiting for the next
+      // discovery cycle — remote VMACs may have changed while we were away
+      setTimeout(() => that.globalWhoIs(), 500);
+    });
+    transport.on("vmac-changed", (vmacString) => {
+      const identity = Read_Sc_Identity_Sync();
+      if (identity) {
+        identity.vmac = vmacString;
+        Store_Sc_Identity(identity);
+      }
+    });
+  }
+
+  /**
+   * Swaps the datalink transport on a redeploy that changed the datalink mode
+   * or any SC parameter. The stack Client instance survives, so every event
+   * listener (including the local BACnet server's) stays valid.
+   */
+  _swapTransport(config) {
+    let that = this;
+    try {
+      if (that.scTransport) {
+        that.scTransport.removeAllListeners();
+        that.scTransport = null;
+        that.lastScStatus = null;
+      }
+      let newTransport;
+      if (config.datalinkMode === "sc") {
+        newTransport = that._buildScTransport(config);
+      } else {
+        const { Transport } = require("./resources/node-bacstack-ts/dist/lib/transport.js");
+        newTransport = new Transport({
+          port: config.port,
+          interface: config.localIpAdrress,
+          broadcastAddress: config.broadCastAddr,
+          portRangeMatrix: config.portRangeMatrix,
+        });
+      }
+      that.client.setTransport(newTransport);
+    } catch (e) {
+      that.logOut("Error swapping datalink transport: ", e);
+    }
+  }
+
   reinitializeClient(config) {
     let that = this;
+
+    const newDatalinkMode = config.datalinkMode === "sc" ? "sc" : "ip";
+    const oldDatalinkMode = that.datalinkMode || "ip";
+    const scParamsChanged =
+      newDatalinkMode === "sc" &&
+      JSON.stringify(config.scConfig || null) !== JSON.stringify(that.scConfigSnapshot || null);
 
     that.config = config;
     that.roundDecimal = config.roundDecimal;
@@ -725,6 +877,12 @@ class BacnetClient extends EventEmitter {
     }
 
     try {
+      if (newDatalinkMode !== oldDatalinkMode || scParamsChanged) {
+        that._swapTransport(config);
+      }
+      that.datalinkMode = newDatalinkMode;
+      that.scConfigSnapshot = config.scConfig ? JSON.parse(JSON.stringify(config.scConfig)) : null;
+
       that.client._settings.apduTimeout = config.apduTimeout;
       that.client._settings.interface = config.localIpAdrress;
       that.client._settings.port = config.port;

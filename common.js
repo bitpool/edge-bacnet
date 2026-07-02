@@ -68,7 +68,9 @@ class BacnetClientConfig {
     sanitise_device_schedule,
     portRangeMatrix,
     enable_device_discovery,
-    maxConcurrentRequests
+    maxConcurrentRequests,
+    datalinkMode,
+    scConfig
   ) {
     this.apduTimeout = apduTimeout;
     this.localIpAdrress = localIpAdrress;
@@ -94,6 +96,13 @@ class BacnetClientConfig {
     if (clampedMaxConcurrent < 1) clampedMaxConcurrent = 1;
     if (clampedMaxConcurrent > 250) clampedMaxConcurrent = 250;
     this.maxConcurrentRequests = clampedMaxConcurrent;
+    // BACnet/SC (ANNEX AB): "ip" (default, Annex J UDP) or "sc" (hub-connected
+    // WebSocket datalink). Absent on flows deployed before the feature existed.
+    this.datalinkMode = datalinkMode === "sc" ? "sc" : "ip";
+    // { primaryHubUri, failoverHubUri, caCert, clientCert, privateKey,
+    //   keyPassphrase, reconnectDelay, connectWaitTimeout, heartbeatInterval,
+    //   verifyHostname, allowTls12 } — cert values are pasted PEM or file paths
+    this.scConfig = scConfig || null;
   }
 
   generatePortRangeArray(rangeMatrix) {
@@ -351,6 +360,44 @@ async function Store_Config_Server(data) {
 // READ CONFIG SYNC FUNCTION - BACNET SERVER ======================================
 //
 // ================================================================================
+// ---------------------------------------------------------------------------
+// BACnet/SC identity persistence (ANNEX AB.1.5). The device UUID must survive
+// restarts for the device lifetime; the VMAC is kept stable too and only
+// regenerated on a NODE_DUPLICATE_VMAC collision. Stored in its own file so
+// treeBuilder's wholesale datastore rewrites cannot clobber it.
+function Read_Sc_Identity_Sync() {
+  try {
+    const data = fs.readFileSync(getStoragePath("edge-bacnet-sc-identity.cfg"), { encoding: "utf8", flag: "r" });
+    const identity = JSON.parse(data);
+    if (identity && identity.uuid && identity.vmac) return identity;
+  } catch (error) {
+    // missing or unreadable — a fresh identity will be generated
+  }
+  return null;
+}
+
+function Store_Sc_Identity(identity) {
+  try {
+    fs.writeFileSync(getStoragePath("edge-bacnet-sc-identity.cfg"), JSON.stringify(identity, null, 2));
+  } catch (error) {
+    console.error("Store_Sc_Identity error: ", error);
+  }
+}
+
+// Accepts either pasted PEM text or an absolute path to a PEM file.
+// Returns the PEM string, null for empty input, or throws with a clear
+// message for an unreadable path.
+function Resolve_Sc_Credential(label, value) {
+  if (!value || typeof value !== "string" || value.trim() === "") return null;
+  const trimmed = value.trim();
+  if (trimmed.startsWith("-----BEGIN")) return trimmed;
+  try {
+    return fs.readFileSync(trimmed, { encoding: "utf8" });
+  } catch (error) {
+    throw new Error(`${label}: cannot read file '${trimmed}' (${error.code || error.message})`);
+  }
+}
+
 function Read_Config_Sync_Server() {
   var data = "{}";
   try {
@@ -435,6 +482,9 @@ module.exports = {
   Read_Config_Async,
   Store_Config_Server,
   Read_Config_Sync_Server,
+  Read_Sc_Identity_Sync,
+  Store_Sc_Identity,
+  Resolve_Sc_Credential,
   isNumber,
   decodeBitArray,
   parseBacnetError,

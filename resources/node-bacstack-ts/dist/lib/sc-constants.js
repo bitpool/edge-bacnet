@@ -1,0 +1,197 @@
+'use strict';
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Defaults = exports.ConnectionState = exports.ConnectionRole = exports.NodeErrorToTaxonomy = exports.WsCloseCodeToErrorName = exports.WS_SUBPROTOCOL_DIRECT = exports.WS_SUBPROTOCOL_HUB = exports.BROADCAST_VMAC_STRING = exports.BROADCAST_VMAC = exports.HubConnectionStatus = exports.ScErrorCode = exports.ScErrorClass = exports.ResultCode = exports.HeaderOptionType = exports.HeaderOptionFlags = exports.ControlFlags = exports.BvlcScFunction = void 0;
+/**
+ * BACnet Secure Connect (BACnet/SC) constants.
+ * ANSI/ASHRAE 135-2020, ANNEX AB. All numeric enumeration values below were
+ * verified against Clause 21 of the standard.
+ */
+exports.BvlcScFunction = {
+    BVLC_RESULT: 0x00,
+    ENCAPSULATED_NPDU: 0x01,
+    ADDRESS_RESOLUTION: 0x02,
+    ADDRESS_RESOLUTION_ACK: 0x03,
+    ADVERTISEMENT: 0x04,
+    ADVERTISEMENT_SOLICITATION: 0x05,
+    CONNECT_REQUEST: 0x06,
+    CONNECT_ACCEPT: 0x07,
+    DISCONNECT_REQUEST: 0x08,
+    DISCONNECT_ACK: 0x09,
+    HEARTBEAT_REQUEST: 0x0A,
+    HEARTBEAT_ACK: 0x0B,
+    PROPRIETARY_MESSAGE: 0x0C
+};
+// AB.2.2 'Control Flags' — bits 7..4 reserved (shall be zero)
+exports.ControlFlags = {
+    DATA_OPTIONS: 0x01,
+    DEST_OPTIONS: 0x02,
+    DEST_VMAC: 0x04,
+    ORIG_VMAC: 0x08,
+    RESERVED_MASK: 0xF0
+};
+// AB.2.3 'Header Marker' bit fields
+exports.HeaderOptionFlags = {
+    MORE_OPTIONS: 0x80,
+    MUST_UNDERSTAND: 0x40,
+    HEADER_DATA: 0x20,
+    TYPE_MASK: 0x1F
+};
+exports.HeaderOptionType = {
+    SECURE_PATH: 1,
+    PROPRIETARY: 31
+};
+// AB.2.4 BVLC-Result 'Result Code'
+exports.ResultCode = {
+    ACK: 0,
+    NAK: 1
+};
+exports.ScErrorClass = {
+    COMMUNICATION: 7
+};
+// BACnetErrorCode values used by BACnet/SC (Clause 21). The 143..199 range is
+// absent from enum.js (pre-SC revision), so it is declared here in full.
+exports.ScErrorCode = {
+    INCONSISTENT_PARAMETERS: 7,
+    OPTIONAL_FUNCTIONALITY_NOT_SUPPORTED: 45,
+    PARAMETER_OUT_OF_RANGE: 80,
+    BVLC_FUNCTION_UNKNOWN: 143,
+    BVLC_PROPRIETARY_FUNCTION_UNKNOWN: 144,
+    HEADER_ENCODING_ERROR: 145,
+    HEADER_NOT_UNDERSTOOD: 146,
+    MESSAGE_INCOMPLETE: 147,
+    NOT_A_BACNET_SC_HUB: 148,
+    PAYLOAD_EXPECTED: 149,
+    UNEXPECTED_DATA: 150,
+    NODE_DUPLICATE_VMAC: 151,
+    HTTP_UNEXPECTED_RESPONSE_CODE: 152,
+    HTTP_NO_UPGRADE: 153,
+    HTTP_RESOURCE_NOT_LOCAL: 154,
+    HTTP_PROXY_AUTHENTICATION_FAILED: 155,
+    HTTP_RESPONSE_TIMEOUT: 156,
+    HTTP_RESPONSE_SYNTAX_ERROR: 157,
+    HTTP_RESPONSE_VALUE_ERROR: 158,
+    HTTP_RESPONSE_MISSING_HEADER: 159,
+    HTTP_WEBSOCKET_HEADER_ERROR: 160,
+    HTTP_UPGRADE_REQUIRED: 161,
+    HTTP_UPGRADE_ERROR: 162,
+    HTTP_TEMPORARY_UNAVAILABLE: 163,
+    HTTP_NOT_A_SERVER: 164,
+    HTTP_ERROR: 165,
+    WEBSOCKET_SCHEME_NOT_SUPPORTED: 166,
+    WEBSOCKET_UNKNOWN_CONTROL_MESSAGE: 167,
+    WEBSOCKET_CLOSE_ERROR: 168,
+    WEBSOCKET_CLOSED_BY_PEER: 169,
+    WEBSOCKET_ENDPOINT_LEAVES: 170,
+    WEBSOCKET_PROTOCOL_ERROR: 171,
+    WEBSOCKET_DATA_NOT_ACCEPTED: 172,
+    WEBSOCKET_CLOSED_ABNORMALLY: 173,
+    WEBSOCKET_DATA_INCONSISTENT: 174,
+    WEBSOCKET_DATA_AGAINST_POLICY: 175,
+    WEBSOCKET_FRAME_TOO_LONG: 176,
+    WEBSOCKET_EXTENSION_MISSING: 177,
+    WEBSOCKET_REQUEST_UNAVAILABLE: 178,
+    WEBSOCKET_ERROR: 179,
+    TLS_CLIENT_CERTIFICATE_ERROR: 180,
+    TLS_SERVER_CERTIFICATE_ERROR: 181,
+    TLS_CLIENT_AUTHENTICATION_FAILED: 182,
+    TLS_SERVER_AUTHENTICATION_FAILED: 183,
+    TLS_CLIENT_CERTIFICATE_EXPIRED: 184,
+    TLS_SERVER_CERTIFICATE_EXPIRED: 185,
+    TLS_CLIENT_CERTIFICATE_REVOKED: 186,
+    TLS_SERVER_CERTIFICATE_REVOKED: 187,
+    TLS_ERROR: 188,
+    DNS_UNAVAILABLE: 189,
+    DNS_NAME_RESOLUTION_FAILED: 190,
+    DNS_RESOLVER_FAILURE: 191,
+    DNS_ERROR: 192,
+    TCP_CONNECT_TIMEOUT: 193,
+    TCP_CONNECTION_REFUSED: 194,
+    TCP_CLOSED_BY_LOCAL: 195,
+    TCP_CLOSED_OTHER: 196,
+    TCP_ERROR: 197,
+    IP_ADDRESS_NOT_REACHABLE: 198,
+    IP_ERROR: 199
+};
+// AB.2.8 Advertisement 'Hub Connection Status'
+exports.HubConnectionStatus = {
+    NO_HUB_CONNECTION: 0,
+    CONNECTED_TO_PRIMARY: 1,
+    CONNECTED_TO_FAILOVER: 2
+};
+// AB.1.5.2 Local Broadcast VMAC
+exports.BROADCAST_VMAC = Buffer.from([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+exports.BROADCAST_VMAC_STRING = 'FF:FF:FF:FF:FF:FF';
+// AB.7.1 WebSocket subprotocol names (IANA-registered)
+exports.WS_SUBPROTOCOL_HUB = 'hub.bsc.bacnet.org';
+exports.WS_SUBPROTOCOL_DIRECT = 'dc.bsc.bacnet.org';
+// AB.7.5.5 WebSocket close status code mapping. Any code not listed maps to
+// WEBSOCKET_ERROR.
+exports.WsCloseCodeToErrorName = {
+    1000: 'WEBSOCKET_CLOSED_BY_PEER',
+    1001: 'WEBSOCKET_ENDPOINT_LEAVES',
+    1002: 'WEBSOCKET_PROTOCOL_ERROR',
+    1003: 'WEBSOCKET_DATA_NOT_ACCEPTED',
+    1006: 'WEBSOCKET_CLOSED_ABNORMALLY',
+    1007: 'WEBSOCKET_DATA_INCONSISTENT',
+    1008: 'WEBSOCKET_DATA_AGAINST_POLICY',
+    1009: 'WEBSOCKET_FRAME_TOO_LONG',
+    1010: 'WEBSOCKET_EXTENSION_MISSING',
+    1011: 'WEBSOCKET_REQUEST_UNAVAILABLE'
+};
+// Node.js error codes (errno / OpenSSL verify codes) mapped onto the AB.7.5.1
+// error taxonomy. Diagnostics only — these names are surfaced in status events
+// and logs, never encoded on the wire by the node role.
+exports.NodeErrorToTaxonomy = {
+    ENOTFOUND: 'DNS_NAME_RESOLUTION_FAILED',
+    EAI_AGAIN: 'DNS_RESOLVER_FAILURE',
+    ECONNREFUSED: 'TCP_CONNECTION_REFUSED',
+    ETIMEDOUT: 'TCP_CONNECT_TIMEOUT',
+    EHOSTUNREACH: 'IP_ADDRESS_NOT_REACHABLE',
+    ENETUNREACH: 'IP_ADDRESS_NOT_REACHABLE',
+    ECONNRESET: 'TCP_CLOSED_OTHER',
+    CERT_HAS_EXPIRED: 'TLS_SERVER_CERTIFICATE_EXPIRED',
+    CERT_NOT_YET_VALID: 'TLS_SERVER_CERTIFICATE_ERROR',
+    CERT_REVOKED: 'TLS_SERVER_CERTIFICATE_REVOKED',
+    DEPTH_ZERO_SELF_SIGNED_CERT: 'TLS_SERVER_CERTIFICATE_ERROR',
+    SELF_SIGNED_CERT_IN_CHAIN: 'TLS_SERVER_CERTIFICATE_ERROR',
+    UNABLE_TO_GET_ISSUER_CERT: 'TLS_SERVER_CERTIFICATE_ERROR',
+    UNABLE_TO_GET_ISSUER_CERT_LOCALLY: 'TLS_SERVER_CERTIFICATE_ERROR',
+    UNABLE_TO_VERIFY_LEAF_SIGNATURE: 'TLS_SERVER_CERTIFICATE_ERROR',
+    ERR_TLS_CERT_ALTNAME_INVALID: 'TLS_SERVER_CERTIFICATE_ERROR',
+    ERR_SSL_TLSV13_ALERT_CERTIFICATE_REQUIRED: 'TLS_CLIENT_CERTIFICATE_ERROR',
+    ERR_SSL_SSLV3_ALERT_BAD_CERTIFICATE: 'TLS_CLIENT_CERTIFICATE_ERROR',
+    ERR_SSL_SSLV3_ALERT_CERTIFICATE_EXPIRED: 'TLS_CLIENT_CERTIFICATE_EXPIRED',
+    ERR_SSL_SSLV3_ALERT_CERTIFICATE_REVOKED: 'TLS_CLIENT_CERTIFICATE_REVOKED',
+    ERR_SSL_SSLV3_ALERT_HANDSHAKE_FAILURE: 'TLS_ERROR',
+    ERR_SSL_UNSUPPORTED_PROTOCOL: 'TLS_ERROR',
+    ERR_TLS_HANDSHAKE_TIMEOUT: 'TLS_ERROR'
+};
+exports.ConnectionRole = {
+    INITIATING: 'initiating',
+    ACCEPTING: 'accepting'
+};
+// AB.6.2.2 (initiating, Figure AB-11) / AB.6.2.3 (accepting, Figure AB-12).
+// CLOSED/FAILED are terminal implementation states standing in for re-entry to
+// IDLE — SCConnection instances are single-use.
+exports.ConnectionState = {
+    IDLE: 'IDLE',
+    AWAITING_WEBSOCKET: 'AWAITING_WEBSOCKET',
+    AWAITING_ACCEPT: 'AWAITING_ACCEPT',
+    AWAITING_REQUEST: 'AWAITING_REQUEST',
+    CONNECTED: 'CONNECTED',
+    DISCONNECTING: 'DISCONNECTING',
+    CLOSED: 'CLOSED',
+    FAILED: 'FAILED'
+};
+exports.Defaults = {
+    CONNECT_WAIT_MS: 10000, // AB.6.2: configurable 5..300 s, recommended 10 s
+    DISCONNECT_WAIT_MS: 5000, // AB.6.2: duration is a local matter
+    HEARTBEAT_MS: 60000, // AB.6.3: configurable 3..300 s (fixed must be 30..300 s)
+    RECONNECT_MS: 10000, // AB.6.1: configurable 2..300 s (fixed must be 10..30 s)
+    RECONNECT_CAP_MS: 600000, // AB.6.1: backoff shall not exceed 600 s
+    MAX_BVLC_ACCEPTED: 6144, // >= 1497 NPDU + 4192 options + header (AB.5.1)
+    MAX_NPDU_ACCEPTED: 1497, // hub minimum forwarding requirement (AB.5.1)
+    VMAC_RETRY_CAP: 5,
+    MAX_HEADER_OPTIONS: 32, // implementation cap per options list (DoS guard)
+    WS_HARD_MAX_PAYLOAD: 1048576 // ws-level anti-DoS backstop (1 MiB)
+};

@@ -1,7 +1,11 @@
 {
   "name": "@bitpoolos/edge-bacnet",
-  "version": "1.6.10",
+  "version": "1.7.0",
   "description": "A bacnet gateway for node-red",
+  "scripts": {
+    "pretest": "node scripts/generate-sc-test-certs.js",
+    "test": "node --test \"test/sc/*.test.js\""
+  },
   "dependencies": {
     "@plus4nodered/ts-node-bacnet": "^1.0.0-beta.2",
     "@vue/server-renderer": "^3.5.13",
@@ -13,7 +17,8 @@
     "toad-scheduler": "^1.6.0",
     "underscore": "^1.10.2",
     "vue": "^3.5.13",
-    "winston": "^3.2.1"
+    "winston": "^3.2.1",
+    "ws": "^8.21.0"
   },
   "node-red": {
     "version": ">=2.2.2",
@@ -37,7 +42,7 @@
     "bms"
   ],
   "engines": {
-    "node": ">=12.0.0"
+    "node": ">=18.0.0"
   },
   "author": {
     "name": "bitpool-dev",
@@ -55,5 +60,8 @@
   "repository": {
     "type": "github",
     "url": "git+https://github.com/bitpool/edge-bacnet.git"
+  },
+  "devDependencies": {
+    "node-forge": "^1.4.0"
   }
 }

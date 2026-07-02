@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.7.0] - 02-07-2026
+
+Feature: BACnet Secure Connect (BACnet/SC)
+
+- The gateway node can now participate in BACnet/SC networks (ANSI/ASHRAE 135-2020, ANNEX AB) as an SC node: a new "Datalink" selector on the Gateway tab chooses between "BACnet/IP (UDP)" (default, unchanged behaviour) and "BACnet Secure Connect (hub)".
+- SC mode connects out to a site hub over a mutually-authenticated TLS 1.3 WebSocket (subprotocol `hub.bsc.bacnet.org`), with primary + optional failover hub URIs, automatic reconnect with backoff, primary re-probing while on failover, spec heartbeats, and duplicate-VMAC recovery.
+- Certificates (CA, operational certificate, private key + optional passphrase) accept pasted PEM or an absolute file path; pasted material is stored encrypted in Node-RED credentials.
+- The gateway's device UUID and Random-48 VMAC are generated on first SC start and persisted in `edge-bacnet-sc-identity.cfg` (honours `BACNET_STORAGE_PATH`).
+- All existing features work unchanged over SC: whoIs/iAm discovery, point polling, reads/writes, and the local BACnet server objects (served over the same hub connection). Devices are addressed by VMAC where an IP address would appear.
+- Node status shows the live SC connection state (connected primary/failover, reconnecting, failed with the spec error taxonomy); the editor dialog shows state, VMAC and UUID.
+- After switching datalink mode, devices re-learn their addresses on the first discovery cycle; reader-node point selections re-key to the new addresses (re-select points after a mode switch).
+- New: in-repo BACnet/SC test hub for development (`node tools/sc-test-hub.js`) plus a self-signed test PKI generator (`node scripts/generate-sc-test-certs.js`) — dev-only, not part of the published package.
+- BACnet/IP is untouched: in IP mode no SC code runs, and the IP wire format is byte-identical to 1.6.10 (regression-checked).
+- Requires Node.js >= 18 (engines updated; TLS 1.3 + WebSocket stack).
+
 ## [1.6.10] - 01-07-2026
 
 Bug fix:
