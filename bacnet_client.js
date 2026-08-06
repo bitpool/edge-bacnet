@@ -641,7 +641,9 @@ class BacnetClient extends EventEmitter {
 
           const discoverySucceeded = await that.discoverPointList(device);
           if (!discoverySucceeded) {
-            that.logOut(`getDevicePointList error: ${that.getDeviceAddress(device)} - ${device.getDeviceId()}`);
+            that.logOut(
+              `Point list discovery failed (both object-list strategies): ${that.getDeviceAddress(device)} - ${device.getDeviceId()}`
+            );
           }
         } catch (e) {
           that.logOut("Error while querying devices: ", e);
@@ -1216,7 +1218,7 @@ class BacnetClient extends EventEmitter {
         device.setLastSeen(Date.now());
         resolve(result);
       } catch (e) {
-        that.logOut(`Error getting point list for ${device.getAddress().toString()} - ${device.getDeviceId()}: `, e);
+        // Logged by discoverPointList, which knows whether a fallback follows.
         reject(e);
       }
     });
@@ -1747,10 +1749,12 @@ class BacnetClient extends EventEmitter {
           try {
             resolve(result.values);
           } catch (e) {
-            that.logOut("Issue with getting device point list, see error:  ", e);
+            // Malformed acknowledgement — reject rather than leaving the promise unsettled,
+            // which would hang the caller until its own timeout (if it has one).
+            reject(e);
           }
         } else {
-          that.logOut(`Error while fetching objects: ${err}`);
+          // discoverPointList is the single place point-list discovery failures are logged.
           reject(err);
         }
       });
