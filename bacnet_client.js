@@ -516,21 +516,11 @@ class BacnetClient extends EventEmitter {
         }
       }
 
-      try {
-        await this.getDevicePointList(device);
-        await this.buildJsonObject(device);
-      } catch (e) {
-        this.logOut(`Update points list error 2: ${this.getDeviceAddress(device)}`, e);
-        device.setManualDiscoveryMode(true);
-
-        try {
-          await this.getDevicePointListWithoutObjectList(device);
-          await this.buildJsonObject(device);
-        } catch (e) {
-          await this.buildJsonObject(device);
-          this.logOut(`Update points list error 4: ${this.getDeviceAddress(device)}`, e);
-        }
+      const discoverySucceeded = await this.discoverPointList(device);
+      if (!discoverySucceeded) {
+        this.logOut(`Update points list error: ${this.getDeviceAddress(device)} - ${device.getDeviceId()}`);
       }
+      await this.buildJsonObject(device);
 
       return true;
     } catch (e) {
@@ -629,69 +619,40 @@ class BacnetClient extends EventEmitter {
 
   async queryDevices() {
     let that = this;
+    that.pollInProgress = true;
     try {
-      that.pollInProgress = true;
+      for (let device of that.deviceList) {
+        if (typeof device != "object" || device.getIsDumbMstpRouter() == true) {
+          continue;
+        }
 
-      let index = 0;
-      await query(index);
-
-      async function query(index) {
-        if (index < that.deviceList.length) {
-          let device = that.deviceList[index];
-          if (typeof device == "object" && (device.getIsDumbMstpRouter() == false || device.getIsDumbMstpRouter() == undefined)) {
-            if (device.getIsProtocolServicesSet() == false) {
-              try {
-                let result = await that.getProtocolSupported(device);
-                let decodedValues = decodeBitArray(8, result.values[0].originalBitString.value);
-                device.setProtocolServicesSupported(decodedValues);
-              } catch (error) {
-                that.logOut("getProtocolSupported error: ", error);
-                index++;
-                await query(index);
-              }
-            }
-            try {
-              await that.updateDeviceName(device);
-
-              if (device.getSegmentation() !== 3) {
-                try {
-                  await that.getDevicePointList(device);
-                  index++;
-                  await query(index);
-                } catch (e) {
-                  that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
-
-                  index++;
-                  await query(index);
-                }
-              } else if (device.getSegmentation() == 3) {
-                try {
-                  await that.getDevicePointListWithoutObjectList(device);
-                  index++;
-                  await query(index);
-                } catch (e) {
-                  that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
-
-                  index++;
-                  await query(index);
-                }
-              }
-            } catch (e) {
-              that.logOut("Error while querying devices: ", e);
-
-              index++;
-              await query(index);
-            }
-          } else {
-            index++;
-            await query(index);
+        if (device.getIsProtocolServicesSet() == false) {
+          try {
+            let result = await that.getProtocolSupported(device);
+            let decodedValues = decodeBitArray(8, result.values[0].originalBitString.value);
+            device.setProtocolServicesSupported(decodedValues);
+          } catch (error) {
+            that.logOut("getProtocolSupported error: ", error);
+            continue;
           }
-        } else if (index == that.deviceList.length) {
-          that.pollInProgress = false;
+        }
+        try {
+          await that.updateDeviceName(device);
+
+          const discoverySucceeded = await that.discoverPointList(device);
+          if (!discoverySucceeded) {
+            that.logOut(
+              `Point list discovery failed (both object-list strategies): ${that.getDeviceAddress(device)} - ${device.getDeviceId()}`
+            );
+          }
+        } catch (e) {
+          that.logOut("Error while querying devices: ", e);
         }
       }
     } catch (e) {
       that.logOut("Error while querying devices: ", e);
+    } finally {
+      that.pollInProgress = false;
     }
   }
 
@@ -1252,16 +1213,54 @@ class BacnetClient extends EventEmitter {
     let that = this;
     return new Promise(async function (resolve, reject) {
       try {
-        device.setManualDiscoveryMode(false);
         let result = await that.scanDevice(device);
         device.setPointsList(result);
         device.setLastSeen(Date.now());
         resolve(result);
       } catch (e) {
-        that.logOut(`Error getting point list for ${device.getAddress().toString()} - ${device.getDeviceId()}: `, e);
+        // Logged by discoverPointList, which knows whether a fallback follows.
         reject(e);
       }
     });
+  }
+
+  async discoverPointList(device) {
+    const preferIndexScan = device.getSegmentation() == 3 || device.getManualDiscoveryMode() == true;
+
+    if (!preferIndexScan) {
+      try {
+        await this.getDevicePointList(device);
+        device.clearPointListRetryCount();
+        return true;
+      } catch (e) {
+        device.incrementPointListRetryCount();
+        this.logOut(
+          `OBJECT_LIST ALL read failed for ${this.getDeviceAddress(device)} - ${device.getDeviceId()} ` +
+            `(retry ${device.getPointListRetryCount()}); falling back to per-index scan`,
+          e
+        );
+      }
+    }
+
+    let scanned;
+    try {
+      scanned = await this.getDevicePointListWithoutObjectList(device);
+    } catch (e) {
+      this.logOut(
+        `getDevicePointListWithoutObjectList error: ${this.getDeviceAddress(device)} - ${device.getDeviceId()}`,
+        e
+      );
+      return false;
+    }
+    const found = Array.isArray(scanned) ? scanned.length : 0;
+
+    if (found > 0) {
+      device.setManualDiscoveryMode(true);
+      device.clearPointListRetryCount();
+      return true;
+    }
+
+    return false;
   }
 
   getDevicePointListWithoutObjectList(device) {
@@ -1750,10 +1749,12 @@ class BacnetClient extends EventEmitter {
           try {
             resolve(result.values);
           } catch (e) {
-            that.logOut("Issue with getting device point list, see error:  ", e);
+            // Malformed acknowledgement — reject rather than leaving the promise unsettled,
+            // which would hang the caller until its own timeout (if it has one).
+            reject(e);
           }
         } else {
-          that.logOut(`Error while fetching objects: ${err}`);
+          // discoverPointList is the single place point-list discovery failures are logged.
           reject(err);
         }
       });
