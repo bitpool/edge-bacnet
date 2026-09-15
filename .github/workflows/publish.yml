@@ -33,5 +33,10 @@ jobs:
     with:
       provenance: true
       dry_run: ${{ inputs.dry_run || false }}
+      # Preserves this repo's deployment branch policy, which the old
+      # repo-local workflow got from its own `environment: release`. The stale
+      # NPM_TOKEN that used to sit in this environment has been deleted, so the
+      # org secret is what resolves — an environment secret would shadow it.
+      environment: release
     # NPM_TOKEN is an org secret scoped to the npm repos.
     secrets: inherit
