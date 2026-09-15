@@ -1,5 +1,13 @@
 name: Publish to npm
 
+# Publishes @bitpoolos/edge-bacnet to https://registry.npmjs.org.
+#
+# The mechanics live in bitpool/workflows so every @bitpoolos package shares one
+# copy — see that repo's README for the inputs and caller requirements.
+#
+# Pushes to main are safe: the reusable workflow checks npm for the version in
+# package.json first, so only a version bump actually publishes.
+
 on:
   push:
     branches: [main]
@@ -16,68 +24,13 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
-    environment: release
+    uses: bitpool/workflows/.github/workflows/npm-publish.yml@v1
+    # The org sets default_workflow_permissions: read, so these must be granted
+    # here or the run dies as startup_failure with no logs at all.
     permissions:
-      contents: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          registry-url: https://registry.npmjs.org
-
-      - name: Read package name + version
-        id: pkg
-        run: |
-          echo "name=$(node -p "require('./package.json').name")" >> "$GITHUB_OUTPUT"
-          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - name: Version gate (skip if already on npm)
-        id: gate
-        run: |
-          if npm view "${{ steps.pkg.outputs.name }}@${{ steps.pkg.outputs.version }}" version >/dev/null 2>&1; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::${{ steps.pkg.outputs.name }}@${{ steps.pkg.outputs.version }} already published — skipping."
-          else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: npm publish (dry run)
-        if: steps.gate.outputs.publish == 'true' && inputs.dry_run == true
-        run: npm publish --provenance --access public --dry-run
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: npm publish
-        if: steps.gate.outputs.publish == 'true' && inputs.dry_run != true
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Tag + GitHub Release
-        if: steps.gate.outputs.publish == 'true' && inputs.dry_run != true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.pkg.outputs.version }}
-        run: |
-          TAG="v$VERSION"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "::notice::$TAG already exists — skipping release."; exit 0
-          fi
-          NOTES="$(mktemp)"
-          awk -v v="$VERSION" '
-            BEGIN { gsub(/\./, "\\.", v) }   # escape dots so 1.6.8 is literal, not "any char"
-            $0 ~ "^## \\[" v "\\]" {grab=1; next}
-            grab && /^## \[/ {exit}
-            grab {print}
-          ' CHANGELOG.md > "$NOTES"
-          if [ -s "$NOTES" ]; then
-            gh release create "$TAG" --title "$TAG" --notes-file "$NOTES" --target "$GITHUB_SHA"
-          else
-            gh release create "$TAG" --title "$TAG" --generate-notes --target "$GITHUB_SHA"
-          fi
+      contents: write # tag + release
+      id-token: write # provenance
+    with:
+      provenance: true
+    # NPM_TOKEN is an org secret scoped to the npm repos.
+    secrets: inherit
