@@ -32,5 +32,6 @@ jobs:
       id-token: write # provenance
     with:
       provenance: true
+      dry_run: ${{ inputs.dry_run || false }}
     # NPM_TOKEN is an org secret scoped to the npm repos.
     secrets: inherit
