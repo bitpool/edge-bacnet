@@ -24,7 +24,10 @@ concurrency:
 
 jobs:
   publish:
-    uses: bitpool/workflows/.github/workflows/npm-publish.yml@v1
+    # workflows-public, not workflows: a reusable workflow in a private repo
+    # cannot be called from a public one — the run fails at startup with no
+    # jobs and no logs.
+    uses: bitpool/workflows-public/.github/workflows/npm-publish.yml@v1
     # The org sets default_workflow_permissions: read, so these must be granted
     # here or the run dies as startup_failure with no logs at all.
     permissions:
