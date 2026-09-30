@@ -68,7 +68,9 @@ class BacnetClientConfig {
     sanitise_device_schedule,
     portRangeMatrix,
     enable_device_discovery,
-    maxConcurrentRequests
+    maxConcurrentRequests,
+    perRouterCap,
+    offlineThreshold
   ) {
     this.apduTimeout = apduTimeout;
     this.localIpAdrress = localIpAdrress;
@@ -94,6 +96,17 @@ class BacnetClientConfig {
     if (clampedMaxConcurrent < 1) clampedMaxConcurrent = 1;
     if (clampedMaxConcurrent > 250) clampedMaxConcurrent = 250;
     this.maxConcurrentRequests = clampedMaxConcurrent;
+    // Max simultaneous requests to a single device / MSTP trunk (protects slow trunks).
+    // Clamp 1..maxConcurrentRequests (can't exceed the global cap).
+    let clampedPerRouter = parseInt(perRouterCap) || 4;
+    if (clampedPerRouter < 1) clampedPerRouter = 1;
+    if (clampedPerRouter > this.maxConcurrentRequests) clampedPerRouter = this.maxConcurrentRequests;
+    this.perRouterCap = clampedPerRouter;
+    // Consecutive failed polls before a point is marked offline (debounce). Clamp 1..10.
+    let clampedOfflineThreshold = parseInt(offlineThreshold) || 3;
+    if (clampedOfflineThreshold < 1) clampedOfflineThreshold = 1;
+    if (clampedOfflineThreshold > 10) clampedOfflineThreshold = 10;
+    this.offlineThreshold = clampedOfflineThreshold;
   }
 
   generatePortRangeArray(rangeMatrix) {

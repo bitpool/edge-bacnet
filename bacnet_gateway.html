@@ -166,6 +166,8 @@
       local_interface_name: { value: "", required: false },
       apduTimeout: { value: 6000 },
       maxConcurrentRequests: { value: 250 },
+      perRouterCap: { value: 4 },
+      offlineThreshold: { value: 3 },
       roundDecimal: { value: 2 },
       local_device_port: { value: 47808, required: true },
       apduSize: { value: "5", required: true },
@@ -1105,6 +1107,20 @@
         <input type="number" id="node-input-maxConcurrentRequests" placeholder="250" min="1" max="250" />
       </div>
 
+      <div class="form-row bp-row">
+        <label for="node-input-perRouterCap"
+          ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.perRouterCap"></span>Max Requests Per Device/Router</label
+        >
+        <input type="number" id="node-input-perRouterCap" placeholder="4" min="1" max="250" />
+      </div>
+
+      <div class="form-row bp-row">
+        <label for="node-input-offlineThreshold"
+          ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.offlineThreshold"></span>Consecutive Misses Before Offline</label
+        >
+        <input type="number" id="node-input-offlineThreshold" placeholder="3" min="1" max="10" />
+      </div>
+
       <div class="form-row bp-row" style="display: none;">
         <label for="node-input-apduSize"
           ><i class="icon-tag"></i> <span data-i18n="bitpool-bacnet.label.apduSize"></span>Max Apdu Size</label
@@ -1326,6 +1342,8 @@
   <ul class="node-ports">
     <li>APDU Timeout - BACnet msg timeout option</li>
     <li>Max Concurrent Requests - Maximum number of simultaneous BACnet requests (1-250). Lower values reduce invoke ID exhaustion on large MSTP networks. Default: 250</li>
+    <li>Max Requests Per Device/Router - Maximum simultaneous requests to a single device or MSTP trunk, on top of Max Concurrent Requests. Protects slow MSTP trunks from being flooded (each trunk behind a router is capped independently). Default: 4</li>
+    <li>Consecutive Misses Before Offline - Number of consecutive failed polls before a point is marked offline. Higher values debounce transient/slow responses so points don't flap offline. Default: 3</li>
     <li>Max APDU Size - BACnet max apdu size</li>
     <li>Max Segments - BACnet max segments</li>
     <li>

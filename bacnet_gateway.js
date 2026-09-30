@@ -39,6 +39,8 @@ module.exports = function (RED) {
     this.sanitise_device_schedule = config.sanitise_device_schedule;
     this.enable_device_discovery = config.enable_device_discovery;
     this.maxConcurrentRequests = config.maxConcurrentRequests;
+    this.perRouterCap = config.perRouterCap;
+    this.offlineThreshold = config.offlineThreshold;
 
     //client and config store
     this.bacnetConfig = nodeContext.get("bacnetConfig");
@@ -69,7 +71,9 @@ module.exports = function (RED) {
         node.sanitise_device_schedule,
         node.portRangeRegisters.filter((ele) => ele.enabled === true),
         node.enable_device_discovery,
-        node.maxConcurrentRequests
+        node.maxConcurrentRequests,
+        node.perRouterCap,
+        node.offlineThreshold
       );
 
       if (typeof node.bacnetClient !== "undefined") {
@@ -256,11 +260,22 @@ module.exports = function (RED) {
         } else if (msg.type == "Write") {
           node.bacnetClient.doWrite(msg.value, msg.options);
         } else if (msg.doDiscover == true) {
-          node.status({ fill: "blue", shape: "dot", text: "Sending global Who is" });
+          node.status({ fill: "blue", shape: "dot", text: "Discovering devices + points" });
+          // Device discovery (Who-Is) alone only finds devices — it never reads names or points.
+          // Follow it with point discovery so a manual "discover" actually builds out the tree.
           node.bacnetClient.globalWhoIs();
           setTimeout(() => {
+            // Delay so devices have answered the Who-Is before we enumerate their points.
+            // Match the scheduler's cacheLoaded precondition to avoid racing the startup cache
+            // load. This is a manual, explicit action, so it intentionally OVERRIDES the
+            // enable_device_discovery schedule toggle (same as the Who-Is above already does).
+            if (!node.bacnetClient.cacheLoaded) return;
+            if (!node.bacnetClient.pollInProgress) node.bacnetClient.queryDevices();
+            if (!node.bacnetClient.buildJsonInProgress) node.bacnetClient.buildJsonTree();
+          }, 15000);
+          setTimeout(() => {
             node.status({});
-          }, 2000);
+          }, 17000);
         } else if (msg.payload == "BindEvents") {
           node.bacnetClient.removeAllListeners();
           bindEventListeners();
