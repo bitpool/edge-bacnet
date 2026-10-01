@@ -4,8 +4,13 @@
 
 module.exports = function (RED) {
   const { BacnetClient } = require("./bacnet_client");
-  const { BacnetClientConfig, getIpAddress } = require("./common");
+  const { BacnetClientConfig, getIpAddress, setStorageDir } = require("./common");
   const { BacnetServer } = require("./bacnet_server.js");
+
+  // Persist the BACnet datastore in the Node-RED userDir (e.g. /data) instead of
+  // the process cwd, so it survives container recreates / updates. Falls back to
+  // cwd if userDir is unavailable. Legacy cwd datastores are migrated on first read.
+  setStorageDir(RED.settings && RED.settings.userDir);
 
   function BitpoolBacnetGatewayDevice(config) {
     RED.nodes.createNode(this, config);
