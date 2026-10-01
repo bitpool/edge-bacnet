@@ -548,7 +548,7 @@
           },
           isDeviceActive(slotProps) {
             let app = this;
-            if ((Date.now() - slotProps.node.lastSeen) / 1000 < app.pollFrequency + 5) {
+            if ((Date.now() - slotProps.node.lastSeen) / 1000 < app.pollFrequency * 2 + 30) {
               return true;
             } else if (slotProps.node.isDumbMstpRouter == true || slotProps.node.isDumbMstpRouter == "true") {
               return true;

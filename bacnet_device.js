@@ -16,6 +16,11 @@ const DEVICE_OBJECT_PROPERTIES = [
     { id: baEnum.PropertyIdentifier.DESCRIPTION },
 ];
 
+// Object types kept in the model (whitelist). Shared by the list filter (setPointsList) and,
+// in bacnet_client, the network-tree gate/prune, so the tree can't diverge from the list.
+// DEVICE(8) AI(0) AO(1) AV(2) BI(3) BO(4) BV(5) MSI(13) MSO(14) MSV(19) CharStrVal(40)
+const ALLOWED_OBJECT_TYPES = new Set([8, 0, 1, 2, 3, 4, 5, 13, 14, 19, 40]);
+
 class BacnetDevice {
     /**
      * Returns the standardized list of properties to read for Device objects (type 8).
@@ -38,7 +43,8 @@ class BacnetDevice {
             that.vendorId = config.vendorId;
             that.lastSeen = config.lastSeen;
             that.deviceName = config.deviceName;
-            that.pointsList = config.pointsList;
+            that.pointsList = [];
+            that.setPointsList(config.pointsList || []); // filter the cached list through the whitelist on load
             that.pointListUpdateTs = config.pointListUpdateTs;
             that.manualDiscoveryMode = config.manualDiscoveryMode;
             that.pointListRetryCount = config.pointListRetryCount;
@@ -268,9 +274,10 @@ class BacnetDevice {
     }
 
     setPointsList(newPoints) {
-        // Whitelisted object types kept in the model:
-        // DEVICE(8) AI(0) AO(1) AV(2) BI(3) BO(4) BV(5) MSI(13) MSO(14) MSV(19) CS(40)
-        const allowedTypes = new Set([8, 0, 1, 2, 3, 4, 5, 13, 14, 19, 40]);
+        // Whitelisted object types kept in the model (shared constant, also used by the
+        // network-tree gate/prune in bacnet_client so the tree stays in sync with this list).
+        const allowedTypes = ALLOWED_OBJECT_TYPES;
+        if (!Array.isArray(newPoints)) newPoints = []; // robust: never throw before the filter runs
 
         for (let index = 0; index < newPoints.length; index++) {
             let newPoint = newPoints[index];
@@ -421,4 +428,4 @@ class BacnetDevice {
 
 }
 
-module.exports = { BacnetDevice };
+module.exports = { BacnetDevice, ALLOWED_OBJECT_TYPES };

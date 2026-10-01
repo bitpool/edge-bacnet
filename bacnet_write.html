@@ -278,7 +278,7 @@
           },
           isDeviceActive(slotProps) {
             let app = this;
-            if ((Date.now() - slotProps.node.lastSeen) / 1000 < app.pollFrequency) {
+            if ((Date.now() - slotProps.node.lastSeen) / 1000 < app.pollFrequency * 2 + 30) {
               return true;
             }
             return false;

@@ -15,7 +15,7 @@ const {
   decodeBitArray,
 } = require("./common");
 const { ToadScheduler, SimpleIntervalJob, Task } = require("toad-scheduler");
-const { BacnetDevice } = require("./bacnet_device");
+const { BacnetDevice, ALLOWED_OBJECT_TYPES } = require("./bacnet_device");
 const { Mutex } = require("async-mutex");
 const { treeBuilder } = require("./treeBuilder.js");
 
@@ -43,6 +43,11 @@ class BacnetClient extends EventEmitter {
     that._requestQueue = [];           // Queue of waiting request resolvers
     that._processingQueue = false;     // Flag to prevent concurrent queue processing
     that._maxQueueSize = 10000;        // Maximum queued requests before rejecting (sized for large sites)
+    // --- per-router (per-address) in-flight throttle + offline debounce ---
+    that._perAddrInFlight = new Map();   // addr -> current outstanding count
+    that._perAddrWaiters = new Map();    // addr -> [resolve, ...] queued waiters
+    that._perRouterCap = Math.max(1, parseInt(config.perRouterCap) || 4);     // max outstanding per router IP (>=1)
+    that.offlineThreshold = Math.max(1, parseInt(config.offlineThreshold) || 3); // consecutive misses before a point goes offline (>=1)
 
     try {
       that.roundDecimal = config.roundDecimal;
@@ -130,6 +135,9 @@ class BacnetClient extends EventEmitter {
         //who is callback
         that.client.on("iAm", (device) => {
           if (device.address !== that.config.localIpAdrress) {
+            // Ignore phantom/invalid device instances (null/0/NaN) — they can never enumerate and
+            // only bloat the list. A genuine device always announces a valid positive instance.
+            if (!that._isValidDeviceId(device.deviceId)) return;
             if (that.scanMatrix.length > 0) {
               let matrixMap = that.scanMatrix.filter((ele) => device.deviceId >= ele.start && device.deviceId <= ele.end);
               if (matrixMap.length > 0) {
@@ -254,6 +262,96 @@ class BacnetClient extends EventEmitter {
     });
   }
 
+  // Cap simultaneous outstanding requests to a single device/router IP, on top of the
+  // global maxConcurrentRequests. MSTP trunks are serial, so flooding one router with many
+  // concurrent requests just overruns its buffer and drops responses; this protects the slow
+  // trunks (and lets the global cap be raised for throughput). Acquire AFTER _waitForRequestSlot.
+  _acquireAddrSlot(addr) {
+    let that = this;
+    const inFlight = that._perAddrInFlight.get(addr) || 0;
+    if (inFlight < that._perRouterCap) {
+      that._perAddrInFlight.set(addr, inFlight + 1);
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      let q = that._perAddrWaiters.get(addr);
+      if (!q) {
+        q = [];
+        that._perAddrWaiters.set(addr, q);
+      }
+      q.push(resolve);
+    });
+  }
+
+  _releaseAddrSlot(addr) {
+    let that = this;
+    const q = that._perAddrWaiters.get(addr);
+    if (q && q.length > 0) {
+      q.shift()(); // hand the slot straight to the next waiter (count unchanged)
+      if (q.length === 0) that._perAddrWaiters.delete(addr);
+      return;
+    }
+    const inFlight = that._perAddrInFlight.get(addr) || 0;
+    if (inFlight <= 1) that._perAddrInFlight.delete(addr);
+    else that._perAddrInFlight.set(addr, inFlight - 1);
+  }
+
+  // Key for the per-router cap. For MSTP devices include the network number so independent
+  // trunks behind ONE BACnet/IP router each get their own cap (the trunk — not the router — is
+  // the serial bottleneck). Local BACnet/IP devices key by their own IP (cap never binds since
+  // reads are already serial per device).
+  _addrKeyFromAddress(a) {
+    if (a && typeof a === "object") {
+      return a.address + (a.net !== undefined && a.net !== null ? ":" + a.net : "");
+    }
+    return a;
+  }
+
+  _addrSlotKey(device) {
+    return this._addrKeyFromAddress(device.getAddress());
+  }
+
+  // Shared timeout classifier: distinguishes a transient ERR_TIMEOUT from a definitive error.
+  _isTimeoutError(err) {
+    return !!err && String(err.message || err).includes("ERR_TIMEOUT");
+  }
+
+  // Gated single ReadProperty for the DISCOVERY / internal read paths: waits for a global slot
+  // AND a per-router slot, then releases the per-router slot exactly once (response, timeout, or
+  // synchronous throw). ALWAYS resolves {err, value} and NEVER rejects, so callers can destructure
+  // without a try/catch — a saturated global queue surfaces as {err}, not a rejection (several
+  // callers, e.g. the per-property Promise.all and _readDeviceName, rely on this). The per-router
+  // release relies on the bacnet library always firing the callback (response OR apduTimeout), so a
+  // stuck request cannot permanently hold a trunk's slot.
+  async _gatedReadProperty(addressObject, objectId, property, options) {
+    const addr = this._addrKeyFromAddress(addressObject.address);
+    const that = this;
+    try {
+      await this._waitForRequestSlot();
+      await this._acquireAddrSlot(addr);
+    } catch (e) {
+      return { err: e, value: undefined }; // gating failed (e.g. queue full) — surface as {err}, never reject
+    }
+    return new Promise((resolve) => {
+      let released = false;
+      const release = () => {
+        if (!released) {
+          released = true;
+          that._releaseAddrSlot(addr);
+        }
+      };
+      try {
+        that.client.readProperty(addressObject, objectId, property, options, (err, value) => {
+          release();
+          resolve({ err, value });
+        });
+      } catch (e) {
+        release();
+        resolve({ err: e, value: undefined });
+      }
+    });
+  }
+
   async readCachedFile() {
     let that = this;
     try {
@@ -265,9 +363,14 @@ class BacnetClient extends EventEmitter {
           // if (parsedData.renderList) that.renderList = parsedData.renderList;
           if (parsedData.deviceList) {
             parsedData.deviceList.forEach(function (device) {
+              // Skip phantom entries (invalid instance id) unless they are router placeholders
+              // (isDumbMstpRouter, deviceId null) which the tree builder needs for rendering.
+              if (!that._isValidDeviceId(device.deviceId) && device.isDumbMstpRouter !== true) return;
               let newBacnetDevice = new BacnetDevice(true, device);
               that.deviceList.push(newBacnetDevice);
             });
+            // Collapse any duplicate entries persisted in the cache from earlier sessions.
+            that._dedupeDeviceList();
           }
           if (parsedData.pointList) that.networkTree = parsedData.pointList;
           // renderListCount is no longer cached - will be recalculated by tree builder
@@ -406,26 +509,14 @@ class BacnetClient extends EventEmitter {
     };
     const readOptions = that.getDeviceSpecificOptions(device);
 
-    // Wait for a request slot before proceeding
-    await that._waitForRequestSlot();
-
-    return new Promise((resolve, reject) => {
-      that.client.readProperty(
-        addressObject,
-        { type: baEnum.ObjectType.DEVICE, instance: device.getDeviceId() },
-        baEnum.PropertyIdentifier.PROTOCOL_SERVICES_SUPPORTED,
-        readOptions,
-        (err, value) => {
-          if (err) {
-            reject(err);
-          }
-
-          if (value) {
-            resolve(value);
-          }
-        }
-      );
-    });
+    const { err, value } = await that._gatedReadProperty(
+      addressObject,
+      { type: baEnum.ObjectType.DEVICE, instance: device.getDeviceId() },
+      baEnum.PropertyIdentifier.PROTOCOL_SERVICES_SUPPORTED,
+      readOptions
+    );
+    if (err) throw err;
+    return value;
   }
 
   addToParentMstpNetwork(device) {
@@ -632,66 +723,85 @@ class BacnetClient extends EventEmitter {
     try {
       that.pollInProgress = true;
 
-      let index = 0;
-      await query(index);
+      // Flat sequential walk. The previous recursive version advanced with
+      // `index++; await query(index)` inside catch blocks WITHOUT returning, so a
+      // failing device re-walked the remaining list (2^m traversals) and any escaped
+      // throw left pollInProgress stuck true, permanently disabling polling until a
+      // restart. A for-loop + try/finally fixes both.
+      for (let index = 0; index < that.deviceList.length; index++) {
+        let device = that.deviceList[index];
+        if (typeof device !== "object") continue;
+        if (device.getIsDumbMstpRouter() === true) continue;
+        if (!that._isValidDeviceId(device.getDeviceId())) continue; // never scan a phantom/invalid id
 
-      async function query(index) {
-        if (index < that.deviceList.length) {
-          let device = that.deviceList[index];
-          if (typeof device == "object" && (device.getIsDumbMstpRouter() == false || device.getIsDumbMstpRouter() == undefined)) {
-            if (device.getIsProtocolServicesSet() == false) {
-              try {
-                let result = await that.getProtocolSupported(device);
-                let decodedValues = decodeBitArray(8, result.values[0].originalBitString.value);
-                device.setProtocolServicesSupported(decodedValues);
-              } catch (error) {
-                that.logOut("getProtocolSupported error: ", error);
-                index++;
-                await query(index);
-              }
-            }
+        try {
+          if (device.getIsProtocolServicesSet() == false) {
             try {
-              await that.updateDeviceName(device);
+              let result = await that.getProtocolSupported(device);
+              let decodedValues = decodeBitArray(8, result.values[0].originalBitString.value);
+              device.setProtocolServicesSupported(decodedValues);
+            } catch (error) {
+              that.logOut("getProtocolSupported error: ", error);
+              continue; // skip this device this cycle; retried next cycle (isProtocolServicesSet stays false)
+            }
+          }
 
-              if (device.getSegmentation() !== 3) {
-                try {
-                  await that.getDevicePointList(device);
-                  index++;
-                  await query(index);
-                } catch (e) {
-                  that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
+          // Re-enumeration gate. Re-walking every device's full OBJECT_LIST every cycle is what
+          // starves discovery on large sites — the sweep never reaches the un-enumerated tail. A
+          // device that has ALREADY produced points and was refreshed within RESCAN_MS is skipped
+          // here (its points persist and still get polled by buildJsonTree); devices that have
+          // never enumerated (no timestamp) are (re)tried every cycle so the tail is prioritised.
+          // Object lists change rarely, so the slow re-scan is safe; a manual rediscover forces it.
+          const enumTs = device.getPointListUpdateTS ? device.getPointListUpdateTS() : null;
+          const RESCAN_MS = Math.max(6 * 3600 * 1000, (parseInt(that.device_read_schedule) || 900) * 1000 * 8);
+          if (enumTs && Date.now() - enumTs < RESCAN_MS) {
+            continue; // already enumerated recently — free discovery to reach un-enumerated devices
+          }
 
-                  index++;
-                  await query(index);
-                }
-              } else if (device.getSegmentation() == 3) {
-                try {
-                  await that.getDevicePointListWithoutObjectList(device);
-                  index++;
-                  await query(index);
-                } catch (e) {
-                  that.logOut(`getDevicePointList error: ${device.getAddress()}`, e);
+          await that.updateDeviceName(device);
 
-                  index++;
-                  await query(index);
-                }
-              }
+          device._enumComplete = false; // set by getDevicePointList / scanDeviceManually below
+
+          if (device.getSegmentation() !== 3) {
+            // Try the whole-list OBJECT_LIST read first.
+            let ok = false;
+            let definitiveFailure = false;
+            try {
+              const result = await that.getDevicePointList(device);
+              ok = Array.isArray(result) && result.length > 1; // got a real list (not just the device object)
             } catch (e) {
-              that.logOut("Error while querying devices: ", e);
-
-              index++;
-              await query(index);
+              that.logOut(`getDevicePointList (whole) failed for ${device.getDeviceId ? device.getDeviceId() : ""}: `, e);
+              definitiveFailure = !that._isTimeoutError(e); // a non-timeout error (e.g. seg-not-supported abort) is real
+            }
+            if (!ok) {
+              // #53: whole-list read didn't yield a usable list -> fall back to the per-index scan.
+              // Only PIN the device to the slow path (setSegmentation 3) on a DEFINITIVE failure — a
+              // single dropped datagram (timeout) or a genuinely short list must NOT downgrade a
+              // segmentation-capable device (it retries the fast whole-list read next cycle).
+              that.logOut(`Falling back to per-index OBJECT_LIST scan for device ${device.getDeviceId ? device.getDeviceId() : ""}`);
+              if (definitiveFailure) device.setSegmentation(3);
+              await that.getDevicePointListWithoutObjectList(device);
             }
           } else {
-            index++;
-            await query(index);
+            await that.getDevicePointListWithoutObjectList(device);
           }
-        } else if (index == that.deviceList.length) {
-          that.pollInProgress = false;
+
+          // Stamp enumeration time ONLY once the device has real (non device-object) points AND
+          // the enumeration was COMPLETE (whole-list read, or a per-index walk that reached a
+          // definitive end with no retry-exhausted gaps). A partial walk (transient miss on a
+          // flaky trunk) is left unstamped so the gate retries it next cycle until it fully
+          // enumerates — otherwise the missed points would lock out for the full RESCAN_MS.
+          const realPts = (device.getPointsList() || []).filter((p) => p && p.value && p.value.type !== 8);
+          if (realPts.length > 0 && device._enumComplete === true) device.setPointListUpdateTS(Date.now());
+        } catch (e) {
+          that.logOut(`Error while querying device ${device.getDeviceId ? device.getDeviceId() : ""}: `, e);
+          // continue to next device
         }
       }
     } catch (e) {
       that.logOut("Error while querying devices: ", e);
+    } finally {
+      that.pollInProgress = false; // ALWAYS clear, even on an escaped throw
     }
   }
 
@@ -726,9 +836,22 @@ class BacnetClient extends EventEmitter {
 
     try {
       that.client._settings.apduTimeout = config.apduTimeout;
+      // maxConcurrentRequests was previously only applied at construction, so changing it
+      // required a full Node-RED restart. canSendRequest() reads _settings live, so patching
+      // it here makes it take effect on Deploy (same as apduTimeout).
+      // config.maxConcurrentRequests is already clamped to [1,250] by BacnetClientConfig (common.js),
+      // so assign it directly like the other live settings above.
+      that.client._settings.maxConcurrentRequests = config.maxConcurrentRequests;
       that.client._settings.interface = config.localIpAdrress;
       that.client._settings.port = config.port;
       that.client._settings.broadcastAddress = config.broadCastAddr;
+      // NOTE: portRangeMatrix is NOT live-patchable here — the transport binds a UDP socket
+      // per port at construction; changing ports still needs a restart / transport rebuild.
+
+      // Re-read app-layer tunables so a Deploy applies them (not just a restart).
+      that.deviceRetryCount = parseInt(config.retries);
+      that._perRouterCap = Math.max(1, parseInt(config.perRouterCap) || 4);
+      that.offlineThreshold = Math.max(1, parseInt(config.offlineThreshold) || 3);
 
       that.client._transport.interface = config.localIpAdrress;
       that.client._transport.port = config.port;
@@ -815,6 +938,130 @@ class BacnetClient extends EventEmitter {
     }
   }
 
+  // A valid BACnet device instance is an integer in 0..4194302 (ASHRAE 135: 0 is spec-legal and
+  // addressable; 4194303 = 0x3FFFFF is the reserved "uninitialized/wildcard" value, never a real
+  // device). Phantom entries (null / NaN / negative / the wildcard) fail this — they can only ever
+  // error on read, so they must never enter the device list or be scanned.
+  _isValidDeviceId(id) {
+    const n = typeof id === "string" ? parseInt(id, 10) : id;
+    return Number.isInteger(n) && n >= 0 && n <= 4194302;
+  }
+
+  // Collapse duplicate deviceList entries that share the same IP+deviceId key. Duplicates
+  // accumulate over time (per-cycle re-adds / overlapping tree builds) and bloat the datamodel,
+  // waste discovery, and split a device's children across stale copies. Merge conservatively:
+  // keep the copy with the most points, take the freshest lastSeen, and union childDevices.
+  // Purely removes redundancy (never adds work or wire traffic) so it cannot regress throughput.
+  // Returns the number of entries removed.
+  _dedupeDeviceList() {
+    let that = this;
+    if (!Array.isArray(that.deviceList) || that.deviceList.length === 0) return 0;
+    const byKey = new Map();
+    const order = [];
+    for (const device of that.deviceList) {
+      if (typeof device !== "object" || device === null) continue;
+      const key = that.createDeviceKey(device);
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, device);
+        order.push(key);
+      } else {
+        // Merge: survivor = the more complete copy (most points). Keep freshest lastSeen and the
+        // union of child device ids so no children are lost when a stale copy is dropped.
+        const survivor = (device.getPointsList() || []).length > (existing.getPointsList() || []).length ? device : existing;
+        const dropped = survivor === existing ? device : existing;
+        const ls = Math.max(survivor.getLastSeen() || 0, dropped.getLastSeen() || 0);
+        if (ls) survivor.setLastSeen(ls);
+        const kids = new Set([...(survivor.childDevices || []), ...(dropped.childDevices || [])]);
+        survivor.childDevices = [...kids];
+        // Preserve a parent link if the survivor lost it — the merge must NEVER drop parentDeviceId
+        // (doing so would orphan an MSTP child under a bare-IP stub instead of its named router).
+        if (
+          (survivor.getParentDeviceId() === null || survivor.getParentDeviceId() === undefined) &&
+          dropped.getParentDeviceId() !== null &&
+          dropped.getParentDeviceId() !== undefined
+        ) {
+          survivor.setParentDeviceId(dropped.getParentDeviceId());
+        }
+        // Preserve any points that exist ONLY on the dropped copy so the survivor is a true
+        // superset — a device must never lose points to a merge. setPointsList de-dups by
+        // type+instance and re-applies the whitelist, and issues zero wire traffic.
+        const droppedPts = dropped.getPointsList() || [];
+        if (droppedPts.length > 0) survivor.setPointsList(droppedPts);
+        byKey.set(key, survivor);
+      }
+    }
+    const deduped = order.map((k) => byKey.get(k));
+    const removed = that.deviceList.length - deduped.length;
+    if (removed > 0) {
+      that.deviceList = deduped;
+      that.logOut(`_dedupeDeviceList: collapsed ${removed} duplicate device entr${removed === 1 ? "y" : "ies"}`);
+    }
+    return removed;
+  }
+
+  // Repair MSTP children that never got linked to a parent (parentDeviceId null) and remove the
+  // redundant bare-IP placeholder folders they caused. Without this, the tree builder drops an
+  // orphaned child under a bare-<IP> stub (addEmptyIpRootDevice) instead of nesting it under its
+  // real named router — the "device shows as its IP with no points" symptom. Re-running discovery
+  // never fixes it because nothing re-links the child. This is pure in-memory relinking/cleanup:
+  // no wire traffic, no cadence change, so it cannot regress throughput.
+  _repairOrphanParents() {
+    let that = this;
+    try {
+      if (!Array.isArray(that.deviceList) || that.deviceList.length === 0) return;
+      // Index the real (non-MSTP, valid-id) device at each IP — the router a child should nest under.
+      const rootByIp = new Map();
+      for (const d of that.deviceList) {
+        if (d && typeof d.getIsMstpDevice === "function" && !d.getIsMstpDevice() && that._isValidDeviceId(d.getDeviceId())) {
+          const ip = that.getDeviceAddress(d);
+          if (!rootByIp.has(ip)) rootByIp.set(ip, d); // first-write-wins, matching addToParentMstpNetwork's findIndex
+        }
+      }
+      // 1) Re-link orphaned MSTP children to the real router at their IP.
+      let relinked = 0;
+      for (const d of that.deviceList) {
+        if (!d || typeof d.getIsMstpDevice !== "function" || !d.getIsMstpDevice()) continue;
+        const pid = d.getParentDeviceId();
+        if (pid !== null && pid !== undefined && pid !== 0) continue; // already linked
+        const root = rootByIp.get(that.getDeviceAddress(d));
+        if (root && root.getDeviceId() !== d.getDeviceId()) {
+          d.setParentDeviceId(root.getDeviceId());
+          root.addChildDevice(d.getDeviceId());
+          relinked++;
+        }
+      }
+      // 2) Prune redundant bare-IP stubs (deviceId null) at IPs now covered by a real device. Their
+      //    children were just re-linked to the real router and will re-nest on this build pass.
+      let pruned = 0;
+      const prunedIps = new Set();
+      that.deviceList = that.deviceList.filter((d) => {
+        if (d && typeof d.getDeviceId === "function" && d.getDeviceId() === null) {
+          const ip = that.getDeviceAddress(d);
+          if (rootByIp.has(ip)) {
+            const key = that.createDeviceKey(d);
+            if (that.networkTree && that.networkTree[key]) delete that.networkTree[key];
+            prunedIps.add(ip);
+            pruned++;
+            return false; // drop the redundant stub
+          }
+        }
+        return true;
+      });
+      // Single pass over renderList to drop the pruned stubs' folder entries.
+      if (prunedIps.size > 0 && Array.isArray(that.renderList)) {
+        that.renderList = that.renderList.filter(
+          (r) => !(r && (r.deviceId === null || r.deviceId === undefined) && prunedIps.has(r.ipAddr))
+        );
+      }
+      if (relinked > 0 || pruned > 0) {
+        that.logOut(`_repairOrphanParents: relinked ${relinked} orphaned MSTP child device(s), pruned ${pruned} redundant IP-stub folder(s)`);
+      }
+    } catch (e) {
+      that.logOut("_repairOrphanParents error: ", e);
+    }
+  }
+
   async doRead(readConfig, outputType, objectPropertyType, readNodeName) {
     const that = this;
     const roundDecimal = readConfig.precision;
@@ -826,6 +1073,7 @@ class BacnetClient extends EventEmitter {
       const devicePromises = devicesToRead.map(async (key, deviceIndex) => {
         const device = that.findDeviceByKey(key);
         if (!device) return null;
+        device._deadReadStreak = 0; // reset the per-cycle circuit-breaker streak for this device
 
         const deviceName = that.computeDeviceName(device);
         const deviceKey = that.createDeviceKey(device);
@@ -921,6 +1169,9 @@ class BacnetClient extends EventEmitter {
         deviceName: deviceName,
       };
 
+      device.setLastSeen(Date.now()); // batch answered -> device is online (device-dot fix)
+      device._deadReadStreak = 0; // batch answered -> device is alive; reset circuit-breaker
+
       // Process the results of the batch
       results.value.values.forEach((pointResult, index) => {
         const cacheRef = requestArray[index];
@@ -932,8 +1183,7 @@ class BacnetClient extends EventEmitter {
 
           if (isNumber(val)) {
             pointRef.presentValue = roundDecimalPlaces(val, roundDecimal);
-            pointRef.error = "none";
-            pointRef.status = "online";
+            that._markPointOnline(pointRef);
             if (pointRef.meta.objectId.type == 19 || pointRef.meta.objectId.type == 13 || pointRef.meta.objectId.type == 14) {
               if (pointRef.stateTextArray && typeof pointRef.stateTextArray[0].value !== "object") {
                 if (val != 0) {
@@ -946,14 +1196,14 @@ class BacnetClient extends EventEmitter {
           } else {
             if (typeof val !== "object") {
               pointRef.presentValue = val;
-              pointRef.error = "none";
-              pointRef.status = "online";
+              that._markPointOnline(pointRef);
             } else if (val.errorClass && val.errorClass) {
               pointRef.error = getBacnetErrorString(val.errorClass, val.errorClass);
               pointRef.status = "offline";
+              pointRef.missCount = 0;
+              pointRef.stale = false;
             } else {
-              pointRef.error = "none";
-              pointRef.status = "online";
+              that._markPointOnline(pointRef);
             }
           }
         }
@@ -978,18 +1228,36 @@ class BacnetClient extends EventEmitter {
       deviceName: deviceName,
     };
 
+    // Route reads through the retry wrapper using the configured "Number of Retries"
+    // (deviceRetryCount). It fires only on failure, so a healthy device sees no change.
+    const retries = Number.isFinite(that.deviceRetryCount) ? that.deviceRetryCount : 2;
+    // Per-device circuit breaker for THIS cycle. The streak is stored ON THE DEVICE (reset once
+    // per cycle in doRead, and on any success) so it spans ALL of the device's point chunks —
+    // not just this batch — and actually bounds a dead device (small-APDU devices are read in
+    // tiny chunks). Once a device fails this many reads in a row, skip its remaining points
+    // (still recorded as debounced misses).
+    const CIRCUIT_BREAK = 10;
+
     for (const request of requestArray) {
       const { objectId, pointRef, pointName } = request;
+
+      if ((device._deadReadStreak || 0) >= CIRCUIT_BREAK) {
+        // Device looks dead this cycle — skip the read, record a (debounced) miss.
+        pointRef.meta["device"] = deviceMetaInfo;
+        that._recordPointMiss(pointRef, null);
+        bacnetResults[deviceName][pointName] = pointRef;
+        continue;
+      }
+
       try {
-        const result = await that.updatePoint(device, pointRef);
+        const result = await that.updatePointWithRetry(device, pointRef, retries);
 
         if (result.objectId.type == objectId.type && result.objectId.instance == objectId.instance) {
           const val = result.values[0].value;
 
           if (isNumber(val)) {
             pointRef.presentValue = roundDecimalPlaces(val, roundDecimal);
-            pointRef.error = "none";
-            pointRef.status = "online";
+            that._markPointOnline(pointRef);
 
             if (pointRef.meta.objectId.type == 19 || pointRef.meta.objectId.type == 13 || pointRef.meta.objectId.type == 14) {
               if (pointRef.stateTextArray && typeof pointRef.stateTextArray[0].value !== "object") {
@@ -1003,32 +1271,68 @@ class BacnetClient extends EventEmitter {
           } else {
             if (typeof val !== "object") {
               pointRef.presentValue = val;
-              pointRef.error = "none";
-              pointRef.status = "online";
+              that._markPointOnline(pointRef);
             } else if (val.errorClass && val.errorClass) {
+              // Definitive per-property BACnet error (device answered) — not a transient miss.
               pointRef.error = getBacnetErrorString(val.errorClass, val.errorClass);
               pointRef.status = "offline";
+              pointRef.missCount = 0;
+              pointRef.stale = false;
             } else {
-              pointRef.error = "none";
-              pointRef.status = "online";
+              that._markPointOnline(pointRef);
             }
           }
 
           pointRef.meta["device"] = deviceMetaInfo;
           pointRef.timestamp = Date.now();
+          device.setLastSeen(Date.now()); // a device answering value reads IS online (device-dot fix)
+          device._deadReadStreak = 0;
 
           // Store the point data in results
           bacnetResults[deviceName][pointName] = pointRef;
         }
       } catch (err) {
         that.logOut(`Error updating point ${pointName}:`, err);
+        device._deadReadStreak = (device._deadReadStreak || 0) + 1;
+
+        // Device-dot liveness: an Error/Abort/Reject PDU IS a response — the device is provably
+        // alive even though this point read failed. Only a genuine ERR_TIMEOUT (no reply) leaves
+        // lastSeen untouched so a truly dead device still goes red. This keeps devices that answer
+        // Who-Is but whose point reads all error (segmentation/RPM-unsupported/unknown-property)
+        // from falling off the tree on the 900s Who-Is boundary. Point status is unaffected.
+        if (!that._isTimeoutError(err)) device.setLastSeen(Date.now());
 
         pointRef.meta["device"] = deviceMetaInfo;
-        pointRef.timestamp = Date.now();
-        pointRef.status = "offline";
-        pointRef.error = parseBacnetError(err);
+        that._recordPointMiss(pointRef, err);
         bacnetResults[deviceName][pointName] = pointRef;
       }
+    }
+  }
+
+  // Mark a point online and reset its debounce/stale state. Used at every success site in
+  // both processBatch and processIndividualPoints so a point that recovers via any path
+  // clears its miss counter (missing one site silently breaks the consecutive-miss debounce).
+  _markPointOnline(pointRef) {
+    pointRef.error = "none";
+    pointRef.status = "online";
+    pointRef.missCount = 0;
+    pointRef.stale = false;
+  }
+
+  // Consecutive-miss debounce: only flip a point offline after offlineThreshold consecutive
+  // failed reads; until then keep the last-known value/status/timestamp and flag it stale.
+  // Passing err === null means the read was skipped by the circuit breaker (still a miss).
+  _recordPointMiss(pointRef, err) {
+    pointRef.missCount = (pointRef.missCount || 0) + 1;
+    if (pointRef.missCount >= this.offlineThreshold) {
+      pointRef.status = "offline";
+      pointRef.error = err ? parseBacnetError(err) : "no response";
+      pointRef.stale = false;
+      pointRef.timestamp = Date.now(); // definitive result -> fresh timestamp
+    } else {
+      // Transient miss: keep last-known value, status AND timestamp; only flag stale.
+      // Do NOT refresh the timestamp — a historian must never get an OLD value with a NEW time.
+      pointRef.stale = true;
     }
   }
 
@@ -1076,18 +1380,21 @@ class BacnetClient extends EventEmitter {
 
   updatePointWithRetry(device, point, retryCount = 1) {
     let that = this;
-    const tryUpdate = (retriesLeft) => {
-      return that.updatePoint(device, point).catch((err) => {
+    // Small backoff between attempts so retries don't pile straight back onto a congested trunk.
+    const backoff = (attempt) => new Promise((r) => setTimeout(r, Math.min(500, 150 * attempt)));
+    const tryUpdate = (retriesLeft, attempt) => {
+      return that.updatePoint(device, point).catch(async (err) => {
         if (retriesLeft > 0) {
-          that.logOut(`Retrying updatePoint... Attempts left: ${retriesLeft}`);
-          return tryUpdate(retriesLeft - 1);
+          await backoff(attempt);
+          return tryUpdate(retriesLeft - 1, attempt + 1);
         }
-        // If no retries are left, reject with the original error
+        // Exhausted; reject with the original error. The caller (processIndividualPoints)
+        // logs it and applies the consecutive-miss debounce, so we don't log per-retry here.
         return Promise.reject(err);
       });
     };
 
-    return tryUpdate(retryCount);
+    return tryUpdate(retryCount, 1);
   }
 
   //used for manual point updates in the UI tree
@@ -1127,25 +1434,41 @@ class BacnetClient extends EventEmitter {
 
     // Use device-specific options
     const settings = that.getDeviceSpecificOptions(device);
+    const addr = that._addrSlotKey(device);
 
-    // Wait for a request slot before proceeding
+    // Wait for a global slot, then a per-router slot, before proceeding.
     await that._waitForRequestSlot();
+    await that._acquireAddrSlot(addr);
 
     return new Promise((resolve, reject) => {
-      that.client.readProperty(
-        addressObject,
-        { type: point.meta.objectId.type, instance: point.meta.objectId.instance },
-        baEnum.PropertyIdentifier.PRESENT_VALUE,
-        settings,
-        (err, value) => {
-          if (err) {
-            reject(err);
-          }
-          if (value) {
-            resolve(value);
-          }
+      // Release the router slot exactly once on ANY outcome — response, ERR_TIMEOUT, or a
+      // synchronous throw from readProperty (the library registers its callback only AFTER the
+      // synchronous encode+send, so a throw there would never fire it and would leak the slot ->
+      // after perRouterCap throws the router deadlocks). released-guard makes release idempotent.
+      let released = false;
+      const release = () => {
+        if (!released) {
+          released = true;
+          that._releaseAddrSlot(addr);
         }
-      );
+      };
+      try {
+        that.client.readProperty(
+          addressObject,
+          { type: point.meta.objectId.type, instance: point.meta.objectId.instance },
+          baEnum.PropertyIdentifier.PRESENT_VALUE,
+          settings,
+          (err, value) => {
+            release();
+            if (err) return reject(err);
+            if (value) return resolve(value);
+            return reject(new Error("ERR_EMPTY_RESPONSE"));
+          }
+        );
+      } catch (e) {
+        release();
+        reject(e);
+      }
     });
   }
 
@@ -1183,25 +1506,25 @@ class BacnetClient extends EventEmitter {
     let that = this;
     return new Promise((resolve, reject) => {
       that._readDeviceName(device, (err, result) => {
-        if (result) {
-          try {
-            if (result.values[0].value) {
-              const deviceObject = {
-                name: result.values[0].value,
-                devicePointEntry: [{ value: { type: 8, instance: device.getDeviceId() }, type: 12 }],
-              };
-              resolve(deviceObject);
-            } else {
-              that.logOut("Issue with deviceName payload, see object: ", result);
-              resolve();
-            }
-          } catch (e) {
-            that.logOut("Unable to get device name: ", e);
-            reject(e);
-          }
-        }
+        // Settle EXACTLY once on every callback path — an err/result pair that is both falsy
+        // must not leave this promise (and its awaiter, updateDeviceName) hung forever.
         if (err) {
           reject(err);
+          return;
+        }
+        try {
+          if (result && result.values && result.values[0] && result.values[0].value) {
+            resolve({
+              name: result.values[0].value,
+              devicePointEntry: [{ value: { type: 8, instance: device.getDeviceId() }, type: 12 }],
+            });
+          } else {
+            that.logOut("Issue with deviceName payload, see object: ", result);
+            resolve(); // no usable name, but SETTLE (don't hang)
+          }
+        } catch (e) {
+          that.logOut("Unable to get device name: ", e);
+          reject(e);
         }
       });
     });
@@ -1256,6 +1579,8 @@ class BacnetClient extends EventEmitter {
         let result = await that.scanDevice(device);
         device.setPointsList(result);
         device.setLastSeen(Date.now());
+        // The whole-list (segmented) read is atomic — a returned list is the COMPLETE object list.
+        device._enumComplete = true;
         resolve(result);
       } catch (e) {
         that.logOut(`Error getting point list for ${device.getAddress().toString()} - ${device.getDeviceId()}: `, e);
@@ -1285,49 +1610,94 @@ class BacnetClient extends EventEmitter {
     });
   }
 
+  // Read a device's OBJECT_LIST element-by-element (for devices that can't return the whole
+  // list in one segmented read). #50 fix: read OBJECT_LIST[0] (the element count) first so we
+  // know how many to expect, retry transient timeouts, and only stop on a DEFINITIVE error —
+  // so a single dropped datagram no longer silently truncates the point list. Gated per-router.
   scanDeviceManually(device) {
     let that = this;
+    return new Promise(async function (resolve) {
+      // discoveredPointList must be reachable from the catch, so declare it before the try.
+      // Everything else (device getters, options) goes INSIDE the try so a throwing getter
+      // still settles the promise instead of leaving it (and the caller) hung forever.
+      const discoveredPointList = [];
+      try {
+        const deviceId = device.getDeviceId();
+        const addressObject = { address: device.getAddress(), port: device.getPort() };
+        const baseOptions = that.getDeviceSpecificOptions(device);
+        const objId = { type: baEnum.ObjectType.DEVICE, instance: deviceId };
+        const MAX_INDEX = 10000; // safety bound
 
-    return new Promise(function (resolve, reject) {
-      let deviceId = device.getDeviceId();
-      let discoveredPointList = [];
+        const readIndex = (idx) =>
+          that._gatedReadProperty(
+            addressObject,
+            objId,
+            baEnum.PropertyIdentifier.OBJECT_LIST,
+            Object.assign({}, baseOptions, { arrayIndex: idx })
+          );
 
-      let addressObject = {
-        address: device.getAddress(),
-        port: device.getPort(),
-      };
-
-      let index = 1;
-
-      send(index);
-
-      async function send(index) {
-        let readOptions = {
-          maxSegments: that.readPropertyMultipleOptions.maxSegments,
-          maxApdu: that.readPropertyMultipleOptions.maxApdu,
-          arrayIndex: index,
+        // Read one array index, retrying transient timeouts up to 2 extra times.
+        // Returns { entry } on success, { end:true } on a definitive (non-timeout) error, {} if it kept timing out.
+        const readWithRetry = async (idx) => {
+          for (let attempt = 0; attempt <= 2; attempt++) {
+            const { err, value } = await readIndex(idx);
+            if (!err && value && value.values && value.values[0] !== undefined) {
+              return { entry: value.values[0] };
+            }
+            if (err && !that._isTimeoutError(err)) return { end: true };
+          }
+          return {};
         };
 
-        // Wait for a request slot before proceeding
-        await that._waitForRequestSlot();
-
-        that.client.readProperty(
-          addressObject,
-          { type: baEnum.ObjectType.DEVICE, instance: deviceId },
-          baEnum.PropertyIdentifier.OBJECT_LIST,
-          readOptions,
-          (err, value) => {
-            if (err) {
-              resolve(discoveredPointList);
-            }
-
-            if (value) {
-              discoveredPointList.push(value.values[0]);
-              index++;
-              send(index);
-            }
+        // 1) Element count from OBJECT_LIST[0].
+        let count = null;
+        for (let attempt = 0; attempt <= 2 && count === null; attempt++) {
+          const { err, value } = await readIndex(0);
+          if (!err && value && value.values && value.values[0] && typeof value.values[0].value === "number") {
+            count = value.values[0].value;
+          } else if (err && !that._isTimeoutError(err)) {
+            break; // device won't give a count (not a timeout) -> degraded walk below
           }
-        );
+        }
+
+        if (count !== null) {
+          const n = Math.min(count, MAX_INDEX);
+          let missedIndex = false; // an index that exhausted its retries (transient gap)
+          for (let i = 1; i <= n; i++) {
+            const r = await readWithRetry(i);
+            if (r.entry !== undefined) discoveredPointList.push(r.entry);
+            else if (r.end) break; // array shrank / definitive end -> a complete walk
+            else missedIndex = true; // kept timing out: skip this index but keep going (don't truncate)
+          }
+          if (discoveredPointList.length < n) {
+            that.logOut(
+              `scanDeviceManually: device ${deviceId} got ${discoveredPointList.length}/${count} OBJECT_LIST entries (some reads failed)`
+            );
+          }
+          // Complete only if no index was skipped due to exhausted retries — a partial walk must
+          // NOT be stamped/gated (queryDevices reads this) or the missed points lock out for hours.
+          device._enumComplete = !missedIndex;
+          resolve(discoveredPointList);
+          return;
+        }
+
+        // 2) Degraded fallback: no count -> walk until a DEFINITIVE error (past end of array),
+        // retrying transient timeouts so a dropped datagram doesn't cut the list short.
+        let endedDefinitively = false;
+        for (let i = 1; i <= MAX_INDEX; i++) {
+          const r = await readWithRetry(i);
+          if (r.entry !== undefined) discoveredPointList.push(r.entry);
+          else if (r.end) {
+            endedDefinitively = true;
+            break; // definitive end-of-array -> complete
+          } else break; // exhausted retries -> stop, but this is an INCOMPLETE walk
+        }
+        device._enumComplete = endedDefinitively;
+        resolve(discoveredPointList);
+      } catch (e) {
+        that.logOut("scanDeviceManually error: ", e);
+        device._enumComplete = false;
+        resolve(discoveredPointList);
       }
     });
   }
@@ -1338,47 +1708,64 @@ class BacnetClient extends EventEmitter {
       address: device.getAddress(),
       port: device.getPort(),
     };
+    const addr = that._addrSlotKey(device);
 
-    // Wait for a request slot before proceeding
+    // Wait for a global slot, then a per-router slot, before proceeding.
     await that._waitForRequestSlot();
+    await that._acquireAddrSlot(addr);
 
-    return new Promise((resolve, reject) => {
-      that.client.readPropertyMultiple(addressObject, requestArray, readOptions, (error, value) => {
-        if (value && value.values) {
-          const reorderedValues = requestArray.map((req) => {
-            const foundValue = value.values.find(
-              (val) => val.objectId.type === req.objectId.type && val.objectId.instance === req.objectId.instance
-            );
-            return (
-              foundValue || {
-                objectId: req.objectId,
-                values: [
-                  {
-                    value: [
-                      {
-                        value: {
-                          errorClass: baEnum.ErrorClass.PROPERTY,
-                          errorCode: baEnum.ErrorCode.UNKNOWN_PROPERTY,
-                        },
-                      },
-                    ],
-                  },
-                ],
-              }
-            );
-          });
-          value.values = reorderedValues;
+    return new Promise((resolve) => {
+      let released = false;
+      const release = () => {
+        if (!released) {
+          released = true;
+          that._releaseAddrSlot(addr);
         }
+      };
+      try {
+        that.client.readPropertyMultiple(addressObject, requestArray, readOptions, (error, value) => {
+          release();
+          if (value && value.values) {
+            const reorderedValues = requestArray.map((req) => {
+              const foundValue = value.values.find(
+                (val) => val.objectId.type === req.objectId.type && val.objectId.instance === req.objectId.instance
+              );
+              return (
+                foundValue || {
+                  objectId: req.objectId,
+                  values: [
+                    {
+                      value: [
+                        {
+                          value: {
+                            errorClass: baEnum.ErrorClass.PROPERTY,
+                            errorCode: baEnum.ErrorCode.UNKNOWN_PROPERTY,
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                }
+              );
+            });
+            value.values = reorderedValues;
+          }
 
-        resolve({
-          error: error,
-          value: value,
+          resolve({
+            error: error,
+            value: value,
+          });
         });
-      });
+      } catch (e) {
+        // Synchronous throw before the library registered its callback: release the slot and
+        // preserve the {error, value} contract (the caller checks results.error).
+        release();
+        resolve({ error: e, value: null });
+      }
     });
   }
 
-  _readDeviceName(device, callback) {
+  async _readDeviceName(device, callback) {
     let that = this;
 
     let addressObject = {
@@ -1388,16 +1775,21 @@ class BacnetClient extends EventEmitter {
     let deviceId = device.getDeviceId();
     const readOptions = that.getDeviceSpecificOptions(device);
 
-    that.client.readProperty(
-      addressObject,
-      { type: baEnum.ObjectType.DEVICE, instance: deviceId },
-      baEnum.PropertyIdentifier.OBJECT_NAME,
-      readOptions,
-      callback
-    );
+    try {
+      const { err, value } = await that._gatedReadProperty(
+        addressObject,
+        { type: baEnum.ObjectType.DEVICE, instance: deviceId },
+        baEnum.PropertyIdentifier.OBJECT_NAME,
+        readOptions
+      );
+      callback(err, value);
+    } catch (e) {
+      that.logOut("Error reading device name: ", e);
+      callback(e, undefined);
+    }
   }
 
-  _readObjectList(device, readOptions, callback) {
+  async _readObjectList(device, readOptions, callback) {
     let that = this;
     let addressObject = {
       address: device.getAddress(),
@@ -1405,37 +1797,59 @@ class BacnetClient extends EventEmitter {
     };
     let deviceId = device.getDeviceId();
     try {
-      that.client.readProperty(
+      // Gated (global + per-router). Previously this whole-list read had no throttle at all.
+      const { err, value } = await that._gatedReadProperty(
         addressObject,
         { type: baEnum.ObjectType.DEVICE, instance: deviceId },
         baEnum.PropertyIdentifier.OBJECT_LIST,
-        readOptions,
-        callback
+        readOptions
       );
+      callback(err, value);
     } catch (e) {
       that.logOut("Error reading object list:  ", e);
+      callback(e, undefined);
     }
   }
 
   async _readObject(addressObject, type, instance, properties, readOptions) {
     let that = this;
+    const addr = that._addrKeyFromAddress(addressObject.address);
 
-    // Wait for a request slot before proceeding
-    await that._waitForRequestSlot();
+    // Wait for a global slot, then a per-router slot. Never reject — surface a gating failure
+    // (e.g. queue full) as {error} so callers' .then/{error} handling stays intact.
+    try {
+      await that._waitForRequestSlot();
+      await that._acquireAddrSlot(addr);
+    } catch (e) {
+      return { error: e, value: null };
+    }
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
+      let released = false;
+      const release = () => {
+        if (!released) {
+          released = true;
+          that._releaseAddrSlot(addr);
+        }
+      };
       const requestArray = [
         {
           objectId: { type: type, instance: instance },
           properties: properties,
         },
       ];
-      that.client.readPropertyMultiple(addressObject, requestArray, readOptions, (error, value) => {
-        resolve({
-          error: error,
-          value: value,
+      try {
+        that.client.readPropertyMultiple(addressObject, requestArray, readOptions, (error, value) => {
+          release();
+          resolve({
+            error: error,
+            value: value,
+          });
         });
-      });
+      } catch (e) {
+        release();
+        resolve({ error: e, value: null });
+      }
     });
   }
 
@@ -1446,7 +1860,7 @@ class BacnetClient extends EventEmitter {
 
     const readIndividualPropsOptions = {
       maxSegments: 0,
-      maxApdu: device.getMaxApdu(),
+      maxApdu: readOptions.maxApdu, // #55: use the 0-5 max-APDU enum (from getDeviceSpecificOptions), NOT the raw octet count
     };
 
     let addressObject = {
@@ -1475,26 +1889,18 @@ class BacnetClient extends EventEmitter {
 
     // Function to read properties individually
     const readPropertiesIndividually = (resolve, reject) => {
-      const promises = propertiesToRead.map(
-        (property) =>
-          new Promise((propertyResolve) => {
-            that.client.readProperty(
-              addressObject,
-              { type: type, instance: instance },
-              property.id,
-              readIndividualPropsOptions,
-              (err, value) => {
-                if (err) {
-                  propertyResolve(null);
-                } else {
-                  propertyResolve({
-                    id: property.id,
-                    index: value.property.index,
-                    value: value.values,
-                  });
-                }
-              }
-            );
+      // Per-property reads now go through the gated helper (global + per-router slot) instead of
+      // firing all ~12 at once ungated — that was a big part of the discovery flood on a trunk.
+      const promises = propertiesToRead.map((property) =>
+        that
+          ._gatedReadProperty(addressObject, { type: type, instance: instance }, property.id, readIndividualPropsOptions)
+          .then(({ err, value }) => {
+            if (err || !value) return null;
+            return {
+              id: property.id,
+              index: value.property ? value.property.index : undefined,
+              value: value.values,
+            };
           })
       );
 
@@ -1530,7 +1936,7 @@ class BacnetClient extends EventEmitter {
       that
         ._readObject(addressObject, type, instance, propertiesToRead, readOptions)
         .then((result) => {
-          if (result.value) {
+          if (result.value && that._responseHasUsableName(result.value)) {
             resolve(result);
           } else {
             readPropertiesIndividually(resolve, reject);
@@ -1553,12 +1959,13 @@ class BacnetClient extends EventEmitter {
       that
         ._readObject(addressObject, type, instance, [{ id: baEnum.PropertyIdentifier.ALL }], readOptions)
         .then((result) => {
-          if (result.value) {
-            // If the result has value, resolve the promise
+          if (result.value && that._responseHasUsableName(result.value)) {
+            // ALL returned genuinely usable data (has OBJECT_NAME) - resolve
             resolve(result);
           } else {
-            // ALL returned no value - try the targeted multi-property RPM before
-            // falling back to the per-property storm.
+            // ALL returned no value, OR an ACK carrying only per-property errors
+            // (device doesn't support the ALL pseudo-property) - fall back to the
+            // targeted multi-property RPM before the per-property storm.
             readTargetedMultiple(resolve, reject);
           }
         })
@@ -1577,7 +1984,7 @@ class BacnetClient extends EventEmitter {
 
     const readIndividualPropsOptions = {
       maxSegments: 0,
-      maxApdu: device.getMaxApdu(),
+      maxApdu: readOptions.maxApdu, // #55: use the 0-5 max-APDU enum (from getDeviceSpecificOptions), NOT the raw octet count
     };
 
     let addressObject = {
@@ -1593,11 +2000,11 @@ class BacnetClient extends EventEmitter {
       that
         ._readObject(addressObject, type, instance, allProperties, readOptions)
         .then((result) => {
-          if (result.value) {
-            // If the result has value, resolve the promise
+          if (result.value && that._responseHasUsableName(result.value)) {
+            // Response has a usable OBJECT_NAME - resolve
             resolve(result);
           } else {
-            // If not, proceed to read individual properties
+            // No value, or an error-only ACK with no OBJECT_NAME - read individually
             readPropertiesIndividually();
           }
         })
@@ -1608,26 +2015,16 @@ class BacnetClient extends EventEmitter {
 
       // Function to read properties individually
       const readPropertiesIndividually = () => {
-        const promises = allProperties.map(
-          (property, index) =>
-            new Promise((propertyResolve) => {
-              that.client.readProperty(
-                addressObject,
-                { type: type, instance: instance },
-                property.id,
-                readIndividualPropsOptions,
-                (err, value) => {
-                  if (err) {
-                    propertyResolve(null);
-                  } else {
-                    propertyResolve({
-                      id: property.id,
-                      index: value.property.index,
-                      value: value.values,
-                    });
-                  }
-                }
-              );
+        const promises = allProperties.map((property) =>
+          that
+            ._gatedReadProperty(addressObject, { type: type, instance: instance }, property.id, readIndividualPropsOptions)
+            .then(({ err, value }) => {
+              if (err || !value) return null;
+              return {
+                id: property.id,
+                index: value.property ? value.property.index : undefined,
+                value: value.values,
+              };
             })
         );
 
@@ -1737,6 +2134,24 @@ class BacnetClient extends EventEmitter {
       return property.value[0].value;
     } else {
       return null;
+    }
+  }
+
+  // A ReadPropertyMultiple(ALL) response can decode to a truthy value even when the
+  // device answered with a per-property error (i.e. it doesn't support the ALL
+  // pseudo-property). Such a response carries no usable OBJECT_NAME, so buildNetworkModel
+  // would drop every object. Use this to decide whether an ALL/lite result is genuinely
+  // usable before accepting it; if not, callers fall back to the targeted RPM / per-property
+  // tiers. Mirrors buildNetworkModel's own name check (non-empty string).
+  _responseHasUsableName(value) {
+    try {
+      if (!value || !Array.isArray(value.values)) return false;
+      return value.values.some((rec) => {
+        const name = this._findValueById(rec && rec.values ? rec.values : [], baEnum.PropertyIdentifier.OBJECT_NAME);
+        return typeof name === "string" && name.length > 0;
+      });
+    } catch (e) {
+      return false;
     }
   }
 
@@ -1982,27 +2397,41 @@ class BacnetClient extends EventEmitter {
 
   async doTreeBuilder() {
     let that = this;
+    // Prevent OVERLAPPING runs. doTreeBuilder is scheduled every 5s, but a full pass over a large
+    // deviceList takes far longer, so runs pile up and mutate deviceList concurrently (racing the
+    // add/dedupe paths) — the most likely source of the duplicate device entries. Serialise them.
+    if (that._treeBuilderInProgress) return;
+    that._treeBuilderInProgress = true;
+    try {
+      // Collapse any duplicates first so the render list and cache never persist redundant copies.
+      that._dedupeDeviceList();
+      // Then re-link orphaned MSTP children to their real router and drop redundant bare-IP stubs,
+      // so the tree nests devices under their named routers instead of bare-<IP> placeholder folders.
+      that._repairOrphanParents();
 
-    const treeWorker = new treeBuilder(
-      that.deviceList,
-      that.networkTree,
-      that.renderList,
-      that.renderListCount,
-      that.initialTreeBuild
-    );
+      const treeWorker = new treeBuilder(
+        that.deviceList,
+        that.networkTree,
+        that.renderList,
+        that.renderListCount,
+        that.initialTreeBuild
+      );
 
-    treeWorker.cacheData();
+      treeWorker.cacheData();
 
-    for (let i = 0; i < that.deviceList.length; i++) {
-      let device = that.deviceList[i];
-      await treeWorker.processDevice(device, i);
+      for (let i = 0; i < that.deviceList.length; i++) {
+        let device = that.deviceList[i];
+        await treeWorker.processDevice(device, i);
+      }
+
+      that.deviceList = treeWorker.deviceList;
+      that.networkTree = treeWorker.networkTree;
+      that.renderList = treeWorker.renderList;
+
+      that.initialTreeBuild = false;
+    } finally {
+      that._treeBuilderInProgress = false;
     }
-
-    that.deviceList = treeWorker.deviceList;
-    that.networkTree = treeWorker.networkTree;
-    that.renderList = treeWorker.renderList;
-
-    that.initialTreeBuild = false;
   }
 
   countDevices() {
@@ -2097,6 +2526,15 @@ class BacnetClient extends EventEmitter {
             ? device.getAddress().address + "-" + device.getDeviceId()
             : device.getAddress() + "-" + device.getDeviceId();
         let values = that.networkTree[deviceKey] ? that.networkTree[deviceKey] : {};
+        // Prune any previously-stored non-whitelisted objects (e.g. carried in from a
+        // pre-whitelist cache). The tree is otherwise append-only, so without this a
+        // filtered-out type would linger forever. Only removes entries with a known,
+        // non-whitelisted objectId type; leaves whitelisted points and the device entry alone.
+        for (const _k of Object.keys(values)) {
+          const _t =
+            values[_k] && values[_k].meta && values[_k].meta.objectId ? values[_k].meta.objectId.type : undefined;
+          if (_t !== undefined && !ALLOWED_OBJECT_TYPES.has(_t)) delete values[_k];
+        }
         for (let i = 0; i < fullObjects.length; i++) {
           let obj = fullObjects[i];
           let successfulResult = !obj.error ? obj.value : null;
@@ -2110,6 +2548,13 @@ class BacnetClient extends EventEmitter {
               let bac_obj = that.getObjectType(currobjectId);
               let objectName = that._findValueById(pointProperty.values, baEnum.PropertyIdentifier.OBJECT_NAME);
               let objectType = pointProperty.objectId.type;
+
+              // Whitelist gate: never add a non-whitelisted object type to the tree, whatever
+              // the source (discovery, manual update, re-read of cached/restored data). Single
+              // choke point that keeps networkTree in sync with the pointsList filter.
+              if (!ALLOWED_OBJECT_TYPES.has(objectType)) {
+                return;
+              }
 
               let objectId;
               if (objectName !== null && typeof objectName == "string") {

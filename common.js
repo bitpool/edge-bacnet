@@ -68,7 +68,9 @@ class BacnetClientConfig {
     sanitise_device_schedule,
     portRangeMatrix,
     enable_device_discovery,
-    maxConcurrentRequests
+    maxConcurrentRequests,
+    perRouterCap,
+    offlineThreshold
   ) {
     this.apduTimeout = apduTimeout;
     this.localIpAdrress = localIpAdrress;
@@ -94,6 +96,17 @@ class BacnetClientConfig {
     if (clampedMaxConcurrent < 1) clampedMaxConcurrent = 1;
     if (clampedMaxConcurrent > 250) clampedMaxConcurrent = 250;
     this.maxConcurrentRequests = clampedMaxConcurrent;
+    // Max simultaneous requests to a single device / MSTP trunk (protects slow trunks).
+    // Clamp 1..maxConcurrentRequests (can't exceed the global cap).
+    let clampedPerRouter = parseInt(perRouterCap) || 4;
+    if (clampedPerRouter < 1) clampedPerRouter = 1;
+    if (clampedPerRouter > this.maxConcurrentRequests) clampedPerRouter = this.maxConcurrentRequests;
+    this.perRouterCap = clampedPerRouter;
+    // Consecutive failed polls before a point is marked offline (debounce). Clamp 1..10.
+    let clampedOfflineThreshold = parseInt(offlineThreshold) || 3;
+    if (clampedOfflineThreshold < 1) clampedOfflineThreshold = 1;
+    if (clampedOfflineThreshold > 10) clampedOfflineThreshold = 10;
+    this.offlineThreshold = clampedOfflineThreshold;
   }
 
   generatePortRangeArray(rangeMatrix) {
@@ -197,8 +210,21 @@ const roundDecimalPlaces = function (value, decimals) {
   return value;
 };
 
+// Directory the datastore files live in. Priority:
+//   1. BACNET_STORAGE_PATH env (explicit override)
+//   2. the dir set via setStorageDir() — the Node-RED userDir, wired up by the
+//      gateway node from RED.settings.userDir
+//   3. the process cwd (legacy behaviour)
+// Older versions only used cwd, which on the Bitpool Edge image is
+// /usr/src/node-red — OUTSIDE the /data volume, so the datastore did not survive
+// container recreates. Preferring the userDir keeps it in /data next to settings.js.
+let configuredStorageDir = null;
+const setStorageDir = (dir) => {
+  if (dir) configuredStorageDir = dir;
+};
+
 const getStoragePath = (fileName) => {
-  const storagePath = process.env.BACNET_STORAGE_PATH;
+  const storagePath = process.env.BACNET_STORAGE_PATH || configuredStorageDir;
   if (storagePath) {
     if (!fs.existsSync(storagePath)) {
       fs.mkdirSync(storagePath, { recursive: true });
@@ -206,6 +232,34 @@ const getStoragePath = (fileName) => {
     return path.join(storagePath, fileName);
   }
   return fileName;
+};
+
+// One-time migration for devices upgrading from a version that wrote the
+// datastore cwd-relative. If we now resolve to a real storage dir but it has no
+// datastore yet, copy the legacy cwd-relative files across so the discovered
+// model is preserved rather than starting empty. Best-effort; never throws.
+let legacyStoreMigrated = false;
+const migrateLegacyStore = () => {
+  if (legacyStoreMigrated) return;
+  legacyStoreMigrated = true;
+  try {
+    const names = [
+      "edge-bacnet-datastore.cfg",
+      "edge-bacnet-datastore.cfg.bak",
+      "edge-bacnet-server-datastore.cfg",
+    ];
+    for (const name of names) {
+      const target = getStoragePath(name);
+      // `name` is the bare cwd-relative legacy path; only migrate when we've been
+      // pointed at a different dir that doesn't already hold the file.
+      if (target !== name && fs.existsSync(name) && !fs.existsSync(target)) {
+        fs.copyFileSync(name, target);
+        console.log(`edge-bacnet: migrated ${name} -> ${target}`);
+      }
+    }
+  } catch (e) {
+    console.error("edge-bacnet: legacy datastore migration failed:", e);
+  }
 };
 
 let storeQueue = [];
@@ -294,6 +348,7 @@ async function Store_Config(data) {
 
 async function Read_Config_Async() {
   // todo rename function, not using sync
+  migrateLegacyStore();
   const mainFile = getStoragePath("edge-bacnet-datastore.cfg");
   const backupFile = getStoragePath("edge-bacnet-datastore.cfg.bak");
   const defaultData = "{}";
@@ -352,6 +407,7 @@ async function Store_Config_Server(data) {
 //
 // ================================================================================
 function Read_Config_Sync_Server() {
+  migrateLegacyStore();
   var data = "{}";
   try {
     data = fs.readFileSync(getStoragePath("edge-bacnet-server-datastore.cfg"), { encoding: "utf8", flag: "r" });
@@ -433,6 +489,7 @@ module.exports = {
   queueConfigStore,
   Store_Config,
   Read_Config_Async,
+  setStorageDir,
   Store_Config_Server,
   Read_Config_Sync_Server,
   isNumber,
